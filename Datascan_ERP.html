@@ -275,6 +275,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 /* ── Login screen ────────────────────────────────────────── */
 #login-screen{position:fixed;inset:0;z-index:9999;background:#1a2e4a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
 #login-screen.hidden{display:none}
+.login-version{font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:.1em;margin-top:16px;text-align:center;font-family:monospace}
 .login-box{background:var(--bg);border-radius:var(--radius-lg);padding:2rem 1.75rem;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.35)}
 .login-logo{width:180px;margin:0 auto 1.5rem;display:block}
 .login-title{font-size:18px;font-weight:700;color:var(--text);text-align:center;margin-bottom:.25rem}
@@ -354,6 +355,10 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .ts-detail-label{color:var(--text2);flex:0 0 40%}
 .ts-detail-value{color:var(--text);font-weight:500;text-align:right;flex:1}
 .ts-detail-section{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .25rem}
+.ts-mgr-action-strip{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;padding:7px 12px;border-radius:6px;margin:6px 0 2px}
+.ts-mgr-action-strip i{font-size:13px;flex-shrink:0}
+.ts-mgr-action-approved{background:var(--success-bg);color:var(--success-text)}
+.ts-mgr-action-rejected{background:var(--danger-bg);color:var(--danger-text)}
 .ts-manager-comment{background:var(--bg2);border-radius:var(--radius);padding:.75rem;font-size:13px;color:var(--text2);font-style:italic;margin-top:.5rem}
 .ts-close-btn{width:100%;padding:12px;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--border2);background:var(--bg2);color:var(--text);font-family:inherit;margin-top:1rem}
 .status-count-badge{background:#6abf3a;color:#fff;border-radius:20px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:4px}
@@ -814,6 +819,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
+    <div class="login-version" id="login-version"></div>
   </div>
 </div>
 
@@ -2224,6 +2230,9 @@ setTimeout(()=>{setupSig('emp');setupSig('mgr');checkSubmitReady();},150);
 waitForSupabase(()=>{
   // Re-init Supabase client now that SDK is guaranteed loaded
   window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // Stamp version on login screen
+  const vEl = document.getElementById('login-version');
+  if(vEl) vEl.textContent = APP_VERSION;
   // Check existing session
   getSupabase().auth.getSession().then(async ({data})=>{
     if(data.session?.user) await onSignedIn(data.session.user);
@@ -2515,6 +2524,9 @@ function buildCustomerAC(){
 
 
 // ── Supabase client ───────────────────────────────────────────────────────
+// ── App version — increment on every code change ──────────────────────────
+const APP_VERSION = 'v1.0.9';
+
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 // Client created after SDK loads — see waitForSupabase() below
@@ -2630,6 +2642,82 @@ async function onSignedIn(user){
     document.getElementById('tab-mgr').style.display    = '';
     document.getElementById('main-wrap').style.display  = 'none';
     switchTab('mgr');
+  }
+
+  // Start real-time subscription so status changes from admin
+  // are reflected immediately without requiring a manual refresh
+  startTimesheetSubscription();
+}
+
+// ════════════════════════════════════════════════════════════
+// REAL-TIME TIMESHEET STATUS SUBSCRIPTION
+// ════════════════════════════════════════════════════════════
+let _timesheetChannel = null;
+
+function startTimesheetSubscription(){
+  // Clean up any existing channel first
+  if(_timesheetChannel){
+    try { getSupabase().removeChannel(_timesheetChannel); } catch(e){}
+    _timesheetChannel = null;
+  }
+  if(!currentUser) return;
+
+  _timesheetChannel = getSupabase()
+    .channel('timesheet-status-' + currentUser.id)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'timesheets',
+    }, (payload) => {
+      const updated = payload.new;
+      if(!updated) return;
+
+      // ── Supervisor view: refresh My Submissions list ───────────────────
+      // Fires when admin approves/rejects a timesheet belonging to this supervisor
+      if(isFieldRole() && updated.supervisor_id === currentUser.id){
+        const statusScreen = document.getElementById('status-screen');
+        // Only auto-refresh if the submissions tab is currently visible
+        if(statusScreen && statusScreen.classList.contains('active')){
+          loadSubmissions();
+        }
+        // If they are viewing the detail screen for this exact timesheet,
+        // update the pill in the topbar immediately
+        if(_currentDetailTs && _currentDetailTs.id === updated.id){
+          _currentDetailTs = { ..._currentDetailTs, ...updated };
+          const statusEl = document.getElementById('detail-topbar-status');
+          if(statusEl){
+            const statusMap = {
+              approved: {cls:'ts-pill-approved', label:'Approved',       icon:'ti-circle-check'},
+              rejected: {cls:'ts-pill-rejected', label:'Rejected',       icon:'ti-circle-x'},
+              submitted:{cls:'ts-pill-submitted', label:'Pending Review', icon:'ti-hourglass'},
+              draft:    {cls:'ts-pill-draft',     label:'Draft',          icon:'ti-device-floppy'},
+            };
+            const s = statusMap[updated.status] || statusMap.draft;
+            statusEl.innerHTML = `<span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>`;
+          }
+        }
+      }
+
+      // ── Manager view: refresh dashboard list ───────────────────────────
+      // Fires for all timesheet updates visible to this manager
+      if(!isFieldRole()){
+        const mgrScreen = document.getElementById('mgr-screen');
+        if(mgrScreen && mgrScreen.classList.contains('active')){
+          loadMgrTimesheets();
+        }
+      }
+    })
+    .subscribe((status) => {
+      if(status === 'SUBSCRIBED'){
+        console.log('[realtime] Timesheet status subscription active');
+      }
+    });
+}
+
+function stopTimesheetSubscription(){
+  if(_timesheetChannel){
+    try { getSupabase().removeChannel(_timesheetChannel); } catch(e){}
+    _timesheetChannel = null;
   }
 }
 
@@ -3659,6 +3747,7 @@ async function switchTestRole(roleKey){
 
 async function doLogout(){
   await getSupabase().auth.signOut();
+  stopTimesheetSubscription();
   currentUser = null; currentProfile = null; _userPermissions = {}; _userScopeType = 'own';
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('main-wrap').style.display = 'none';
@@ -3734,7 +3823,7 @@ async function loadSubmissions(){
 
   const {data, error} = await getSupabase()
     .from('timesheets')
-    .select('id, job_date, client_name, client_code, store_number, city, state, status, created_at, updated_at, manager_comments, supervisor_name')
+    .select('id, job_date, client_name, client_code, store_number, city, state, status, created_at, updated_at, manager_comments, manager_name, manager_signed_at, supervisor_name')
     .eq('supervisor_id', currentUser.id)
     .order('created_at', {ascending:false});
 
@@ -3781,6 +3870,17 @@ async function loadSubmissions(){
         <span class="ts-meta-item"><i class="ti ti-map-pin"></i>${ts.city||''}${ts.state?', '+ts.state:''}</span>
       </div>
       ${ts.manager_comments&&ts.status==='rejected'?`<div class="ts-manager-comment"><i class="ti ti-message-circle" style="margin-right:4px"></i>${ts.manager_comments}</div>`:''}
+      ${(ts.status==='approved'||ts.status==='rejected')&&ts.manager_signed_at ? `
+      <div class="ts-mgr-action-strip ts-mgr-action-${ts.status}">
+        <i class="ti ${ts.status==='approved'?'ti-circle-check':'ti-circle-x'}"></i>
+        <span>
+          ${ts.status==='approved'?'Approved':'Rejected'}
+          ${ts.manager_name?' by '+ts.manager_name:''}
+          &nbsp;·&nbsp;
+          ${new Date(ts.manager_signed_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},
+          ${new Date(ts.manager_signed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}
+        </span>
+      </div>` : ''}
       <div class="ts-card-footer">
         <span class="ts-footer-date">${ts.status==='draft'?'Last saved':'Submitted'} ${submitted}</span>
         <span class="card-footer-actions"></span>
@@ -6348,10 +6448,20 @@ function openRejectModal(){
 
 async function submitApproval(action){
   const ts=_currentDetailTs; if(!ts) return;
+
   const comments = action==='approved'
     ? (document.getElementById('mgr-approve-comments')?.value||'')
     : (document.getElementById('mgr-reject-reason')?.value||'');
   if(action==='rejected'&&!comments.trim()){ alert('Please enter a reason for rejection.'); return; }
+
+  // Determine the correct timesheet ID — timesheet_summary view may expose it
+  // as 'id' or 'timesheet_id'; fall back through all possibilities
+  const tsId = ts.id || ts.timesheet_id;
+  if(!tsId){
+    alert('Error: could not determine timesheet ID. Please close and reopen the timesheet.');
+    console.error('[submitApproval] ts object has no id:', ts);
+    return;
+  }
 
   const updates={
     status: action,
@@ -6359,17 +6469,69 @@ async function submitApproval(action){
     manager_name: currentProfile?.full_name||'',
     manager_comments: comments,
     manager_signed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
   if(action==='approved'){
     updates.locked_at = new Date().toISOString();
     updates.locked_by = currentUser.id;
   }
 
-  const {error}=await getSupabase().from('timesheets').update(updates).eq('id',ts.id);
-  if(error){ alert('Error: '+error.message); return; }
+  console.log('[submitApproval] updating tsId=', tsId, 'action=', action, 'currentUser=', currentUser?.id, 'updates=', updates);
+
+  // Pre-flight read: confirm this row exists and is visible to the current user
+  const {data:preflight, error:preflightErr} = await getSupabase()
+    .from('timesheets')
+    .select('id, status, supervisor_id')
+    .eq('id', tsId)
+    .maybeSingle();
+  console.log('[submitApproval] preflight read:', preflight, preflightErr);
+  if(preflightErr || !preflight){
+    alert('Cannot read this timesheet. Check Supabase RLS SELECT policy for your role.\n\nDetails in browser console.');
+    console.error('[submitApproval] preflight failed:', preflightErr, 'data:', preflight);
+    return;
+  }
+  if(preflight.status !== 'submitted'){
+    alert(`This timesheet status is already "${preflight.status}" — cannot ${action} again.`);
+    return;
+  }
+
+  // Chain .select() so Supabase v2 returns the updated row —
+  // without it, update() returns {data:null, error:null} even on 0 rows matched (RLS block, wrong id, etc)
+  // Use maybeSingle() not single() — single() throws if >1 row matches (e.g. view aliases)
+  // maybeSingle() returns null data without error when 0 rows match (RLS block / wrong id)
+  const {data:updated, error, count} = await getSupabase()
+    .from('timesheets')
+    .update(updates)
+    .eq('id', tsId)
+    .select('id, status, manager_id, manager_comments, locked_at')
+    .maybeSingle();
+
+  if(error){
+    console.error('[submitApproval] update error:', error);
+    alert('Error saving: ' + error.message);
+    return;
+  }
+  if(!updated){
+    // 0 rows updated — either RLS is blocking this user from writing,
+    // or the id field doesn't match the timesheets primary key.
+    // Check browser console: look for the tsId logged above and verify
+    // it matches an actual row in the timesheets table.
+    console.error('[submitApproval] 0 rows updated — RLS block or id mismatch. tsId=', tsId, 'full ts object=', ts);
+    alert('Could not save: the timesheet was not updated.\n\nThis is usually a permissions issue — check that the admin role has an UPDATE policy on the timesheets table in Supabase, or open the browser console for details.');
+    return;
+  }
+
+  console.log('[submitApproval] success, server confirmed:', updated);
+
+  // Update in-memory object with server-confirmed values
+  _currentDetailTs = { ..._currentDetailTs, ...updated };
+
   closeMgrModal();
   closeDetailScreen();
-  loadMgrTimesheets();
+
+  // Reload the manager dashboard with fresh server data
+  await loadMgrTimesheets();
+
   alert(action==='approved'?'✓ Timesheet approved and locked!':'Timesheet rejected. Supervisor has been notified.');
 }
 
