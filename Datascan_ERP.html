@@ -137,6 +137,130 @@ input[type=file]{display:none}
 .submit-hint{font-size:13px;color:rgba(255,255,255,0.6);text-align:center;margin-top:6px;font-weight:500;min-height:20px}
 input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-style:dashed}
 
+/* ── QA Test Session Panel (right side) ─────────────────── */
+#qa-session-panel{
+  width:0;flex-shrink:0;background:#0d1b2a;
+  border-left:1px solid rgba(255,165,0,0.2);
+  display:flex;flex-direction:column;
+  transition:width .25s ease;overflow:hidden;
+  position:relative;z-index:60;
+}
+#qa-session-panel.qs-open{width:320px}
+#qa-session-panel.qs-peek{width:32px}
+.qs-toggle-btn{
+  position:absolute;left:-13px;top:50%;transform:translateY(-50%);
+  width:26px;height:52px;background:#0d1b2a;border:1px solid rgba(255,165,0,0.3);
+  border-radius:6px 0 0 6px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;color:#ffa500;font-size:14px;z-index:61;
+  transition:left .25s ease
+}
+.qs-toggle-btn:hover{background:#1a2e4a}
+.qs-header{
+  padding:10px 12px;border-bottom:1px solid rgba(255,165,0,0.15);
+  flex-shrink:0;display:flex;align-items:center;gap:8px;white-space:nowrap
+}
+.qs-header-title{font-size:12px;font-weight:700;color:#ffa500;letter-spacing:.05em;flex:1}
+.qs-badge{font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;
+  background:rgba(255,165,0,0.2);color:#ffa500;border:1px solid rgba(255,165,0,0.3);
+  text-transform:uppercase;letter-spacing:.04em}
+.qs-body{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+.qs-section-title{font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.qs-test-card{background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,165,0,0.2);
+  border-radius:6px;padding:8px 10px;cursor:pointer;transition:background .15s}
+.qs-test-card:hover{background:rgba(255,165,0,0.08)}
+.qs-test-card.active{background:rgba(255,165,0,0.12);border-color:#ffa500}
+.qs-test-title{font-size:12px;font-weight:600;color:#fff;margin-bottom:2px}
+.qs-test-meta{font-size:10px;color:rgba(255,255,255,0.4);display:flex;gap:6px}
+.qs-checklist-item{display:flex;align-items:flex-start;gap:7px;padding:5px 0;
+  border-bottom:0.5px solid rgba(255,255,255,0.05)}
+.qs-checklist-item:last-child{border-bottom:none}
+.qs-check{width:15px;height:15px;flex-shrink:0;accent-color:#6abf3a;margin-top:1px;cursor:pointer}
+.qs-check-label{font-size:11px;color:rgba(255,255,255,0.7);line-height:1.4;flex:1}
+.qs-check-label.checked{color:rgba(255,255,255,0.3);text-decoration:line-through}
+.qs-log-entry{font-size:10px;color:rgba(255,255,255,0.5);padding:3px 0;
+  border-bottom:0.5px solid rgba(255,255,255,0.04);display:flex;gap:6px}
+.qs-log-time{color:rgba(255,165,0,0.5);flex-shrink:0;font-variant-numeric:tabular-nums}
+.qs-log-text{flex:1;line-height:1.4}
+.qs-log-auto{color:rgba(255,255,255,0.35)}
+.qs-log-manual{color:rgba(255,255,255,0.7);font-style:italic}
+.qs-note-input{width:100%;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.15);
+  border-radius:4px;color:#fff;font-size:11px;padding:5px 7px;font-family:inherit;resize:none;
+  box-sizing:border-box}
+.qs-note-input::placeholder{color:rgba(255,255,255,0.25)}
+.qs-outcome-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.qs-outcome-btn{padding:6px;border:0.5px solid;border-radius:5px;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:inherit;text-align:center;transition:background .15s}
+.qs-outcome-btn.pass{background:rgba(59,109,17,0.2);border-color:#3b6d11;color:#6abf3a}
+.qs-outcome-btn.pass:hover{background:rgba(59,109,17,0.4)}
+.qs-outcome-btn.fail{background:rgba(163,45,45,0.2);border-color:#a32d2d;color:#e05c5c}
+.qs-outcome-btn.fail:hover{background:rgba(163,45,45,0.4)}
+.qs-outcome-btn.blocked{background:rgba(133,79,11,0.2);border-color:#854f0b;color:#e08c30}
+.qs-outcome-btn.blocked:hover{background:rgba(133,79,11,0.4)}
+.qs-outcome-btn.review{background:rgba(24,95,165,0.2);border-color:#185fa5;color:#4da6ff}
+.qs-outcome-btn.review:hover{background:rgba(24,95,165,0.4)}
+.qs-coverage-bar{height:5px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;margin:4px 0}
+.qs-coverage-fill{height:100%;background:#6abf3a;border-radius:3px;transition:width .3s}
+.qs-divider{height:0.5px;background:rgba(255,255,255,0.07);margin:2px 0}
+.qs-start-btn{width:100%;padding:8px;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.4);
+  border-radius:6px;color:#ffa500;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:background .15s}
+.qs-start-btn:hover{background:rgba(255,165,0,0.25)}
+.qs-end-btn{width:100%;padding:8px;background:rgba(163,45,45,0.15);border:1px solid rgba(163,45,45,0.4);
+  border-radius:6px;color:#e05c5c;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:background .15s}
+.qs-end-btn:hover{background:rgba(163,45,45,0.25)}
+.qs-empty{text-align:center;color:rgba(255,255,255,0.25);font-size:11px;padding:16px 0}
+
+/* ── QA / UAT Test Management ───────────────────────────── */
+.qa-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+.qa-filter-select{font-size:13px;padding:5px 9px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit}
+.qa-section{margin-bottom:1.5rem}
+.qa-section-title{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;padding:.4rem .75rem;background:var(--bg2);border-radius:var(--radius);margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between}
+.qa-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:.5rem;display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:start}
+.qa-card.status-pass{border-left:3px solid #3b6d11}
+.qa-card.status-fail{border-left:3px solid #a32d2d}
+.qa-card.status-blocked{border-left:3px solid #854f0b}
+.qa-card.status-pending{border-left:3px solid var(--text3)}
+.qa-card.status-in_progress{border-left:3px solid #185fa5}
+.qa-priority-dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.qa-priority-dot.critical{background:#a32d2d}
+.qa-priority-dot.high{background:#854f0b}
+.qa-priority-dot.medium{background:#185fa5}
+.qa-priority-dot.low{background:var(--text3)}
+.qa-card-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px}
+.qa-card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center}
+.qa-type-pill{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em}
+.qa-type-pill.qa{background:#e6f1fb;color:#185fa5}
+.qa-type-pill.uat{background:#eaf3de;color:#3b6d11}
+.qa-status-pill{font-size:10px;font-weight:600;padding:1px 7px;border-radius:20px}
+.qa-status-pill.pass{background:#eaf3de;color:#3b6d11}
+.qa-status-pill.fail{background:#fcebeb;color:#a32d2d}
+.qa-status-pill.blocked{background:#faeeda;color:#854f0b}
+.qa-status-pill.pending{background:var(--bg2);color:var(--text2)}
+.qa-status-pill.in_progress{background:#e6f1fb;color:#185fa5}
+.qa-assignee{font-size:11px;color:var(--text2)}
+.qa-card-actions{display:flex;gap:4px;flex-shrink:0}
+.qa-action-btn{background:none;border:0.5px solid var(--border2);border-radius:var(--radius);cursor:pointer;color:var(--text2);padding:3px 7px;font-size:11px;font-family:inherit;display:flex;align-items:center;gap:3px}
+.qa-action-btn:hover{background:var(--bg2);color:var(--text)}
+.qa-stats-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem;padding:.65rem 1rem;background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius)}
+.qa-stat{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+.qa-stat strong{color:var(--text)}
+.qa-progress{height:6px;border-radius:3px;background:var(--bg3);margin-bottom:1rem;overflow:hidden;display:flex}
+.qa-progress-seg{height:100%;transition:width .3s}
+
+/* ── Role switcher (test/dev mode) ──────────────────────── */
+.role-switcher-wrap{display:none;align-items:center;gap:6px}
+.role-switcher-wrap.visible{display:flex}
+.role-switcher-label{font-size:10px;color:rgba(255,255,255,0.45);white-space:nowrap}
+.role-switcher-select{font-size:11px;font-weight:700;padding:2px 6px;border-radius:20px;background:rgba(255,165,0,0.25);color:#ffa500;border:1px solid rgba(255,165,0,0.5);cursor:pointer;font-family:inherit;max-width:130px}
+.role-switcher-badge{font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;background:#ffa500;color:#000;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.view-indicator{font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);border:0.5px solid rgba(255,255,255,0.2);white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px}
+.view-indicator i{font-size:11px}
+.user-switcher-select{font-size:11px;font-weight:600;padding:2px 6px;border-radius:20px;background:rgba(106,191,58,0.2);color:#6abf3a;border:1px solid rgba(106,191,58,0.4);cursor:pointer;font-family:inherit;max-width:150px}
+.user-switcher-select:disabled{opacity:.4;cursor:not-allowed}
+.user-switcher-label{font-size:10px;color:rgba(255,255,255,0.45);white-space:nowrap}
+
 /* ── Customer autocomplete ───────────────────────────────── */
 .ac-wrap{position:relative}
 .ac-dropdown{position:absolute;top:100%;left:0;right:0;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);max-height:220px;overflow-y:auto;display:none}
@@ -193,7 +317,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .submission-status i{font-size:16px}
 
 /* ── My Submissions screen ───────────────────────────────── */
-#status-screen{display:none;max-width:520px;margin:0 auto;padding:1rem}
+#status-screen{display:none;max-width:520px;margin:0 auto;padding:.5rem 1rem 1rem}
 #status-screen.active{display:block}
 #main-wrap.hidden-view{display:none}
 .nav-tabs{display:flex;gap:0;background:var(--bg);border-bottom:0.5px solid var(--border);position:sticky;top:0;z-index:50}
@@ -256,7 +380,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .tsv-grid th:last-child{border-right:none}
 .tsv-grid th.col-name{text-align:left;width:130px}
 .tsv-grid th.col-role{width:36px;text-align:center}
-.tsv-grid th.col-time{width:62px;text-align:center}
+.tsv-grid th.col-time{width:68px;text-align:center}
 .tsv-grid th.col-hrs{width:42px;text-align:center}
 .tsv-grid th.col-flag{width:36px;text-align:center}
 .tsv-grid th.col-group{border-bottom:none;border-top:0.5px solid var(--border2);text-align:center;font-size:8px;letter-spacing:.06em;color:var(--text3)}
@@ -269,6 +393,8 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .tsv-grid td.group-start{border-left:1.5px solid var(--border2)}
 .tsv-grid tr:last-child td{border-bottom:none}
 .tsv-grid tr:hover td{background:var(--bg2)}
+.tsv-grid tr.tsv-continuation-row td{background:var(--bg2);border-top:none}
+.tsv-grid tr.tsv-continuation-row:hover td{background:var(--bg3)}
 /* DNR / Preferred badges */
 .tsv-flag-dnr{font-size:9px;font-weight:700;color:var(--danger-text);background:var(--danger-bg);padding:1px 4px;border-radius:3px}
 .tsv-flag-pref{font-size:9px;font-weight:700;color:var(--success-text);background:var(--success-bg);padding:1px 4px;border-radius:3px}
@@ -447,8 +573,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .adj-amount{font-weight:700;color:var(--text);white-space:nowrap}
 
 /* ── Setup Wizard ────────────────────────────────────────── */
-.gear-btn{background:rgba(255,255,255,0.15);border:0.5px solid rgba(255,255,255,0.4);color:#fff;font-size:12px;font-weight:600;cursor:pointer;padding:4px 10px;border-radius:5px;font-family:inherit;display:none;align-items:center;gap:4px}
-.gear-btn:hover{background:rgba(255,255,255,0.25)}
+.gear-btn{display:none!important} /* moved to sidebar as Configuration */
 #wizard-screen{display:none;position:fixed;inset:0;z-index:260;background:var(--bg3);flex-direction:row;overflow:hidden}
 #wizard-screen.active{display:flex}
 /* Wizard content panel — sits to the right of the sidebar clone */
@@ -626,6 +751,16 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <span class="sb-link-label">Scheduling</span>
     </button>
     <div class="sb-divider"></div>
+    <div class="sb-section-label">System</div>
+    <button class="sb-link" id="sb-config" onclick="openWizard()" aria-label="Configuration" style="display:none">
+      <i class="ti ti-settings-2" aria-hidden="true"></i>
+      <span class="sb-link-label">Configuration</span>
+    </button>
+    <button class="sb-link" id="sb-signout" onclick="doLogout()" aria-label="Sign out">
+      <i class="ti ti-logout" aria-hidden="true"></i>
+      <span class="sb-link-label">Sign out</span>
+    </button>
+    <div class="sb-divider"></div>
     <div class="sb-section-label">Finance</div>
     <button class="sb-link sb-future" id="sb-payroll" onclick="sbNavigate('payroll')" aria-label="Payroll" title="Coming soon">
       <i class="ti ti-cash" aria-hidden="true"></i>
@@ -639,9 +774,9 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 
   <!-- Footer: settings + user -->
   <div class="sb-footer">
-    <button class="sb-link" id="sb-settings" onclick="openWizard()" aria-label="Settings" style="display:none">
-      <i class="ti ti-settings" aria-hidden="true"></i>
-      <span class="sb-link-label">Settings</span>
+    <button class="sb-link" id="sb-settings" onclick="openWizard()" aria-label="Configuration" style="display:none">
+      <i class="ti ti-settings-2" aria-hidden="true"></i>
+      <span class="sb-link-label">Configuration</span>
     </button>
     <div class="sb-user-row">
       <div class="sb-avatar" id="sb-avatar">?</div>
@@ -686,10 +821,8 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 <!-- Nav tabs (shown when logged in) -->
 <div id="nav-tabs" style="display:none">
   <div class="nav-tabs">
-    <button class="nav-tab active" id="tab-form" onclick="switchTab('form')">
-      <i class="ti ti-clipboard-list"></i> New Timesheet
-    </button>
-    <button class="nav-tab" id="tab-status" onclick="switchTab('status')">
+    <button class="nav-tab" id="tab-form" onclick="switchTab('form')" style="display:none"></button>
+    <button class="nav-tab active" id="tab-status" onclick="switchTab('status')">
       <i class="ti ti-history"></i> My Submissions
       <span class="status-count-badge" id="pending-count" style="display:none">0</span>
     </button>
@@ -702,8 +835,25 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 <div class="user-bar" id="user-bar" style="display:none">
   <span class="user-bar-name" id="user-bar-name">Loading...</span>
   <span class="user-bar-role" id="user-bar-role">Supervisor</span>
-  <button class="gear-btn" id="gear-btn" onclick="openWizard()" title="Setup &amp; Settings">⚙ Setup</button>
+  <span class="view-indicator" id="view-indicator" style="display:none"></span>
   <button class="logout-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+  <div class="role-switcher-wrap" id="role-switcher-wrap">
+    <span class="role-switcher-badge" id="role-switcher-badge-label">TEST</span>
+    <span class="role-switcher-label">Role:</span>
+    <select class="role-switcher-select" id="role-switcher-select" onchange="switchTestRole(this.value)">
+      <option value="">Loading...</option>
+    </select>
+    <span class="user-switcher-label">Group:</span>
+    <select class="user-switcher-select" id="user-switcher-group" onchange="renderUserSwitcherOptions(this.value);switchTestUser('')" disabled style="max-width:110px">
+      <option value="">All groups</option>
+    </select>
+    <span class="user-switcher-label">User:</span>
+    <select class="user-switcher-select" id="user-switcher-select" onchange="switchTestUser(this.value)" disabled>
+      <option value="">— select role first —</option>
+    </select>
+  </div>
+
+
 </div>
 
 <!-- Setup Wizard -->
@@ -726,9 +876,9 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       </button>
       <div class="sb-divider"></div>
       <div class="sb-section-label">Workforce</div>
-      <button class="sb-link active" aria-label="Employees">
-        <i class="ti ti-users" aria-hidden="true"></i>
-        <span class="sb-link-label">Employees</span>
+      <button class="sb-link active" aria-label="Configuration">
+        <i class="ti ti-settings-2" aria-hidden="true"></i>
+        <span class="sb-link-label">Configuration</span>
       </button>
       <button class="sb-link" onclick="closeWizard();showComingSoon('scheduling')" aria-label="Scheduling">
         <i class="ti ti-calendar" aria-hidden="true"></i>
@@ -743,6 +893,11 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <button class="sb-link" onclick="closeWizard();showComingSoon('reports')" aria-label="Reports">
         <i class="ti ti-chart-bar" aria-hidden="true"></i>
         <span class="sb-link-label">Reports</span>
+      </button>
+      <div class="sb-divider"></div>
+      <button class="sb-link" onclick="doLogout()" aria-label="Sign out">
+        <i class="ti ti-logout" aria-hidden="true"></i>
+        <span class="sb-link-label">Sign out</span>
       </button>
     </nav>
     <div class="sb-footer">
@@ -766,6 +921,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <i class="ti ti-settings" style="color:#6abf3a;font-size:18px"></i>
     <span class="wizard-topbar-title">Setup &amp; Settings</span>
     <img src="data:image/png;base64,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" alt="DATASCAN" style="height:24px;width:auto;object-fit:contain;margin-left:auto;margin-right:12px;opacity:.9"/>
+    <button onclick="doLogout()" style="background:none;border:0.5px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.7);font-size:12px;font-weight:600;cursor:pointer;padding:4px 12px;border-radius:5px;font-family:inherit;display:inline-flex;align-items:center;gap:5px;margin-right:6px"><i class="ti ti-logout"></i> Sign out</button>
     <button class="wizard-close-btn" onclick="closeWizard()" title="Close"><i class="ti ti-x"></i></button>
   </div>
   <!-- First-run banner -->
@@ -785,6 +941,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <button class="wizard-tab"        id="wtab-roles"   onclick="wizardGoto('roles')"><i class="ti ti-shield-check"></i> Roles &amp; Permissions</button>
     <button class="wizard-tab"        id="wtab-chain"   onclick="wizardGoto('chain')"><i class="ti ti-git-branch"></i> Approval Chain</button>
     <button class="wizard-tab"        id="wtab-perdiem" onclick="wizardGoto('perdiem')"><i class="ti ti-cash"></i> Per Diem</button>
+    <button class="wizard-tab"        id="wtab-qa"      onclick="wizardGoto('qa')"><i class="ti ti-test-pipe"></i> QA / UAT</button>
   </div>
   <!-- Body -->
   <div class="wizard-body" id="wizard-body">
@@ -794,6 +951,21 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   </div>
   </div><!-- /wizard-content-panel -->
 </div><!-- /wizard-screen -->
+
+<!-- QA Session Panel (right side, injected into app-shell by JS) -->
+<div id="qa-session-panel">
+  <button class="qs-toggle-btn" id="qs-toggle-btn" onclick="toggleQAPanel()" title="QA Test Session">
+    <i class="ti ti-test-pipe" id="qs-toggle-icon"></i>
+  </button>
+  <div class="qs-header">
+    <span class="qs-badge" id="qs-mode-badge">QA</span>
+    <span class="qs-header-title">Test Session</span>
+    <button onclick="toggleQAPanel()" style="background:none;border:none;color:rgba(255,255,255,0.3);cursor:pointer;padding:0;font-size:14px"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="qs-body" id="qs-body">
+    <div class="qs-empty"><i class="ti ti-test-pipe" style="font-size:24px;display:block;margin-bottom:6px"></i>Activate QA or UAT mode<br>to start a test session</div>
+  </div>
+</div>
 
 <!-- Wizard modal -->
 <div class="wiz-modal-overlay" id="wiz-modal-overlay">
@@ -955,7 +1127,9 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       </div>
       <div class="mgr-filter-group">
         <label>Supervisor</label>
-        <input type="text" id="mgr-f-supervisor" placeholder="Any"/>
+        <select id="mgr-f-supervisor">
+          <option value="">All supervisors</option>
+        </select>
       </div>
       <div class="mgr-filter-group" style="min-width:60px">
         <label>Store</label>
@@ -1462,14 +1636,15 @@ function removeBlock(empId,blockId){
 function makeBlockEl(empId,block,blocks){
   const{blockId,type,isPrimary,isDefault}=block;
   const canRemove=!isPrimary&&!isDefault;
-  const label=isPrimary?'Count in / out':isDefault&&type==='brk'?'Break':isDefault&&type==='variance'?'Variance':type==='brk'?'Additional break':type==='variance'?'Additional variance':'Additional paid';
-  const badgeCls=type==='brk'?'bb-brk':type==='variance'?'bb-var':'bb-paid';
-  const cardCls=type==='brk'?'brk':type==='variance'?'variance':'paid';
-  const inLbl=type==='variance'?'Variance in':isPrimary?'Count in':'In';
-  const outLbl=type==='variance'?'Variance out':isPrimary?'Count out':'Out';
+  const label=isPrimary?'Count in / out':isDefault&&type==='brk'?'Break':isDefault&&type==='variance'?'Variance':type==='travel'?'Travel':type==='brk'?'Additional break':type==='variance'?'Additional variance':'Additional paid';
+  const badgeCls=type==='brk'?'bb-brk':type==='variance'?'bb-var':type==='travel'?'bb-var':'bb-paid';
+  const cardCls=type==='brk'?'brk':type==='variance'?'variance':type==='travel'?'variance':'paid';
+  const inLbl=type==='variance'?'Variance in':isPrimary?'Count in':type==='travel'?'Travel in':'In';
+  const outLbl=type==='variance'?'Variance out':isPrimary?'Count out':type==='travel'?'Travel out':'Out';
   let hint='';
   if(type==='variance')hint='<div class="hint" style="color:#378ADD">Auto-filled from clock out when variance out is entered</div>';
   else if(type==='brk')hint='<div class="hint">Must fall within a paid period</div>';
+  else if(type==='travel')hint='<div class="hint" style="color:#378ADD">Travel Only — count punches are locked for this employee</div>';
   else if(!isPrimary&&!isDefault&&type==='paid')hint='<div class="hint">Cannot overlap other paid periods</div>';
   const isVarIn=type==='variance';
   // Variance in: editable only when primary has no count in/out; locked once count in or out is set
@@ -1541,10 +1716,11 @@ function addEmployee(role,loginOverride){
       <div class="field-group"><label>Login / ID</label><input type="text" value="${loginDefault}" placeholder="Login"/></div>
     </div>
     <div id="blocks-${empId}"></div>
-    <div class="add-block-row" id="add-block-row-${empId}">
-      <button class="abb paid" onclick="addBlock(${empId},'paid')"><i class="ti ti-plus"></i> Paid</button>
+    <div class="add-block-row" id="add-block-row-${empId}" style="grid-template-columns:1fr 1fr 1fr 1fr">
+      <button class="abb paid" id="abb-paid-${empId}" onclick="addBlock(${empId},'paid')"><i class="ti ti-plus"></i> Paid</button>
       <button class="abb brk" onclick="addBlock(${empId},'brk')"><i class="ti ti-plus"></i> Break</button>
       <button class="abb var" onclick="addBlock(${empId},'variance')"><i class="ti ti-plus"></i> Variance</button>
+      <button class="abb" style="border-color:#378ADD;color:#185FA5" onclick="addBlock(${empId},'travel')"><i class="ti ti-plus"></i> Travel</button>
     </div>
     <div class="emp-checks">
       <label class="emp-check-label dnr">
@@ -1558,6 +1734,10 @@ function addEmployee(role,loginOverride){
       <label class="emp-check-label tie">
         <input type="checkbox" id="tie-${empId}"/>
         <span>TIE</span>
+      </label>
+      <label class="emp-check-label" style="border-color:#378ADD;color:#185FA5">
+        <input type="checkbox" id="travel-only-${empId}" onchange="onTravelOnlyChange(${empId},this.checked)"/>
+        <span>Travel Only</span>
       </label>
     </div>
     <div class="field-group" style="margin-top:8px"><label>Notes</label><input type="text" placeholder="Optional notes…" style="font-size:14px"/></div>`;
@@ -1696,6 +1876,74 @@ function onEmpCheckChange(selected, other, empId){
   if(selectedEl && selectedEl.checked && otherEl){
     otherEl.checked = false;
   }
+}
+
+function onTravelOnlyChange(empId, checked){
+  const blocks = empBlocks[empId] || [];
+  const primary = blocks.find(b => b.isPrimary);
+  const hasCountTime = primary && (primary.inVal || primary.outVal);
+
+  if(checked && hasCountTime){
+    // Warn: count punches exist
+    const ok = confirm(
+      'This employee has Count In/Out time entries.\n\n' +
+      'Selecting Travel Only will delete all Count, Break, and Variance punches for this employee.\n\n' +
+      'Continue?'
+    );
+    if(!ok){
+      // Revert checkbox
+      const cb = document.getElementById('travel-only-'+empId);
+      if(cb) cb.checked = false;
+      return;
+    }
+    // Delete all non-travel blocks: clear values and hide
+    blocks.forEach(b => {
+      if(b.type !== 'travel'){
+        b.inVal = ''; b.outVal = '';
+        const inEl  = document.getElementById('bin-'  + b.blockId);
+        const outEl = document.getElementById('bout-' + b.blockId);
+        if(inEl)  inEl.value = '';
+        if(outEl) outEl.value = '';
+      }
+    });
+  }
+
+  // Lock or unlock the Count In/Out, Break, Variance inputs
+  blocks.forEach(b => {
+    if(b.type === 'travel') return;
+    const inEl  = document.getElementById('bin-'  + b.blockId);
+    const outEl = document.getElementById('bout-' + b.blockId);
+    const blockEl = document.getElementById('block-' + b.blockId);
+    if(checked){
+      if(inEl)  { inEl.readOnly=true;  inEl.style.cssText='background:#f0f0f0;color:#888;cursor:not-allowed;border-style:dashed'; }
+      if(outEl) { outEl.readOnly=true; outEl.style.cssText='background:#f0f0f0;color:#888;cursor:not-allowed;border-style:dashed'; }
+      if(blockEl) blockEl.style.opacity='0.45';
+    } else {
+      if(inEl)  { inEl.readOnly=false;  inEl.style.cssText=''; }
+      if(outEl) { outEl.readOnly=false; outEl.style.cssText=''; }
+      if(blockEl) blockEl.style.opacity='';
+    }
+  });
+
+  // Lock/unlock the Paid/Break/Variance add buttons
+  const paidBtn = document.getElementById('abb-paid-'+empId);
+  const addRow  = document.getElementById('add-block-row-'+empId);
+  if(addRow){
+    addRow.querySelectorAll('.abb.paid, .abb.brk, .abb.var').forEach(btn => {
+      btn.disabled = checked;
+      btn.style.opacity = checked ? '0.35' : '';
+      btn.style.cursor  = checked ? 'not-allowed' : '';
+    });
+  }
+
+  // Add a travel block automatically if none exists when Travel Only is checked
+  if(checked){
+    const hasTravelBlock = blocks.some(b => b.type === 'travel');
+    if(!hasTravelBlock) addBlock(empId, 'travel');
+  }
+
+  calcTotals();
+  checkSubmitReady();
 }
 
 function lockFormAfterSubmit(){
@@ -2286,8 +2534,8 @@ function can(permission){
 }
 
 // Role group shortcuts
-function isSupervisor(){ return currentProfile?.role === 'supervisor'; }
-function isEmployee()  { return currentProfile?.role === 'employee'; }
+function isSupervisor(){ return (_testRoleKey || currentProfile?.role) === 'supervisor'; }
+function isEmployee()  { return (_testRoleKey || currentProfile?.role) === 'employee'; }
 function isFieldRole() { return isSupervisor() || isEmployee(); }
 function canApprove()  { return can('approve'); }
 function canViewAll()  { return can('view_all'); }
@@ -2345,11 +2593,14 @@ async function onSignedIn(user){
 
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
   document.getElementById('user-bar-role').textContent = roleDef?.role_label || profile?.role || 'Supervisor';
+  initRoleSwitcher();   // cache roles for switcher (hidden until key combo)
+  initQAKeyListener();  // listen for secret key combo to activate QA mode
+  // NOTE: view indicator and role switcher only appear after key combo
 
   // Route to correct view based on permissions
   if(isFieldRole()){
-    // Supervisor / Employee: start on My Submissions, form accessible via New Timesheet
-    document.getElementById('tab-form').style.display   = '';
+    // Supervisor / Employee: start on My Submissions, form accessible via New Timesheet button
+    document.getElementById('tab-form').style.display   = 'none';
     document.getElementById('tab-status').style.display = '';
     document.getElementById('tab-mgr').style.display    = 'none';
     const supEl = document.getElementById('ji-supervisor');
@@ -2380,6 +2631,1030 @@ async function onSignedIn(user){
     document.getElementById('main-wrap').style.display  = 'none';
     switchTab('mgr');
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// QA / UAT TEST MANAGEMENT
+// ════════════════════════════════════════════════════════════
+let _qaTests        = [];
+let _qaUsers        = [];
+let _qaFilterType   = '';
+let _qaFilterStatus = '';
+let _qaFilterArea   = '';
+
+const QA_AREAS = [
+  'Login & Auth', 'Timesheet Submission', 'Employee Management',
+  'Approval Workflow', 'Manager Dashboard', 'Role Permissions',
+  'Notifications', 'User Setup', 'Org Structure', 'Per Diem',
+  'Reports', 'Scans & Attachments', 'Role Switcher / Test Tools'
+];
+
+const QA_STATUSES = {
+  pending:     {label:'Pending',     cls:'pending'},
+  in_progress: {label:'In Progress', cls:'in_progress'},
+  pass:        {label:'Pass',        cls:'pass'},
+  fail:        {label:'Fail',        cls:'fail'},
+  blocked:     {label:'Blocked',     cls:'blocked'},
+};
+
+const QA_PRIORITIES = {
+  critical: {label:'Critical', cls:'critical'},
+  high:     {label:'High',     cls:'high'},
+  medium:   {label:'Medium',   cls:'medium'},
+  low:      {label:'Low',      cls:'low'},
+};
+
+// ════════════════════════════════════════════════════════════
+// QA SESSION PANEL — right-side collapsible test runner
+// ════════════════════════════════════════════════════════════
+let _qsOpen          = false;
+let _qsActiveTest    = null;   // currently running test case
+let _qsLog           = [];     // [{time, text, type}]
+let _qsChecklist     = [];     // [{id, label, checked}]
+let _qsInterceptors  = [];     // cleanup fns for event listeners
+let _qsAssignedTests = [];     // tests assigned to current user
+
+function toggleQAPanel(){
+  const panel = document.getElementById('qa-session-panel');
+  const icon  = document.getElementById('qs-toggle-icon');
+  if(!panel) return;
+  _qsOpen = !_qsOpen;
+  panel.classList.toggle('qs-open', _qsOpen);
+  if(icon) icon.className = _qsOpen ? 'ti ti-chevron-right' : 'ti ti-test-pipe';
+}
+
+async function openQAPanel(){
+  const panel = document.getElementById('qa-session-panel');
+  if(!panel) return;
+  _qsOpen = true;
+  panel.classList.add('qs-open');
+  document.getElementById('qs-toggle-icon').className = 'ti ti-chevron-right';
+  await renderQASessionBody();
+}
+
+async function renderQASessionBody(){
+  const body = document.getElementById('qs-body');
+  if(!body) return;
+
+  // Set mode badge
+  const badge = document.getElementById('qs-mode-badge');
+  if(badge){
+    const modes = [];
+    if(_qaModeActive)  modes.push('QA');
+    if(_uatModeActive) modes.push('UAT');
+    badge.textContent = modes.join('+') || 'TEST';
+  }
+
+  if(_qsActiveTest){
+    renderActiveSession();
+    return;
+  }
+
+  // Load assigned tests
+  const config       = currentProfile?.permissions_override?.qa_config;
+  const type         = _uatModeActive && !_qaModeActive ? 'uat' : _qaModeActive ? 'qa' : null;
+  const {data:tests} = await getSupabase()
+    .from('qa_tests')
+    .select('*')
+    .eq('assigned_to', currentUser.id)
+    .order('priority').order('area');
+
+  _qsAssignedTests = (tests||[]).filter(t=> !type || t.type===type);
+
+  if(!_qsAssignedTests.length){
+    body.innerHTML = `<div class="qs-empty"><i class="ti ti-clipboard-x" style="font-size:24px;display:block;margin-bottom:6px"></i>No test cases assigned to you</div>`;
+    return;
+  }
+
+  const pending  = _qsAssignedTests.filter(t=>t.status==='pending'||t.status==='in_progress');
+  const done     = _qsAssignedTests.filter(t=>t.status==='pass'||t.status==='fail'||t.status==='blocked');
+  const total    = _qsAssignedTests.length;
+  const pct      = total ? Math.round((done.length/total)*100) : 0;
+
+  body.innerHTML = `
+    <div>
+      <div class="qs-section-title">Coverage</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:3px">
+        <span>${done.length}/${total} completed</span><span>${pct}%</span>
+      </div>
+      <div class="qs-coverage-bar"><div class="qs-coverage-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="qs-divider"></div>
+    ${pending.length ? `
+      <div>
+        <div class="qs-section-title">To test (${pending.length})</div>
+        ${pending.map(t=>`
+          <div class="qs-test-card" onclick="startQASession('${t.id}')">
+            <div class="qs-test-title">${t.title}</div>
+            <div class="qs-test-meta">
+              <span class="qa-type-pill ${t.type||'qa'}">${(t.type||'qa').toUpperCase()}</span>
+              <span>${t.area||'General'}</span>
+              <span style="margin-left:auto;color:${t.priority==='critical'?'#e05c5c':t.priority==='high'?'#e08c30':'rgba(255,255,255,0.3)'}">${t.priority||'medium'}</span>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+    ${done.length ? `
+      <div>
+        <div class="qs-section-title">Completed (${done.length})</div>
+        ${done.map(t=>`
+          <div class="qs-test-card" style="opacity:.6">
+            <div class="qs-test-title">${t.title}</div>
+            <div class="qs-test-meta">
+              <span class="qa-status-pill ${t.status}">${QA_STATUSES[t.status]?.label||t.status}</span>
+              <span>${t.area||''}</span>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}`;
+}
+
+async function startQASession(testId){
+  const test = _qsAssignedTests.find(t=>t.id===testId);
+  if(!test) return;
+  _qsActiveTest = test;
+  _qsLog = [];
+  _qsChecklist = buildChecklist();
+
+  // Mark as in_progress
+  await getSupabase().from('qa_tests').update({status:'in_progress',updated_at:new Date().toISOString()}).eq('id',testId);
+
+  // Start intercepting interactions
+  startInterceptingInteractions();
+
+  qsLog('Session started', 'auto');
+  renderActiveSession();
+}
+
+function buildChecklist(){
+  // Dynamically scan the current visible screen for interactive elements
+  const items = [];
+  const seen  = new Set();
+
+  // Scan buttons
+  document.querySelectorAll('button:not([disabled]):not(.qs-toggle-btn)').forEach(el=>{
+    const label = (el.textContent||el.title||el.getAttribute('aria-label')||'').trim().replace(/\s+/g,' ').substring(0,40);
+    if(label && !seen.has(label) && el.offsetParent !== null){
+      seen.add(label);
+      items.push({id:'btn-'+items.length, label:'Button: '+label, checked:false, el});
+    }
+  });
+
+  // Scan inputs/selects
+  document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]), select, textarea').forEach(el=>{
+    const lbl = document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim()
+      || el.placeholder || el.name || el.id || '';
+    const label = lbl.substring(0,40);
+    if(label && !seen.has(label) && el.offsetParent !== null){
+      seen.add(label);
+      items.push({id:'inp-'+items.length, label:'Field: '+label, checked:false, el});
+    }
+  });
+
+  return items.slice(0,30); // cap at 30 items
+}
+
+function renderActiveSession(){
+  const body = document.getElementById('qs-body');
+  if(!body || !_qsActiveTest) return;
+
+  const checked = _qsChecklist.filter(i=>i.checked).length;
+  const total   = _qsChecklist.length;
+  const pct     = total ? Math.round((checked/total)*100) : 0;
+
+  body.innerHTML = `
+    <div>
+      <div style="font-size:11px;color:rgba(255,165,0,0.8);font-weight:600;margin-bottom:4px">
+        <i class="ti ti-player-record" style="color:#e05c5c"></i> ACTIVE SESSION
+      </div>
+      <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:6px">${_qsActiveTest.title}</div>
+      ${_qsActiveTest.description ? `<div style="font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:6px">${_qsActiveTest.description}</div>` : ''}
+    </div>
+
+    <div class="qs-divider"></div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="qs-section-title">Screen checklist</div>
+        <span style="font-size:10px;color:rgba(255,255,255,0.3)">${checked}/${total}</span>
+      </div>
+      <div class="qs-coverage-bar"><div class="qs-coverage-fill" style="width:${pct}%"></div></div>
+      <div id="qs-checklist" style="margin-top:6px;max-height:160px;overflow-y:auto">
+        ${_qsChecklist.length ? _qsChecklist.map((item,i)=>`
+          <div class="qs-checklist-item">
+            <input type="checkbox" class="qs-check" id="qsc-${i}" ${item.checked?'checked':''}
+              onchange="toggleChecklistItem(${i}, this.checked)"/>
+            <label for="qsc-${i}" class="qs-check-label ${item.checked?'checked':''}">${item.label}</label>
+          </div>`).join('') : '<div class="qs-empty" style="padding:8px 0">No elements detected on screen</div>'}
+      </div>
+      <button onclick="refreshChecklist()" style="font-size:10px;background:none;border:none;color:rgba(255,165,0,0.5);cursor:pointer;padding:4px 0;font-family:inherit"><i class="ti ti-refresh"></i> Refresh checklist</button>
+    </div>
+
+    <div class="qs-divider"></div>
+
+    <div>
+      <div class="qs-section-title">Activity log (${_qsLog.length})</div>
+      <div id="qs-log" style="max-height:140px;overflow-y:auto;display:flex;flex-direction:column-reverse">
+        ${_qsLog.slice().reverse().map(e=>`
+          <div class="qs-log-entry">
+            <span class="qs-log-time">${e.time}</span>
+            <span class="qs-log-text ${e.type==='manual'?'qs-log-manual':'qs-log-auto'}">${e.text}</span>
+          </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:5px;margin-top:6px">
+        <input type="text" class="qs-note-input" id="qs-note-input" placeholder="Add a note..." style="flex:1"
+          onkeydown="if(event.key==='Enter'){addManualNote();event.preventDefault()}"/>
+        <button onclick="addManualNote()" style="background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.3);border-radius:4px;color:#ffa500;cursor:pointer;padding:0 7px;font-size:13px"><i class="ti ti-send"></i></button>
+      </div>
+    </div>
+
+    <div class="qs-divider"></div>
+
+    <div>
+      <div class="qs-section-title">End session — outcome</div>
+      <textarea class="qs-note-input" id="qs-feedback" rows="2" placeholder="Feedback / bug details..." style="margin-bottom:6px;width:100%"></textarea>
+      <div class="qs-outcome-btns">
+        <button class="qs-outcome-btn pass"    onclick="endQASession('pass')"><i class="ti ti-circle-check"></i> Pass</button>
+        <button class="qs-outcome-btn fail"    onclick="endQASession('fail')"><i class="ti ti-circle-x"></i> Fail</button>
+        <button class="qs-outcome-btn blocked" onclick="endQASession('blocked')"><i class="ti ti-alert-triangle"></i> Blocked</button>
+        <button class="qs-outcome-btn review"  onclick="endQASession('needs_review')"><i class="ti ti-eye"></i> Review</button>
+      </div>
+      <button class="qs-end-btn" style="margin-top:6px" onclick="cancelQASession()">Cancel session</button>
+    </div>`;
+}
+
+function toggleChecklistItem(index, checked){
+  if(!_qsChecklist[index]) return;
+  _qsChecklist[index].checked = checked;
+  const label = _qsChecklist[index].label;
+  qsLog((checked ? '✓ Checked: ' : '○ Unchecked: ') + label, 'auto');
+  // Update label style
+  const lbl = document.querySelector(`label[for="qsc-${index}"]`);
+  if(lbl) lbl.className = 'qs-check-label' + (checked?' checked':'');
+  // Update log
+  refreshSessionLog();
+  // Update coverage bar
+  const checked2 = _qsChecklist.filter(i=>i.checked).length;
+  const pct = _qsChecklist.length ? Math.round((checked2/_qsChecklist.length)*100) : 0;
+  const fill = document.querySelector('.qs-coverage-fill');
+  if(fill) fill.style.width = pct+'%';
+  document.querySelector('.qs-section-title + span')?.innerText;
+}
+
+function refreshSessionLog(){
+  const logEl = document.getElementById('qs-log');
+  if(!logEl) return;
+  logEl.innerHTML = _qsLog.slice().reverse().map(e=>`
+    <div class="qs-log-entry">
+      <span class="qs-log-time">${e.time}</span>
+      <span class="qs-log-text ${e.type==='manual'?'qs-log-manual':'qs-log-auto'}">${e.text}</span>
+    </div>`).join('');
+}
+
+function refreshChecklist(){
+  _qsChecklist = buildChecklist();
+  renderActiveSession();
+  qsLog('Checklist refreshed — ' + _qsChecklist.length + ' elements found', 'auto');
+}
+
+function addManualNote(){
+  const inp = document.getElementById('qs-note-input');
+  if(!inp || !inp.value.trim()) return;
+  qsLog(inp.value.trim(), 'manual');
+  inp.value = '';
+  refreshSessionLog();
+}
+
+function qsLog(text, type='auto'){
+  const now = new Date();
+  const time = now.toTimeString().substring(0,8);
+  _qsLog.push({time, text, type});
+}
+
+function startInterceptingInteractions(){
+  // Stop any previous interceptors
+  stopInterceptingInteractions();
+
+  // Log all button clicks
+  const btnHandler = e => {
+    const btn = e.target.closest('button');
+    if(!btn || btn.closest('#qa-session-panel')) return;
+    const label = (btn.textContent||btn.title||btn.getAttribute('aria-label')||'').trim().replace(/\s+/g,' ').substring(0,50);
+    if(label) qsLog('Clicked: ' + label, 'auto');
+    // Auto-check matching checklist item
+    _qsChecklist.forEach((item,i)=>{
+      if(!item.checked && item.label.toLowerCase().includes(label.toLowerCase().substring(0,15))){
+        item.checked = true;
+        const cb = document.getElementById('qsc-'+i);
+        if(cb) cb.checked = true;
+      }
+    });
+    refreshSessionLog();
+  };
+
+  // Log significant field changes (on blur)
+  const inputHandler = e => {
+    const el = e.target;
+    if(!el || el.closest('#qa-session-panel')) return;
+    if(!['INPUT','SELECT','TEXTAREA'].includes(el.tagName)) return;
+    const lbl = document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim()
+      || el.placeholder || el.name || el.id || 'field';
+    const val = el.type==='password' ? '••••' : (el.value||'').substring(0,30);
+    qsLog(`Changed "${lbl.substring(0,25)}": ${val}`, 'auto');
+    _qsChecklist.forEach((item,i)=>{
+      if(!item.checked && item.label.toLowerCase().includes(lbl.toLowerCase().substring(0,12))){
+        item.checked = true;
+        const cb = document.getElementById('qsc-'+i);
+        if(cb) cb.checked = true;
+      }
+    });
+    refreshSessionLog();
+  };
+
+  document.addEventListener('click', btnHandler, true);
+  document.addEventListener('change', inputHandler, true);
+
+  _qsInterceptors = [
+    ()=>document.removeEventListener('click', btnHandler, true),
+    ()=>document.removeEventListener('change', inputHandler, true),
+  ];
+}
+
+function stopInterceptingInteractions(){
+  _qsInterceptors.forEach(fn=>fn());
+  _qsInterceptors = [];
+}
+
+async function endQASession(outcome){
+  if(!_qsActiveTest) return;
+  stopInterceptingInteractions();
+
+  const feedback = document.getElementById('qs-feedback')?.value?.trim() || '';
+  const logText  = _qsLog.map(e=>`[${e.time}] ${e.text}`).join('\n');
+  const checked  = _qsChecklist.filter(i=>i.checked).length;
+  const total    = _qsChecklist.length;
+  const summary  = `Coverage: ${checked}/${total} elements tested.\n\n${feedback ? 'Feedback: '+feedback+'\n\n' : ''}Activity log:\n${logText}`;
+
+  const updates = {
+    status:     outcome==='needs_review' ? 'in_progress' : outcome,
+    notes:      summary,
+    updated_at: new Date().toISOString(),
+  };
+
+  if(outcome==='pass'){
+    updates.signed_off_by = currentUser.id;
+    updates.signed_off_at = new Date().toISOString();
+  }
+
+  await getSupabase().from('qa_tests').update(updates).eq('id', _qsActiveTest.id);
+
+  _qsActiveTest = null;
+  _qsLog = [];
+  _qsChecklist = [];
+
+  showQAToast(outcome==='pass'?'✓ Test passed & saved':'✗ Session saved as ' + outcome);
+  await renderQASessionBody();
+}
+
+async function cancelQASession(){
+  if(!confirm('Cancel this test session? Progress will not be saved.')) return;
+  stopInterceptingInteractions();
+  _qsActiveTest = null;
+  _qsLog = [];
+  _qsChecklist = [];
+  await renderQASessionBody();
+}
+
+async function loadWizQA(){
+  const body = document.getElementById('wizard-body');
+  body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text2)"><i class="ti ti-loader-2" style="font-size:24px;animation:spin 1s linear infinite;display:block;margin:0 auto .5rem"></i>Loading test cases...</div>';
+
+  // Load users for assignment dropdown
+  const {data:users} = await getSupabase().from('profiles').select('id,full_name,email').eq('is_active',true).order('full_name');
+  _qaUsers = users||[];
+
+  // Load test cases from qa_tests table (create if missing)
+  const {data:tests, error} = await getSupabase().from('qa_tests').select('*').order('area').order('priority').order('created_at');
+  if(error && error.code==='42P01'){
+    // Table doesn't exist yet — show setup prompt
+    body.innerHTML = `
+      <div style="text-align:center;padding:3rem 2rem">
+        <i class="ti ti-test-pipe" style="font-size:40px;color:var(--text3);display:block;margin-bottom:1rem"></i>
+        <p style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:.5rem">QA/UAT table not set up yet</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1.5rem">Run the following SQL in Supabase to create the test case table:</p>
+        <pre style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:1rem;font-size:11px;text-align:left;overflow-x:auto;white-space:pre-wrap;color:var(--text)">CREATE TABLE public.qa_tests (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title         text NOT NULL,
+  description   text,
+  area          text,
+  type          text DEFAULT 'qa',
+  priority      text DEFAULT 'medium',
+  status        text DEFAULT 'pending',
+  assigned_to   uuid REFERENCES public.profiles(id),
+  notes         text,
+  bug_ref       text,
+  signed_off_by uuid REFERENCES public.profiles(id),
+  signed_off_at timestamptz,
+  created_by    uuid REFERENCES public.profiles(id),
+  created_at    timestamptz DEFAULT now(),
+  updated_at    timestamptz DEFAULT now()
+);
+ALTER TABLE public.qa_tests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage qa_tests"
+  ON public.qa_tests FOR ALL USING (auth.role() = 'authenticated');</pre>
+        <button class="wiz-btn primary" style="margin-top:1rem" onclick="loadWizQA()"><i class="ti ti-refresh"></i> Retry after setup</button>
+      </div>`;
+    return;
+  }
+
+  _qaTests = tests||[];
+  renderQAPanel();
+}
+
+function renderQAPanel(){
+  const body = document.getElementById('wizard-body');
+
+  // Filter
+  let filtered = _qaTests;
+  if(_qaFilterType)   filtered = filtered.filter(t=>t.type===_qaFilterType);
+  if(_qaFilterStatus) filtered = filtered.filter(t=>t.status===_qaFilterStatus);
+  if(_qaFilterArea)   filtered = filtered.filter(t=>t.area===_qaFilterArea);
+
+  // Stats
+  const total   = filtered.length;
+  const passing = filtered.filter(t=>t.status==='pass').length;
+  const failing = filtered.filter(t=>t.status==='fail').length;
+  const blocked = filtered.filter(t=>t.status==='blocked').length;
+  const inProg  = filtered.filter(t=>t.status==='in_progress').length;
+  const pending = filtered.filter(t=>t.status==='pending').length;
+  const pct     = total ? Math.round((passing/total)*100) : 0;
+
+  // Group by area
+  const byArea = {};
+  filtered.forEach(t=>{
+    const a = t.area||'General';
+    if(!byArea[a]) byArea[a]=[];
+    byArea[a].push(t);
+  });
+
+  const areaOpts = QA_AREAS.map(a=>`<option value="${a}" ${_qaFilterArea===a?'selected':''}>${a}</option>`).join('');
+  const userOpts = _qaUsers.map(u=>`<option value="${u.id}">${u.full_name||u.email}</option>`).join('');
+
+  body.innerHTML = `
+    <div class="qa-toolbar">
+      <button class="wiz-btn primary" onclick="openNewTestModal()"><i class="ti ti-plus"></i> New test case</button>
+      <select class="qa-filter-select" onchange="_qaFilterType=this.value;renderQAPanel()">
+        <option value="" ${!_qaFilterType?'selected':''}>All types</option>
+        <option value="qa"  ${_qaFilterType==='qa'?'selected':''}>QA only</option>
+        <option value="uat" ${_qaFilterType==='uat'?'selected':''}>UAT only</option>
+      </select>
+      <select class="qa-filter-select" onchange="_qaFilterStatus=this.value;renderQAPanel()">
+        <option value="" ${!_qaFilterStatus?'selected':''}>All statuses</option>
+        ${Object.entries(QA_STATUSES).map(([k,v])=>`<option value="${k}" ${_qaFilterStatus===k?'selected':''}>${v.label}</option>`).join('')}
+      </select>
+      <select class="qa-filter-select" onchange="_qaFilterArea=this.value;renderQAPanel()">
+        <option value="">All areas</option>
+        ${areaOpts}
+      </select>
+      <span style="font-size:12px;color:var(--text2);margin-left:auto">${total} test${total!==1?'s':''} · <strong style="color:${pct>=80?'#3b6d11':pct>=50?'#854f0b':'#a32d2d'}">${pct}% passing</strong></span>
+    </div>
+    <div class="qa-stats-bar">
+      <span class="qa-stat"><i class="ti ti-circle-check" style="color:#3b6d11"></i> Pass: <strong>${passing}</strong></span>
+      <span class="qa-stat"><i class="ti ti-circle-x" style="color:#a32d2d"></i> Fail: <strong>${failing}</strong></span>
+      <span class="qa-stat"><i class="ti ti-alert-triangle" style="color:#854f0b"></i> Blocked: <strong>${blocked}</strong></span>
+      <span class="qa-stat"><i class="ti ti-player-play" style="color:#185fa5"></i> In Progress: <strong>${inProg}</strong></span>
+      <span class="qa-stat"><i class="ti ti-clock" style="color:var(--text3)"></i> Pending: <strong>${pending}</strong></span>
+    </div>
+    <div class="qa-progress">
+      <div class="qa-progress-seg" style="width:${total?((passing/total)*100).toFixed(1):0}%;background:#3b6d11"></div>
+      <div class="qa-progress-seg" style="width:${total?((inProg/total)*100).toFixed(1):0}%;background:#185fa5"></div>
+      <div class="qa-progress-seg" style="width:${total?((failing/total)*100).toFixed(1):0}%;background:#a32d2d"></div>
+      <div class="qa-progress-seg" style="width:${total?((blocked/total)*100).toFixed(1):0}%;background:#854f0b"></div>
+    </div>
+    ${Object.keys(byArea).length===0 ? `
+      <div class="ts-empty" style="padding:3rem 1rem;text-align:center;color:var(--text3)">
+        <i class="ti ti-test-pipe" style="font-size:36px;display:block;margin-bottom:.75rem"></i>
+        <p style="font-size:14px">No test cases yet. Click "New test case" to get started.</p>
+      </div>` :
+      Object.entries(byArea).map(([area, tests])=>`
+        <div class="qa-section">
+          <div class="qa-section-title">
+            <span><i class="ti ti-folder"></i> ${area}</span>
+            <span style="font-size:11px;font-weight:400">${tests.filter(t=>t.status==='pass').length}/${tests.length} passing</span>
+          </div>
+          ${tests.map(t=>{
+            const assignee = _qaUsers.find(u=>u.id===t.assigned_to);
+            const signedBy = _qaUsers.find(u=>u.id===t.signed_off_by);
+            return `<div class="qa-card status-${t.status||'pending'}">
+              <div class="qa-priority-dot ${t.priority||'medium'}" title="${QA_PRIORITIES[t.priority||'medium']?.label} priority"></div>
+              <div>
+                <div class="qa-card-title">${t.title}</div>
+                ${t.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${t.description}</div>` : ''}
+                <div class="qa-card-meta">
+                  <span class="qa-type-pill ${t.type||'qa'}">${(t.type||'qa').toUpperCase()}</span>
+                  <span class="qa-status-pill ${t.status||'pending'}">${QA_STATUSES[t.status||'pending']?.label}</span>
+                  ${assignee ? `<span class="qa-assignee"><i class="ti ti-user" style="font-size:10px"></i> ${assignee.full_name||assignee.email}</span>` : ''}
+                  ${t.bug_ref ? `<span style="font-size:11px;color:var(--danger-text)"><i class="ti ti-bug"></i> ${t.bug_ref}</span>` : ''}
+                  ${signedBy ? `<span style="font-size:11px;color:var(--success-text)"><i class="ti ti-circle-check"></i> Signed off by ${signedBy.full_name||signedBy.email}</span>` : ''}
+                </div>
+                ${t.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:4px;font-style:italic;border-left:2px solid var(--border2);padding-left:6px">${t.notes}</div>` : ''}
+              </div>
+              <div class="qa-card-actions">
+                <button class="qa-action-btn" onclick="openEditTestModal('${t.id}')" title="Edit"><i class="ti ti-edit"></i></button>
+                <button class="qa-action-btn" onclick="quickStatusCycle('${t.id}')" title="Cycle status"><i class="ti ti-arrows-exchange"></i></button>
+                ${!t.signed_off_by && t.status==='pass' ? `<button class="qa-action-btn" onclick="signOffTest('${t.id}')" title="Sign off" style="color:#3b6d11;border-color:#3b6d11"><i class="ti ti-writing-sign"></i></button>` : ''}
+                <button class="qa-action-btn" onclick="deleteQATest('${t.id}')" title="Delete" style="color:var(--danger-text)"><i class="ti ti-trash"></i></button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`).join('')
+    }`;
+}
+
+function openNewTestModal(){
+  const areaOpts = QA_AREAS.map(a=>`<option value="${a}">${a}</option>`).join('');
+  const userOpts = '<option value="">— unassigned —</option>'+_qaUsers.map(u=>`<option value="${u.id}">${u.full_name||u.email}</option>`).join('');
+  openWizModal('New test case', `
+    <div class="wiz-modal-field"><label>Title <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="qt-title" placeholder="e.g. Supervisor can submit timesheet"/></div>
+    <div class="wiz-modal-field"><label>Description</label>
+      <textarea id="qt-desc" rows="2" placeholder="Steps to reproduce or acceptance criteria"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="wiz-modal-field"><label>Type</label>
+        <select id="qt-type">
+          <option value="qa">QA</option>
+          <option value="uat">UAT</option>
+        </select></div>
+      <div class="wiz-modal-field"><label>Priority</label>
+        <select id="qt-priority">
+          <option value="critical">🔴 Critical</option>
+          <option value="high">🟠 High</option>
+          <option value="medium" selected>🔵 Medium</option>
+          <option value="low">⚪ Low</option>
+        </select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="wiz-modal-field"><label>Area</label>
+        <select id="qt-area"><option value="">— select area —</option>${areaOpts}</select></div>
+      <div class="wiz-modal-field"><label>Assign to</label>
+        <select id="qt-assignee">${userOpts}</select></div>
+    </div>
+    <div class="wiz-modal-btns">
+      <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
+      <button class="wiz-btn primary" onclick="saveNewTest()"><i class="ti ti-plus"></i> Add test case</button>
+    </div>`);
+}
+
+async function saveNewTest(){
+  const title    = document.getElementById('qt-title')?.value.trim();
+  const desc     = document.getElementById('qt-desc')?.value.trim();
+  const type     = document.getElementById('qt-type')?.value;
+  const priority = document.getElementById('qt-priority')?.value;
+  const area     = document.getElementById('qt-area')?.value;
+  const assignee = document.getElementById('qt-assignee')?.value;
+  if(!title){ alert('Title is required.'); return; }
+  const {error} = await getSupabase().from('qa_tests').insert({
+    title, description:desc||null, type, priority, area:area||null,
+    assigned_to:assignee||null, status:'pending',
+    created_by:currentUser.id, created_at:new Date().toISOString()
+  });
+  if(error){ alert('Error: '+error.message); return; }
+  closeWizModal();
+  await loadWizQA();
+}
+
+async function openEditTestModal(testId){
+  const t = _qaTests.find(x=>x.id===testId);
+  if(!t) return;
+  const areaOpts = QA_AREAS.map(a=>`<option value="${a}" ${t.area===a?'selected':''}>${a}</option>`).join('');
+  const userOpts = '<option value="">— unassigned —</option>'+_qaUsers.map(u=>`<option value="${u.id}" ${t.assigned_to===u.id?'selected':''}>${u.full_name||u.email}</option>`).join('');
+  const statusOpts = Object.entries(QA_STATUSES).map(([k,v])=>`<option value="${k}" ${t.status===k?'selected':''}>${v.label}</option>`).join('');
+  openWizModal('Edit test case', `
+    <div class="wiz-modal-field"><label>Title</label>
+      <input type="text" id="qt-title" value="${t.title||''}"/></div>
+    <div class="wiz-modal-field"><label>Description</label>
+      <textarea id="qt-desc" rows="2">${t.description||''}</textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="wiz-modal-field"><label>Type</label>
+        <select id="qt-type">
+          <option value="qa" ${t.type==='qa'?'selected':''}>QA</option>
+          <option value="uat" ${t.type==='uat'?'selected':''}>UAT</option>
+        </select></div>
+      <div class="wiz-modal-field"><label>Priority</label>
+        <select id="qt-priority">
+          <option value="critical" ${t.priority==='critical'?'selected':''}>🔴 Critical</option>
+          <option value="high"     ${t.priority==='high'?'selected':''}>🟠 High</option>
+          <option value="medium"   ${t.priority==='medium'?'selected':''}>🔵 Medium</option>
+          <option value="low"      ${t.priority==='low'?'selected':''}>⚪ Low</option>
+        </select></div>
+      <div class="wiz-modal-field"><label>Status</label>
+        <select id="qt-status">${statusOpts}</select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="wiz-modal-field"><label>Area</label>
+        <select id="qt-area"><option value="">— select —</option>${areaOpts}</select></div>
+      <div class="wiz-modal-field"><label>Assign to</label>
+        <select id="qt-assignee">${userOpts}</select></div>
+    </div>
+    <div class="wiz-modal-field"><label>Notes / Bug details</label>
+      <textarea id="qt-notes" rows="2" placeholder="Add notes, steps to reproduce, or bug reference...">${t.notes||''}</textarea></div>
+    <div class="wiz-modal-field"><label>Bug reference</label>
+      <input type="text" id="qt-bugref" value="${t.bug_ref||''}" placeholder="e.g. BUG-042 or GitHub issue #12"/></div>
+    <div class="wiz-modal-btns">
+      <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
+      <button class="wiz-btn primary" onclick="saveEditTest('${testId}')"><i class="ti ti-device-floppy"></i> Save</button>
+    </div>`);
+}
+
+async function saveEditTest(testId){
+  const updates = {
+    title:       document.getElementById('qt-title')?.value.trim(),
+    description: document.getElementById('qt-desc')?.value.trim()||null,
+    type:        document.getElementById('qt-type')?.value,
+    priority:    document.getElementById('qt-priority')?.value,
+    status:      document.getElementById('qt-status')?.value,
+    area:        document.getElementById('qt-area')?.value||null,
+    assigned_to: document.getElementById('qt-assignee')?.value||null,
+    notes:       document.getElementById('qt-notes')?.value.trim()||null,
+    bug_ref:     document.getElementById('qt-bugref')?.value.trim()||null,
+    updated_at:  new Date().toISOString(),
+  };
+  if(!updates.title){ alert('Title is required.'); return; }
+  const {error} = await getSupabase().from('qa_tests').update(updates).eq('id',testId);
+  if(error){ alert('Error: '+error.message); return; }
+  closeWizModal();
+  await loadWizQA();
+}
+
+async function quickStatusCycle(testId){
+  const t = _qaTests.find(x=>x.id===testId);
+  if(!t) return;
+  const order = ['pending','in_progress','pass','fail','blocked'];
+  const next  = order[(order.indexOf(t.status)+1)%order.length];
+  const {error} = await getSupabase().from('qa_tests').update({status:next, updated_at:new Date().toISOString()}).eq('id',testId);
+  if(error){ alert('Error: '+error.message); return; }
+  await loadWizQA();
+}
+
+async function signOffTest(testId){
+  if(!confirm('Sign off this test case as verified?')) return;
+  const {error} = await getSupabase().from('qa_tests').update({
+    signed_off_by: currentUser.id,
+    signed_off_at: new Date().toISOString(),
+    updated_at:    new Date().toISOString(),
+  }).eq('id',testId);
+  if(error){ alert('Error: '+error.message); return; }
+  await loadWizQA();
+}
+
+async function deleteQATest(testId){
+  if(!confirm('Delete this test case? This cannot be undone.')) return;
+  const {error} = await getSupabase().from('qa_tests').delete().eq('id',testId);
+  if(error){ alert('Error: '+error.message); return; }
+  await loadWizQA();
+}
+
+// ════════════════════════════════════════════════════════════
+// ROLE SWITCHER (test/dev mode — only for users with manage_users permission)
+// ════════════════════════════════════════════════════════════
+// ── QA Mode state ─────────────────────────────────────────
+let _qaModeActive    = false;   // is QA mode currently on for this session
+let _uatModeActive   = false;   // is UAT mode currently on for this session
+let _qaKeyBuffer     = [];      // tracks recent keypresses for combo detection
+let _qaKeyCombo      = ['q','a','t','e','s','t']; // type "qatest"  to activate QA
+let _uatKeyCombo     = ['u','a','t','e','s','t']; // type "uatest" to activate UAT
+let _maxComboLen     = 6;
+let _qaUserConfig    = null;    // per-user QA config from permissions_override
+
+function initQAKeyListener(){
+  document.addEventListener('keydown', e => {
+    // Ignore when typing in inputs/textareas
+    if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    _qaKeyBuffer.push(e.key.toLowerCase());
+    if(_qaKeyBuffer.length > _maxComboLen) _qaKeyBuffer.shift();
+    const buf = _qaKeyBuffer.join('');
+    if(buf.endsWith(_qaKeyCombo.join(''))){
+      _qaKeyBuffer = [];
+      toggleQAMode('qa');
+    } else if(buf.endsWith(_uatKeyCombo.join(''))){
+      _qaKeyBuffer = [];
+      toggleQAMode('uat');
+    }
+  });
+}
+
+function toggleQAMode(mode){
+  const config = currentProfile?.permissions_override?.qa_config;
+  if(mode === 'qa'){
+    if(!config?.qa_enabled){
+      return; // silently ignore
+    }
+    _qaModeActive  = !_qaModeActive;
+    _qaUserConfig  = config || null;
+    applyQAMode('qa');
+  } else if(mode === 'uat'){
+    if(!config?.uat_enabled){
+      return; // silently ignore
+    }
+    _uatModeActive = !_uatModeActive;
+    _qaUserConfig  = config || null;
+    applyQAMode('uat');
+  }
+}
+
+function applyQAMode(mode){
+  const wrap  = document.getElementById('role-switcher-wrap');
+  const viEl  = document.getElementById('view-indicator');
+  const badge = document.getElementById('role-switcher-badge-label');
+  const isAnyActive = _qaModeActive || _uatModeActive;
+
+  if(isAnyActive){
+    // Show TEST badge + role switcher + view indicator
+    if(wrap) wrap.classList.add('visible');
+    if(viEl){ updateViewIndicator(); viEl.style.display='flex'; }
+
+    // Update badge label to reflect which mode(s) are active
+    const activeModes = [];
+    if(_qaModeActive)  activeModes.push('QA');
+    if(_uatModeActive) activeModes.push('UAT');
+    if(badge) badge.textContent = activeModes.join('+');
+
+    // Filter roles based on active mode's allowed list
+    filterRoleSwitcherByConfig(mode);
+
+    const label = activeModes.join(' + ');
+    showQAToast('🧪 ' + label + ' mode ' + (mode==='qa' ? (_qaModeActive?'activated':'deactivated') : (_uatModeActive?'activated':'deactivated')));
+    openQAPanel(); // open right-side session panel
+  } else {
+    // Both modes off — hide QA tools and restore real role
+    if(wrap) wrap.classList.remove('visible');
+    if(viEl) viEl.style.display='none';
+    if(badge) badge.textContent = 'TEST';
+    const sel = document.getElementById('role-switcher-select');
+    if(sel && sel.value){ sel.value=''; switchTestRole(''); }
+    // Close QA session panel
+    const panel = document.getElementById('qa-session-panel');
+    const icon  = document.getElementById('qs-toggle-icon');
+    if(panel){ panel.classList.remove('qs-open'); _qsOpen = false; }
+    if(icon)  icon.className = 'ti ti-test-pipe';
+    // Cancel any active test session silently
+    if(_qsActiveTest){ stopInterceptingInteractions(); _qsActiveTest=null; _qsLog=[]; _qsChecklist=[]; }
+    showQAToast((mode==='qa'?'QA':'UAT') + ' mode deactivated');
+  }
+}
+
+function filterRoleSwitcherByConfig(mode){
+  const sel = document.getElementById('role-switcher-select');
+  if(!sel || !_qaUserConfig) return;
+
+  // Combine allowed roles from all active modes
+  let allowed = [];
+  if(_qaModeActive  && _qaUserConfig.allowed_roles?.length)
+    allowed = allowed.concat(_qaUserConfig.allowed_roles);
+  if(_uatModeActive && _qaUserConfig.uat_allowed_roles?.length)
+    allowed = allowed.concat(_qaUserConfig.uat_allowed_roles);
+
+  if(!allowed.length) return; // no restriction — show all roles
+
+  // Disable options not in combined allowed list
+  Array.from(sel.options).forEach(opt=>{
+    if(!opt.value) return; // keep "My real role" option
+    opt.disabled = !allowed.includes(opt.value);
+    opt.title    = opt.disabled ? 'Not permitted for your active test mode' : '';
+  });
+}
+
+function showQAToast(msg){
+  let t = document.getElementById('qa-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'qa-toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;border:1px solid rgba(255,165,0,0.4);pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(()=>{ t.style.opacity='0'; }, 2200);
+}
+
+let _allRoleDefinitions = []; // cached role list for switcher
+let _originalPermissions = null; // store real permissions before switching
+let _originalScopeType   = null;
+let _originalRoleLabel   = null;
+let _testRoleKey         = null; // tracks active test role key for isSupervisor/isEmployee checks
+
+async function initRoleSwitcher(){
+  // Load roles for the switcher — always hidden until key combo is pressed
+  // (Roles are cached here; visibility is always controlled by key combo / applyQAMode)
+  const showNow = false; // never auto-show — key combo required for everyone
+
+  const {data:roles} = await getSupabase()
+    .from('role_definitions').select('role_key,role_label,permissions,scope_type')
+    .eq('is_active', true).order('sort_order');
+  if(!roles||!roles.length) return;
+
+  _allRoleDefinitions = roles;
+
+  // Cache the real permissions
+  _originalPermissions = {..._userPermissions};
+  _originalScopeType   = _userScopeType;
+  _originalRoleLabel   = document.getElementById('user-bar-role').textContent;
+
+  // Populate the dropdown
+  const sel = document.getElementById('role-switcher-select');
+  sel.innerHTML = `<option value="">— My real role —</option>` +
+    roles.map(r => `<option value="${r.role_key}">${r.role_label}</option>`).join('');
+
+  // Show the switcher only if user has permanent access; otherwise QA key combo controls it
+  if(showNow) document.getElementById('role-switcher-wrap').classList.add('visible');
+}
+
+let _allUsersForSwitcher = []; // cached users for test user switcher
+let _originalProfile     = null; // store real profile before switching user
+let _originalUserName    = null;
+
+async function updateUserSwitcher(roleKey){
+  const sel = document.getElementById('user-switcher-select');
+  if(!sel) return;
+
+  if(!roleKey){
+    // No role selected — disable user picker and restore real user
+    sel.innerHTML = '<option value="">— select role first —</option>';
+    sel.disabled = true;
+    return;
+  }
+
+  // Fetch all active users with this role + their group labels
+  const {data:users} = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, email, id_group, role')
+    .eq('role', roleKey)
+    .eq('is_active', true)
+    .order('full_name');
+
+  // Fetch group labels for display
+  const {data:groups} = await getSupabase()
+    .from('user_groups')
+    .select('group_key, group_label')
+    .order('sort_order');
+  const groupMap = {};
+  (groups||[]).forEach(g => groupMap[g.group_key] = g.group_label);
+
+  _allUsersForSwitcher = (users||[]).map(u => ({
+    ...u,
+    group_label: groupMap[u.id_group] || u.id_group || ''
+  }));
+
+  // If user has a QA config with allowed_users, filter to only those users
+  const allowedUserIds = _qaUserConfig?.allowed_users;
+  if(allowedUserIds && allowedUserIds.length){
+    _allUsersForSwitcher = _allUsersForSwitcher.filter(u => allowedUserIds.includes(u.id));
+  }
+
+  if(!_allUsersForSwitcher.length){
+    sel.innerHTML = '<option value="">— no permitted users for this role —</option>';
+    sel.disabled = true;
+    // Also clear group filter
+    const gSel = document.getElementById('user-switcher-group');
+    if(gSel){ gSel.innerHTML='<option value="">All groups</option>'; gSel.disabled=true; }
+    return;
+  }
+
+  // Populate group filter dropdown with groups present in this role
+  const groupSel = document.getElementById('user-switcher-group');
+  if(groupSel){
+    const uniqueGroups = [...new Map(
+      _allUsersForSwitcher.filter(u=>u.id_group).map(u=>[u.id_group, u.group_label])
+    ).entries()];
+    groupSel.innerHTML = '<option value="">All groups</option>' +
+      uniqueGroups.map(([key, label])=>`<option value="${key}">${label}</option>`).join('');
+    groupSel.disabled = uniqueGroups.length === 0;
+  }
+
+  renderUserSwitcherOptions('');
+}
+
+function renderUserSwitcherOptions(groupFilter){
+  const sel = document.getElementById('user-switcher-select');
+  if(!sel) return;
+  const filtered = groupFilter
+    ? _allUsersForSwitcher.filter(u => u.id_group === groupFilter)
+    : _allUsersForSwitcher;
+
+  if(!filtered.length){
+    sel.innerHTML = '<option value="">— no users in this group —</option>';
+    sel.disabled = true;
+    return;
+  }
+
+  sel.innerHTML = '<option value="">— my own context —</option>' +
+    filtered.map(u =>
+      `<option value="${u.id}">${u.full_name||u.email}${u.group_label ? ' · '+u.group_label : ''}</option>`
+    ).join('');
+  sel.disabled = false;
+}
+
+async function switchTestUser(userId){
+  const nameEl = document.getElementById('user-bar-name');
+
+  if(!userId){
+    // Restore original profile context
+    if(_originalProfile){
+      currentProfile = _originalProfile;
+      _originalProfile = null;
+    }
+    if(_originalUserName && nameEl) nameEl.textContent = _originalUserName;
+    return;
+  }
+
+  // Store original if first switch
+  if(!_originalProfile){
+    _originalProfile = currentProfile;
+    _originalUserName = nameEl?.textContent;
+  }
+
+  const user = _allUsersForSwitcher.find(u=>u.id===userId);
+  if(!user) return;
+
+  // Impersonate this user's profile context (read-only — no auth change)
+  currentProfile = {...currentProfile, ...user};
+  if(nameEl) nameEl.textContent = (user.full_name||user.email) + ' ★';
+}
+
+function updateViewIndicator(){
+  const el = document.getElementById('view-indicator');
+  if(!el) return;
+  let icon, label;
+  if(isFieldRole()){
+    if(isSupervisor()){ icon='ti-users'; label='Field — Supervisor view'; }
+    else               { icon='ti-user'; label='Field — Employee view'; }
+  } else if(isReadOnly()){
+    icon='ti-eye'; label='Dashboard — View only';
+  } else if(can('timesheets')||can('timesheets_read')||canApprove()){
+    icon='ti-shield-check'; label='Dashboard — Manager view';
+  } else {
+    icon='ti-layout-dashboard'; label='Dashboard — Limited view';
+  }
+  el.innerHTML = `<i class="ti ${icon}"></i> ${label}`;
+  el.style.display = 'flex';
+}
+
+async function switchTestRole(roleKey){
+  if(!roleKey){
+    // Restore original permissions
+    _userPermissions = {..._originalPermissions};
+    _userScopeType   = _originalScopeType;
+    _testRoleKey     = null;
+    document.getElementById('user-bar-role').textContent = _originalRoleLabel;
+    updateViewIndicator();
+    updateUserSwitcher(''); // reset user switcher
+    switchTestUser('');     // restore original profile
+  } else {
+    const role = _allRoleDefinitions.find(r=>r.role_key===roleKey);
+    if(!role) return;
+    // Apply selected role's permissions (no user overrides — pure role test)
+    _userPermissions = {...(role.permissions||{})};
+    _userScopeType   = role.scope_type || 'own';
+    _testRoleKey     = roleKey; // used by isSupervisor/isEmployee checks
+    document.getElementById('user-bar-role').textContent = role.role_label + ' ★';
+    updateViewIndicator();
+    updateUserSwitcher(roleKey); // load users belonging to this role
+    // Reset user + group selection when role changes
+    const uSel = document.getElementById('user-switcher-select');
+    if(uSel) uSel.value = '';
+    const gSel = document.getElementById('user-switcher-group');
+    if(gSel) gSel.value = '';
+    switchTestUser('');
+  }
+
+  // Re-apply the view routing based on new permissions
+  const mgrScreen  = document.getElementById('mgr-screen');
+  const mainWrap   = document.getElementById('main-wrap');
+  const tabForm    = document.getElementById('tab-form');
+  const tabStatus  = document.getElementById('tab-status');
+  const tabMgr     = document.getElementById('tab-mgr');
+
+  if(isFieldRole()){
+    tabForm.style.display   = 'none';
+    tabStatus.style.display = '';
+    tabMgr.style.display    = 'none';
+    mainWrap.style.display  = '';
+    if(mgrScreen) mgrScreen.classList.remove('active');
+    switchTab('status');
+  } else if(isReadOnly() || can('timesheets') || can('timesheets_read') || canApprove()){
+    tabForm.style.display   = 'none';
+    tabStatus.style.display = 'none';
+    tabMgr.style.display    = '';
+    mainWrap.style.display  = 'none';
+    switchTab('mgr');
+  } else {
+    tabForm.style.display   = 'none';
+    tabStatus.style.display = 'none';
+    tabMgr.style.display    = '';
+    mainWrap.style.display  = 'none';
+    switchTab('mgr');
+  }
+
+  updateGearVisibility();
 }
 
 async function doLogout(){
@@ -2672,6 +3947,11 @@ async function loadDraftTimesheet(tsId){
       if(dnrEl)  dnrEl.checked  = emp.dnr       || false;
       if(prefEl) prefEl.checked = emp.preferred  || false;
       if(tieEl)  tieEl.checked  = emp.tie        || false;
+      const travelOnlyEl = document.getElementById('travel-only-'+eid);
+      if(travelOnlyEl && emp.travel_only){
+        travelOnlyEl.checked = true;
+        onTravelOnlyChange(eid, true);
+      }
 
       // ── 6. Restore time blocks ──────────────────────────
       const myBlocks = empBlocks[eid] || [];
@@ -2787,6 +4067,19 @@ function fmt12(t){
   const hr=h%12===0?12:h%12;
   return hr+':'+String(m).padStart(2,'0')+ampm;
 }
+function fmt12WithDate(t){
+  if(!t)return'<span style="color:var(--text3)">—</span>';
+  let dateStr="", timeStr=t;
+  if(t.includes("T")){ const parts=t.split("T"); dateStr=parts[0]; timeStr=parts[1]; }
+  const[h,m]=timeStr.split(":").map(Number);
+  const ampm=h<12?"a":"p";
+  const hr=h%12===0?12:h%12;
+  const time=hr+":"+String(m).padStart(2,"0")+ampm;
+  if(!dateStr) return time;
+  const d=new Date(dateStr+"T00:00:00");
+  const dateLbl=(d.getMonth()+1)+"/"+(d.getDate());
+  return `<span style="display:flex;flex-direction:column;align-items:center;line-height:1.2"><span>${time}</span><span style="font-size:10px;color:var(--text2);font-weight:600">${dateLbl}</span></span>`;
+}
 // Calc hours between two HH:MM strings
 function calcHrs(inT,outT){
   if(!inT||!outT)return null;
@@ -2812,8 +4105,8 @@ function populateTopbarInfo(ts, empCount, totalPaidMins, totalBrkMins, avgHrs, s
     {l:'Submitted', v:submitted,                                                        cls:'narrow-datetime'},
     {l:'Updated',   v:updated,                                                          cls:'narrow-datetime'},
     {l:'Employees', v:String(empCount),                                                 cls:'narrow'},
-    {l:'Paid hrs',  v:(totalPaidMins/60).toFixed(1)+'h',                               cls:'narrow'},
-    {l:'Break hrs', v:(totalBrkMins/60).toFixed(1)+'h',                                cls:'narrow'},
+    {l:'Paid hrs',  v:(totalPaidMins/60).toFixed(2)+'h',                               cls:'narrow'},
+    {l:'Break hrs', v:(totalBrkMins/60).toFixed(2)+'h',                                cls:'narrow'},
   ];
   grid.innerHTML = cells.map(c=>`
     <div class="topbar-info-cell ${c.cls}">
@@ -2873,8 +4166,10 @@ async function openDetail(ts){
 
   function blockMins(b){
     if(!b.time_in||!b.time_out) return 0;
-    const[hi,mi]=b.time_in.split(':').map(Number);
-    const[ho,mo]=b.time_out.split(':').map(Number);
+    const tin=b.time_in.includes('T')?b.time_in.split('T')[1]:b.time_in;
+    const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out;
+    const[hi,mi]=tin.split(':').map(Number);
+    const[ho,mo]=tout.split(':').map(Number);
     return Math.max(0,(ho*60+mo)-(hi*60+mi));
   }
 
@@ -2909,8 +4204,8 @@ async function openDetail(ts){
     const notesCell = e.notes&&e.notes.trim()?e.notes.trim():'—';
 
     // Time cell helper — dash if no time
-    const tc = b=>b?fmt12(b.time_in):'<span class="tsv-flag-empty">—</span>';
-    const tc2= b=>b?fmt12(b.time_out):'<span class="tsv-flag-empty">—</span>';
+    const tc = b=>b?fmt12WithDate(b.time_in):'<span class="tsv-flag-empty">—</span>';
+    const tc2= b=>b?fmt12WithDate(b.time_out):'<span class="tsv-flag-empty">—</span>';
 
     return `<tr>
       <td class="col-role"><span class="tsv-role-pill ${rolePillCls}">${roleLbl}</span></td>
@@ -3068,7 +4363,9 @@ function initSidebar(){
   }
   // Settings button visibility
   const settingsBtn = document.getElementById('sb-settings');
-  if(settingsBtn) settingsBtn.style.display = (can('setup_wizard')||can('manage_users')) ? 'flex' : 'none';
+  if(settingsBtn) settingsBtn.style.display = 'none'; // replaced by sb-config in nav
+  const cfgBtn2 = document.getElementById('sb-config');
+  if(cfgBtn2) cfgBtn2.style.display = (can('setup_wizard')||can('manage_users')) ? 'flex' : 'none';
   // User info
   if(currentProfile){
     const initials = (currentProfile.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -3109,6 +4406,10 @@ function wrapAppShell(){
   parent.insertBefore(shellDiv, sidebar);
   shellDiv.appendChild(sidebar);
   shellDiv.appendChild(contentDiv);
+
+  // Inject QA session panel on the right side of the shell
+  const qaPanel = document.getElementById('qa-session-panel');
+  if(qaPanel) shellDiv.appendChild(qaPanel);
 
   // Move remaining siblings into content
   while(parent.firstChild && parent.firstChild !== shellDiv){
@@ -3213,7 +4514,7 @@ document.getElementById('wiz-modal-overlay').addEventListener('click', e=>{
 
 function wizardGoto(tab){
   _wizardTab = tab;
-  ['users','org','roles','chain','perdiem'].forEach(t=>{
+  ['users','org','roles','chain','perdiem','qa'].forEach(t=>{
     document.getElementById('wtab-'+t)?.classList.toggle('active', t===tab);
   });
   const body = document.getElementById('wizard-body');
@@ -3223,6 +4524,7 @@ function wizardGoto(tab){
   if(tab==='roles')   loadWizRoles();
   if(tab==='chain')   loadWizChain();
   if(tab==='perdiem') loadWizPerDiem();
+  if(tab==='qa')      loadWizQA();
 }
 
 // ── First-run detection ──────────────────────────────────────
@@ -3422,7 +4724,8 @@ async function openEditUserModal(userId){
     <div class="wiz-modal-field"><label>Full name</label>
       <input type="text" id="eu-name" value="${profile.full_name||''}"/></div>
     <div class="wiz-modal-field"><label>Email</label>
-      <input type="email" id="eu-email" value="${profile.email||''}" disabled style="opacity:.6"/></div>
+      <input type="email" id="eu-email" value="${profile.email||''}" data-original="${profile.email||''}"/>
+      <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-info-circle"></i> Changing email updates both login and profile.</p></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="wiz-modal-field"><label>Role</label>
         <select id="eu-role">${roleOpts}</select></div>
@@ -3456,6 +4759,77 @@ async function openEditUserModal(userId){
         }).join('')}
       </div>
       <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-alert-triangle" style="color:var(--warn-text)"></i> Highlighted = overridden from role default</p>
+    </div>
+    <div style="margin-top:1rem;border-top:0.5px solid var(--border2);padding-top:1rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+        <span class="role-switcher-badge">QA</span>
+        <span style="font-size:13px;font-weight:700;color:var(--text)">Testing Access</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto">Secret key combo: type <code style="background:var(--bg2);padding:1px 5px;border-radius:4px;font-size:11px">qatest</code></span>
+      </div>
+
+      <!-- QA / UAT tab switcher -->
+      <div style="display:flex;border-bottom:1px solid var(--border2);margin-bottom:.75rem">
+        <button type="button" id="eu-testing-tab-qa"
+          onclick="document.getElementById('eu-testing-panel-qa').style.display='';document.getElementById('eu-testing-panel-uat').style.display='none';document.getElementById('eu-testing-tab-qa').style.cssText='padding:5px 14px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid #185fa5;color:#185fa5;cursor:pointer';document.getElementById('eu-testing-tab-uat').style.cssText='padding:5px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer'"
+          style="padding:5px 14px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid #185fa5;color:#185fa5;cursor:pointer">
+          <i class="ti ti-test-pipe"></i> QA
+        </button>
+        <button type="button" id="eu-testing-tab-uat"
+          onclick="document.getElementById('eu-testing-panel-uat').style.display='';document.getElementById('eu-testing-panel-qa').style.display='none';document.getElementById('eu-testing-tab-uat').style.cssText='padding:5px 14px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid #3b6d11;color:#3b6d11;cursor:pointer';document.getElementById('eu-testing-tab-qa').style.cssText='padding:5px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer'"
+          style="padding:5px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer">
+          <i class="ti ti-user-check"></i> UAT
+        </button>
+      </div>
+
+      <!-- QA Panel -->
+      <div id="eu-testing-panel-qa">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:.6rem">
+          <input type="checkbox" id="eu-qa-enabled" ${profile.permissions_override?.qa_config?.qa_enabled?'checked':''} style="accent-color:#185fa5;width:14px;height:14px"/>
+          <span style="font-weight:600">Enable QA mode for this user</span>
+        </label>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 .6rem">QA tests technical functionality — query accuracy, data integrity, permission boundaries.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="wiz-modal-field">
+            <label>Roles to test as <span style="font-weight:400;color:var(--text3)">(QA)</span></label>
+            <select id="eu-qa-roles" multiple style="height:110px;font-size:12px">
+              ${(roles||[]).map(r=>`<option value="${r.role_key}" ${(profile.permissions_override?.qa_config?.allowed_roles||[]).includes(r.role_key)?'selected':''}>${r.role_label}</option>`).join('')}
+            </select>
+            <p style="font-size:10px;color:var(--text3);margin:.2rem 0 0">Ctrl/Cmd + click to select multiple</p>
+          </div>
+          <div class="wiz-modal-field">
+            <label>Users to impersonate <span style="font-weight:400;color:var(--text3)">(QA)</span></label>
+            <select id="eu-qa-users" multiple style="height:110px;font-size:12px">
+              ${(_allUsers||[]).filter(u=>u.id!==userId).map(u=>`<option value="${u.id}" ${(profile.permissions_override?.qa_config?.allowed_users||[]).includes(u.id)?'selected':''}>${u.full_name||u.email}</option>`).join('')}
+            </select>
+            <p style="font-size:10px;color:var(--text3);margin:.2rem 0 0">Ctrl/Cmd + click to select multiple</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- UAT Panel -->
+      <div id="eu-testing-panel-uat" style="display:none">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:.6rem">
+          <input type="checkbox" id="eu-uat-enabled" ${profile.permissions_override?.qa_config?.uat_enabled?'checked':''} style="accent-color:#3b6d11;width:14px;height:14px"/>
+          <span style="font-weight:600">Enable UAT mode for this user</span>
+        </label>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 .6rem">UAT validates real-world business workflows — used by end users to confirm the app meets their requirements.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="wiz-modal-field">
+            <label>Roles to test as <span style="font-weight:400;color:var(--text3)">(UAT)</span></label>
+            <select id="eu-uat-roles" multiple style="height:110px;font-size:12px">
+              ${(roles||[]).map(r=>`<option value="${r.role_key}" ${(profile.permissions_override?.qa_config?.uat_allowed_roles||[]).includes(r.role_key)?'selected':''}>${r.role_label}</option>`).join('')}
+            </select>
+            <p style="font-size:10px;color:var(--text3);margin:.2rem 0 0">Ctrl/Cmd + click to select multiple</p>
+          </div>
+          <div class="wiz-modal-field">
+            <label>Users to impersonate <span style="font-weight:400;color:var(--text3)">(UAT)</span></label>
+            <select id="eu-uat-users" multiple style="height:110px;font-size:12px">
+              ${(_allUsers||[]).filter(u=>u.id!==userId).map(u=>`<option value="${u.id}" ${(profile.permissions_override?.qa_config?.uat_allowed_users||[]).includes(u.id)?'selected':''}>${u.full_name||u.email}</option>`).join('')}
+            </select>
+            <p style="font-size:10px;color:var(--text3);margin:.2rem 0 0">Ctrl/Cmd + click to select multiple</p>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="wiz-modal-btns">
       <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
@@ -3497,6 +4871,40 @@ async function saveEditUser(userId){
     if(checked !== roleHas) overrides[key] = checked;
   });
   updates.permissions_override = overrides;
+
+  // Handle email change — must update auth.users as well as profiles
+  const newEmail = document.getElementById('eu-email')?.value.trim().toLowerCase();
+  const originalEmail = document.getElementById('eu-email')?.dataset.original;
+  if(newEmail && newEmail !== originalEmail){
+    const {error: authErr} = await getSupabase().rpc('update_user_email', {
+      p_user_id: userId,
+      p_email:   newEmail
+    });
+    if(authErr){ alert('Error updating email in auth: '+authErr.message); return; }
+    updates.email = newEmail;
+  }
+
+  // Save QA config back into permissions_override
+  const qaEnabled    = document.getElementById('eu-qa-enabled')?.checked;
+  const uatEnabled   = document.getElementById('eu-uat-enabled')?.checked;
+  const qaRolesEl    = document.getElementById('eu-qa-roles');
+  const qaUsersEl    = document.getElementById('eu-qa-users');
+  const uatRolesEl   = document.getElementById('eu-uat-roles');
+  const uatUsersEl   = document.getElementById('eu-uat-users');
+
+  // Merge QA + UAT config into existing permissions_override
+  const existingOverride = (await getSupabase().from('profiles').select('permissions_override').eq('id',userId).single())?.data?.permissions_override || {};
+  updates.permissions_override = {
+    ...existingOverride,
+    qa_config: {
+      qa_enabled:        !!qaEnabled,
+      allowed_roles:     qaRolesEl  ? Array.from(qaRolesEl.selectedOptions).map(o=>o.value)  : [],
+      allowed_users:     qaUsersEl  ? Array.from(qaUsersEl.selectedOptions).map(o=>o.value)  : [],
+      uat_enabled:       !!uatEnabled,
+      uat_allowed_roles: uatRolesEl ? Array.from(uatRolesEl.selectedOptions).map(o=>o.value) : [],
+      uat_allowed_users: uatUsersEl ? Array.from(uatUsersEl.selectedOptions).map(o=>o.value) : [],
+    }
+  };
 
   const {error} = await getSupabase().from('profiles').update(updates).eq('id',userId);
   if(error){ alert('Error: '+error.message); return; }
@@ -3774,7 +5182,7 @@ const PERM_LABELS = {
   per_diem_set:'Set per diem', per_diem_view:'View per diem', manage_users:'Manage users',
   setup_wizard:'Setup wizard', reports:'Reports', build_reports:'Build reports',
   timesheets:'View timesheets', timesheets_read:'Read timesheets', timesheets_own:'Own timesheets',
-  notifications:'Notifications'
+  notifications:'Notifications', role_switcher:'Role Switcher (Test)'
 };
 
 async function loadWizRoles(){
@@ -4113,7 +5521,9 @@ async function saveRate(){
 // ── Show gear icon only for users with setup_wizard or manage_users ──
 function updateGearVisibility(){
   const btn = document.getElementById('gear-btn');
-  if(btn) btn.style.display = (can('setup_wizard')||can('manage_users')) ? 'inline-flex' : 'none';
+  if(btn) btn.style.display = 'none'; // removed from top bar
+  const cfgBtn = document.getElementById('sb-config');
+  if(cfgBtn) cfgBtn.style.display = (can('setup_wizard')||can('manage_users')) ? 'flex' : 'none';
 }
 
 // Expose auth functions globally for inline onclick handlers
@@ -4243,6 +5653,7 @@ async function saveTimesheet(statusVal, silent=false){
       const dnrEl       = document.getElementById('dnr-'+eid);
       const preferredEl = document.getElementById('preferred-'+eid);
       const tieEl2      = document.getElementById('tie-'+eid);
+      const travelOnlyEl = document.getElementById('travel-only-'+eid);
       const empPayload = {
         timesheet_id:  timesheetId,
         role_type:     roleType,
@@ -4253,7 +5664,8 @@ async function saveTimesheet(statusVal, silent=false){
         notes:         notesEl ? notesEl.value.trim() : '',
         dnr:           dnrEl ? dnrEl.checked : false,
         preferred:     preferredEl ? preferredEl.checked : false,
-        tie:           tieEl2 ? tieEl2.checked : false
+        tie:           tieEl2 ? tieEl2.checked : false,
+        travel_only:   travelOnlyEl ? travelOnlyEl.checked : false
       };
       empOrder++;
       console.log('[save] inserting emp:', empPayload);
@@ -4325,7 +5737,27 @@ let _scanPdfDoc = null;
 let _scanPdfPage = 1;
 
 // ── Load manager timesheets ───────────────────────────────────
+async function populateSupervisorFilter(){
+  const sel = document.getElementById('mgr-f-supervisor');
+  if(!sel || sel.options.length > 1) return; // already populated
+  const {data:sups} = await getSupabase()
+    .from('profiles')
+    .select('id, full_name')
+    .eq('role', 'supervisor')
+    .eq('is_active', true)
+    .order('full_name');
+  if(!sups||!sups.length) return;
+  sups.forEach(s=>{
+    const opt = document.createElement('option');
+    opt.value = s.full_name; // used for ilike fallback
+    opt.dataset.id = s.id;   // used for supervisor_id match
+    opt.textContent = s.full_name;
+    sel.appendChild(opt);
+  });
+}
+
 async function loadMgrTimesheets(){
+  await populateSupervisorFilter();
   const loading   = document.getElementById('mgr-loading');
   const container = document.getElementById('mgr-list');
   const stats     = document.getElementById('mgr-stats');
@@ -4358,7 +5790,23 @@ async function loadMgrTimesheets(){
   if(_mgrFilters.to)       query = query.lte('job_date', _mgrFilters.to);
   if(_mgrFilters.status)   query = query.eq('status', _mgrFilters.status);
   if(_mgrFilters.customer) query = query.ilike('client_name', '%'+_mgrFilters.customer+'%');
-  if(_mgrFilters.supervisor) query = query.ilike('supervisor_name', '%'+_mgrFilters.supervisor+'%');
+  if(_mgrFilters.supervisorId){
+    // Direct UUID match from dropdown selection — most reliable
+    query = query.or(`supervisor_id.eq.${_mgrFilters.supervisorId},supervisor_name.ilike.%${_mgrFilters.supervisor}%`);
+  } else if(_mgrFilters.supervisor){
+    // Free text fallback — search both name field and profile lookup
+    const {data:matchedProfiles} = await getSupabase()
+      .from('profiles').select('id').ilike('full_name', '%'+_mgrFilters.supervisor+'%');
+    const matchedIds = (matchedProfiles||[]).map(p=>p.id);
+    if(matchedIds.length){
+      query = query.or(
+        matchedIds.map(id=>`supervisor_id.eq.${id}`).join(',') +
+        `,supervisor_name.ilike.%${_mgrFilters.supervisor}%`
+      );
+    } else {
+      query = query.ilike('supervisor_name', '%'+_mgrFilters.supervisor+'%');
+    }
+  }
   if(_mgrFilters.store)    query = query.ilike('store_number', '%'+_mgrFilters.store+'%');
 
   const {data, error} = await query;
@@ -4445,20 +5893,24 @@ async function loadMgrTimesheets(){
 }
 
 function applyMgrFilters(){
+  const supSel = document.getElementById('mgr-f-supervisor');
+  const supOpt = supSel?.options[supSel.selectedIndex];
   _mgrFilters = {
-    from:       document.getElementById('mgr-f-from').value,
-    to:         document.getElementById('mgr-f-to').value,
-    status:     document.getElementById('mgr-f-status').value,
-    customer:   document.getElementById('mgr-f-customer').value.trim(),
-    supervisor: document.getElementById('mgr-f-supervisor').value.trim(),
-    store:      document.getElementById('mgr-f-store').value.trim(),
+    from:           document.getElementById('mgr-f-from').value,
+    to:             document.getElementById('mgr-f-to').value,
+    status:         document.getElementById('mgr-f-status').value,
+    customer:       document.getElementById('mgr-f-customer').value.trim(),
+    supervisor:     supSel?.value.trim() || '',
+    supervisorId:   supOpt?.dataset.id || null, // direct UUID match
+    store:          document.getElementById('mgr-f-store').value.trim(),
   };
   loadMgrTimesheets();
 }
 function clearMgrFilters(){
-  ['mgr-f-from','mgr-f-to','mgr-f-customer','mgr-f-supervisor','mgr-f-store'].forEach(id=>{
+  ['mgr-f-from','mgr-f-to','mgr-f-customer','mgr-f-store'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
+  const supSel=document.getElementById('mgr-f-supervisor'); if(supSel) supSel.value='';
   document.getElementById('mgr-f-status').value='';
   _mgrFilters={};
   loadMgrTimesheets();
@@ -4502,11 +5954,12 @@ async function openDetailScreen(ts, isManager=false){
     {data:adjs,      error:adjsErr}
   ] = await Promise.all([
     getSupabase().from('scan_attachments').select('id,file_name,mime_type,storage_path,created_at').eq('timesheet_id',ts.id).order('created_at'),
-    getSupabase().from('employees').select('id,first_name,last_name,role_type,login_id,dnr,preferred,tie,notes,display_order').eq('timesheet_id',ts.id).order('display_order'),
+    getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).order('display_order'),
     getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).order('display_order'),
     getSupabase().from('pay_adjustments').select('*').eq('timesheet_id',ts.id).order('created_at'),
   ]);
   console.log('[detail] ts.id=',ts.id,'emps=',emps?.length,'empsErr=',empsErr,'blocks=',blocks?.length,'blocksErr=',blocksErr,'scansErr=',scansErr);
+  if(empsErr) console.error('[detail] employees query failed:',empsErr);
 
   // ── Scan viewer ───────────────────────────────────────────
   _detailScans = scansData||[];
@@ -4519,45 +5972,67 @@ async function openDetailScreen(ts, isManager=false){
   const validEmps=(emps||[]).filter(e=>e.first_name||e.last_name);
   let totalPaidMins=0,totalBrkMins=0,empCount=0;
 
-  function bMins(b){ if(!b||!b.time_in||!b.time_out)return 0; const[hi,mi]=b.time_in.split(':').map(Number);const[ho,mo]=b.time_out.split(':').map(Number);return Math.max(0,(ho*60+mo)-(hi*60+mi)); }
+  function bMins(b){ if(!b||!b.time_in||!b.time_out)return 0; const tin=b.time_in.includes('T')?b.time_in.split('T')[1]:b.time_in; const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out; const[hi,mi]=tin.split(':').map(Number);const[ho,mo]=tout.split(':').map(Number);return Math.max(0,(ho*60+mo)-(hi*60+mi)); }
 
   const gridRows=validEmps.map(e=>{
     const eBlocks=blocksByEmp[e.id]||[];
+    // Group blocks by type, preserving display_order within each type
     const primary=eBlocks.find(b=>b.is_primary);
-    const brkBlock=eBlocks.find(b=>b.block_type==='brk');
-    const varBlock=eBlocks.find(b=>b.block_type==='variance');
-    const trvBlock=eBlocks.find(b=>b.block_type==='travel');
-    const setupBlock=eBlocks.find(b=>b.block_type==='setup');
+    const paidBlocks=eBlocks.filter(b=>b.block_type==='paid'&&!b.is_primary);
+    const brkBlocks=eBlocks.filter(b=>b.block_type==='brk');
+    const varBlocks=eBlocks.filter(b=>b.block_type==='variance');
+    const trvBlocks=eBlocks.filter(b=>b.block_type==='travel');
+    const setupBlocks=eBlocks.filter(b=>b.block_type==='setup');
+    // How many rows does this employee need?
+    const extraPaid=paidBlocks.length;
+    const rowCount=Math.max(1,extraPaid,brkBlocks.length,varBlocks.length,trvBlocks.length,setupBlocks.length);
     let empPaid=0,empBrk=0;
     eBlocks.forEach(b=>{ const m=bMins(b); if(b.block_type==='brk')empBrk+=m; else empPaid+=m; });
     if(empPaid>0||empBrk>0){totalPaidMins+=empPaid;totalBrkMins+=empBrk;empCount++;}
     const rolePillCls=e.role_type==='supervisor'?'tsv-role-sup':e.role_type==='assistant'?'tsv-role-asst':'tsv-role-emp';
     const roleLbl=e.role_type==='supervisor'?'SUP':e.role_type==='assistant'?'ASST':'EMP';
     const fullName=[e.first_name,e.last_name].filter(Boolean).join(' ');
-    const hrsDisplay=empPaid>0?`<span class="tsv-hrs-badge">${(empPaid/60).toFixed(1)}h</span>`:'<span class="tsv-flag-empty">—</span>';
+    const isTravelOnly=e.travel_only===true||e.travel_only==='true';
+    const travelOnlyBadge=isTravelOnly?'<span style="font-size:9px;font-weight:700;background:#E6F1FB;color:#185FA5;padding:1px 5px;border-radius:3px;margin-left:4px">TRAVEL ONLY</span>':'';
+    const hrsDisplay=empPaid>0?`<span class="tsv-hrs-badge">${(empPaid/60).toFixed(2)}h</span>`:'<span class="tsv-flag-empty">—</span>';
     const isDnr=e.dnr===true||e.dnr==='true';
     const isPref=e.preferred===true||e.preferred==='true';
-    const tc=b=>b&&b.time_in?fmt12(b.time_in):'<span class="tsv-flag-empty">—</span>';
-    const tc2=b=>b&&b.time_out?fmt12(b.time_out):'<span class="tsv-flag-empty">—</span>';
+    const tc=b=>b&&b.time_in?fmt12WithDate(b.time_in):'<span class="tsv-flag-empty">—</span>';
+    const tc2=b=>b&&b.time_out?fmt12WithDate(b.time_out):'<span class="tsv-flag-empty">—</span>';
     const modBadge=b=>b&&b.modified_at?'<span class="tsv-modified-badge">MOD</span>':'';
-    return `<tr>
-      <td class="col-role"><span class="tsv-role-pill ${rolePillCls}">${roleLbl}</span></td>
-      <td class="col-name">${fullName}</td>
-      <td class="col-time group-start ${primary&&primary.modified_at?'tsv-modified':''}" data-block-id="${primary?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(primary)}${modBadge(primary)}</td>
-      <td class="col-time ${primary&&primary.modified_at?'tsv-modified':''}" data-block-id="${primary?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(primary)}${modBadge(primary)}</td>
-      <td class="col-time group-start" data-block-id="${brkBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(brkBlock)}</td>
-      <td class="col-time" data-block-id="${brkBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(brkBlock)}</td>
-      <td class="col-time group-start" data-block-id="${varBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(varBlock)}</td>
-      <td class="col-time" data-block-id="${varBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(varBlock)}</td>
-      <td class="col-time group-start" data-block-id="${trvBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(trvBlock)}</td>
-      <td class="col-time" data-block-id="${trvBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(trvBlock)}</td>
-      <td class="col-time group-start" data-block-id="${setupBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(setupBlock)}</td>
-      <td class="col-time" data-block-id="${setupBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(setupBlock)}</td>
-      <td class="col-hrs group-start">${hrsDisplay}</td>
-      <td class="col-flag group-start">${isDnr?'<span class="tsv-flag-dnr">DNR</span>':'<span class="tsv-flag-empty">—</span>'}</td>
-      <td class="col-flag">${isPref?'<span class="tsv-flag-pref">PREF</span>':'<span class="tsv-flag-empty">—</span>'}</td>
-      <td class="tsv-notes-cell">${e.notes&&e.notes.trim()?e.notes.trim():'—'}</td>
-    </tr>`;
+    const empty='<span class="tsv-flag-empty">—</span>';
+    // Build rows — first row gets rowspan cells for name/role/hrs/flags/notes
+    const rows=[];
+    for(let i=0;i<rowCount;i++){
+      // Count column: row 0 = primary, subsequent rows = additional paid blocks
+      const countBlock = i===0 ? primary : paidBlocks[i-1];
+      const brk=brkBlocks[i]||null;
+      const vari=varBlocks[i]||null;
+      const trv=trvBlocks[i]||null;
+      const setup=setupBlocks[i]||null;
+      const isFirst=i===0;
+      // continuation row label
+      const contLabel=!isFirst?`<span style="font-size:9px;color:var(--text3);font-weight:600;white-space:nowrap">+${i}</span>`:'';
+      rows.push(`<tr class="${!isFirst?'tsv-continuation-row':''}">
+        ${isFirst?`<td class="col-role" rowspan="${rowCount}"><span class="tsv-role-pill ${rolePillCls}">${roleLbl}</span></td>`:''}
+        ${isFirst?`<td class="col-name" rowspan="${rowCount}">${fullName}${travelOnlyBadge}</td>`:''}
+        <td class="col-time group-start ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(countBlock)}${modBadge(countBlock)}${contLabel}</td>
+        <td class="col-time ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(countBlock)}${modBadge(countBlock)}</td>
+        <td class="col-time group-start" data-block-id="${brk?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(brk)}</td>
+        <td class="col-time" data-block-id="${brk?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(brk)}</td>
+        <td class="col-time group-start" data-block-id="${vari?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(vari)}</td>
+        <td class="col-time" data-block-id="${vari?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(vari)}</td>
+        <td class="col-time group-start" data-block-id="${trv?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(trv)}</td>
+        <td class="col-time" data-block-id="${trv?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(trv)}</td>
+        <td class="col-time group-start" data-block-id="${setup?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(setup)}</td>
+        <td class="col-time" data-block-id="${setup?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(setup)}</td>
+        ${isFirst?`<td class="col-hrs group-start" rowspan="${rowCount}">${hrsDisplay}</td>`:''}
+        ${isFirst?`<td class="col-flag group-start" rowspan="${rowCount}">${isDnr?'<span class="tsv-flag-dnr">DNR</span>':empty}</td>`:''}
+        ${isFirst?`<td class="col-flag" rowspan="${rowCount}">${isPref?'<span class="tsv-flag-pref">PREF</span>':empty}</td>`:''}
+        ${isFirst?`<td class="tsv-notes-cell" rowspan="${rowCount}">${e.notes&&e.notes.trim()?e.notes.trim():'—'}</td>`:''}
+      </tr>`);
+    }
+    return rows.join('');
   }).join('');
 
   const avgHrs=empCount>0?(totalPaidMins/60/empCount).toFixed(1):'—';
@@ -4628,15 +6103,15 @@ async function openDetailScreen(ts, isManager=false){
       } else if(ts.status==='submitted'){
         topbarBtns.innerHTML=`
           <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
-          <button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>
-          <button class="topbar-mgr-btn approve" onclick="openApproveModal()"><i class="ti ti-circle-check"></i> Approve</button>
-          <button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>`;
+          ${canApprove() ? `<button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>` : ''}
+          ${canApprove() ? `<button class="topbar-mgr-btn approve" onclick="openApproveModal()"><i class="ti ti-circle-check"></i> Approve</button>` : ''}
+          ${canApprove() ? `<button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>` : ''}`;
       } else if(ts.status==='approved'||ts.status==='rejected'||ts.status==='draft'){
-        // Approved: home + pay adj; Rejected: home only; Draft: home only
+        // Approved: home + pay adj (approve permission required); Rejected/Draft: home only
         const isApproved = ts.status==='approved';
         topbarBtns.innerHTML=`
           <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
-          ${isApproved ? `<button class="topbar-mgr-btn adjust" onclick="openAdjustModal()"><i class="ti ti-plus"></i> Pay Adj</button>` : ''}`;
+          ${isApproved && canApprove() ? `<button class="topbar-mgr-btn adjust" onclick="openAdjustModal()"><i class="ti ti-plus"></i> Pay Adj</button>` : ''}`;
       } else {
         topbarBtns.innerHTML=`
           <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>`;
@@ -4703,27 +6178,11 @@ function closeDetailScreen(){
   if(canvas){canvas.style.display='none';}
   document.getElementById('scan-no-scans').style.display='block';
   document.getElementById('scan-controls').style.display='none';
-  // Return to whichever tab opened the detail screen
-  if(isFieldRole()){
-    // Supervisor: go back to My Submissions and refresh list
-    switchTab('status');
-  } else {
-    // Manager: just show the mgr screen without reloading cards
-    const mgrScreen = document.getElementById('mgr-screen');
-    const statusScreen = document.getElementById('status-screen');
-    const formWrap = document.getElementById('main-wrap');
-    if(mgrScreen) mgrScreen.classList.add('active');
-    if(statusScreen) statusScreen.classList.remove('active');
-    if(formWrap) formWrap.style.display = 'none';
-    document.getElementById('tab-mgr')?.classList.add('active');
-    document.getElementById('tab-form')?.classList.remove('active');
-    document.getElementById('tab-status')?.classList.remove('active');
-  }
   document.getElementById('scan-thumb-strip').style.display='none';
   // Reset topbar info grid
   const tig=document.getElementById('topbar-info-grid');
   if(tig){tig.innerHTML='';tig.style.display='none';}
-  // Return to previous tab
+  // Return to the tab that opened the detail screen — single call handles both roles
   switchTab(_previousTab||'form');
 }
 
