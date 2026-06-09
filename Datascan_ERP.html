@@ -2772,7 +2772,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.22';
+const APP_VERSION = 'v1.0.23';
 
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
@@ -4428,7 +4428,14 @@ async function loadDraftTimesheet(tsId){
     checkSubmitReady();
   }
 
-  // ── 8. Finish ─────────────────────────────────────────────
+  // ── 8. Validate all employees — populates hours badges and block hr displays ──
+  // Must run after all block values are restored so calculations have real data
+  document.querySelectorAll('.emp-card').forEach(card => {
+    const eid = card.dataset.empId;
+    if(eid) validateEmployee(eid);
+  });
+
+  // ── 9. Finish ─────────────────────────────────────────────
   calcTotals();
   checkSubmitReady();
   updateStatus(ts.status||'draft');
