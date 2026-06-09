@@ -2214,7 +2214,7 @@ function collectFormState(){
 }
 
 function saveToLocal(){
-  if(_formLocked) return;
+  if(_formLocked || !_autoSaveDirty) return;
   try{
     const state = collectFormState();
     // Only save if there's something meaningful entered
@@ -2222,9 +2222,9 @@ function saveToLocal(){
                     state.employees.some(e=>e.firstName||e.blocks.some(b=>b.inVal||b.outVal));
     if(!hasData) return;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
-    setAutosaveStatus('saved','Draft backed up locally');
-    setTimeout(()=>setAutosaveStatus('idle',''), 3000);
-  } catch(e){ console.warn('localStorage save failed',e); }
+    // No status message here — server save message is the user-facing indicator
+    console.log('[saveToLocal] local backup written');
+  } catch(e){ console.warn('[saveToLocal] failed:', e); }
 }
 
 let _lastServerSave = null; // tracks last successful server save timestamp
@@ -2342,73 +2342,110 @@ function dismissRestore(){
   clearLocalDraft();
 }
 
-// Debounced save — fires 2 seconds after last change
+// ── Dirty flags ────────────────────────────────────────────────────────────────
+// _autoSaveDirty  — local storage needs updating
+// _supabaseDirty  — server needs updating
+// Both are set true on any form change, cleared after each respective save.
+// Nothing saves unless its dirty flag is true.
+let _supabaseSaveDebounce = null;
+let _supabaseDirty        = false;
+let _supabaseDraftTimer   = null;
+let _savingInProgress     = false; // prevents concurrent saves creating duplicates
+let _previousTab          = 'form'; // tracks which tab was open before detail screen
+
 function onFormChange(){
   if(_formLocked) return;
+  // Mark both stores as needing a save
   _autoSaveDirty = true;
-  _supabaseDirty = true; // mark Supabase backup as needing save
-  setAutosaveStatus('saving','Saving...');
-  // Local backup — fires 2s after last change
+  _supabaseDirty = true;
+
+  // ── Local storage — 3s after last change, only if dirty ─────────────────
   clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(()=>{ saveToLocal(); _autoSaveDirty=false; }, 2000);
-  // Supabase server save — fires 8s after last change (debounced)
-  // Ensures data is on the server well before the 30s polling interval
+  _autoSaveTimer = setTimeout(()=>{
+    if(!_autoSaveDirty) return;
+    saveToLocal();
+    _autoSaveDirty = false;
+  }, 3000);
+
+  // ── Inactivity debounce — save to server 10s after last change ───────────
+  // Fires once the user stops editing. Clears itself so only runs on inactivity.
   clearTimeout(_supabaseSaveDebounce);
   _supabaseSaveDebounce = setTimeout(async()=>{
-    if(_formLocked||!currentUser||!_supabaseDirty) return;
+    if(_formLocked || !currentUser || !_supabaseDirty) return;
     const state = collectFormState();
-    const hasData = state.supervisor||state.customer||state.store;
+    const hasData = state.supervisor || state.customer || state.store;
     if(!hasData) return;
     try{
+      setAutosaveStatus('saving', 'Saving to server...');
       await saveTimesheet('draft', true);
       _supabaseDirty = false;
       _recordServerSave();
     } catch(e){
-      console.error('[debounce save] Supabase write failed:', e.message, e);
+      console.error('[inactivity save] failed:', e.message, e);
       setAutosaveStatus('error', 'Save failed — check connection');
     }
-  }, 8000);
+  }, 10000);
 }
-
-// Debounced Supabase save — fires 8 seconds after the last form change
-// This ensures data reaches the server promptly without hammering on every keystroke
-let _supabaseSaveDebounce = null;
-
-// Auto-save draft to Supabase every 30 seconds (belt-and-suspenders backup)
-// _supabaseDirty is set true whenever form data changes (via onFormChange)
-// and cleared after a successful Supabase draft save
-let _supabaseDirty = false;
-let _supabaseDraftTimer = null;
-let _savingInProgress = false; // prevents concurrent saves creating duplicates
-let _previousTab = 'form'; // tracks which tab was open before detail screen
 
 function startSupabaseAutoSave(){
   if(_supabaseDraftTimer) clearInterval(_supabaseDraftTimer);
-  // Check every 30 seconds, but only actually save if data has changed
+
+  // ── 30-second interval — saves while changes are actively happening ───────
+  // Runs every 30s but only writes to server if _supabaseDirty is true.
+  // Catches the case where the user is continuously editing and the
+  // 10s inactivity debounce never fires.
   _supabaseDraftTimer = setInterval(async()=>{
-    if(_formLocked||!currentUser||!_supabaseDirty) return;
+    if(_formLocked || !currentUser || !_supabaseDirty) return;
     const state = collectFormState();
-    const hasData = state.supervisor||state.customer||state.store;
+    const hasData = state.supervisor || state.customer || state.store;
     if(!hasData) return;
     try{
-      setAutosaveStatus('saving','Auto-saving draft...');
+      setAutosaveStatus('saving', 'Auto-saving draft...');
       await saveTimesheet('draft', true);
-      _supabaseDirty = false; // mark clean after successful save
-      setAutosaveStatus('saved','Auto-saved '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}));
+      _supabaseDirty = false;
+      // Reset the inactivity debounce — no need to fire again right after this save
+      clearTimeout(_supabaseSaveDebounce);
+      _supabaseSaveDebounce = null;
+      setAutosaveStatus('saved', 'Auto-saved ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}));
       setTimeout(()=>setAutosaveStatus('idle',''), 4000);
     } catch(e){
-      console.error('[autosave] Supabase write failed:', e.message);
-      setAutosaveStatus('error','Auto-save failed — will retry');
+      console.error('[30s autosave] failed:', e.message);
+      setAutosaveStatus('error', 'Auto-save failed — will retry');
     }
-  }, 30*1000); // poll every 30s, only saves when dirty
+  }, 30*1000);
+
+  // ── 60-second safety net ─────────────────────────────────────────────────
+  // Fires only if _supabaseDirty is still true — meaning both the 10s inactivity
+  // debounce and the 30s interval missed the save (e.g. tab was backgrounded).
+  if(_supabaseSafetyTimer) clearInterval(_supabaseSafetyTimer);
+  _supabaseSafetyTimer = setInterval(async()=>{
+    if(_formLocked || !currentUser || !_supabaseDirty) return;
+    const state = collectFormState();
+    const hasData = state.supervisor || state.customer || state.store;
+    if(!hasData) return;
+    try{
+      await saveTimesheet('draft', true);
+      _supabaseDirty = false;
+      clearTimeout(_supabaseSaveDebounce);
+      _supabaseSaveDebounce = null;
+      _recordServerSave();
+      console.log('[60s safety net] saved dirty data to server');
+    } catch(e){
+      console.error('[60s safety net] failed:', e.message);
+    }
+  }, 60*1000);
 }
 
+let _supabaseSafetyTimer = null; // 60s safety net
+
 function stopSupabaseAutoSave(){
-  if(_supabaseDraftTimer) clearInterval(_supabaseDraftTimer);
-  _supabaseDraftTimer = null;
+  if(_supabaseDraftTimer)  clearInterval(_supabaseDraftTimer);
+  if(_supabaseSafetyTimer) clearInterval(_supabaseSafetyTimer);
+  _supabaseDraftTimer   = null;
+  _supabaseSafetyTimer  = null;
   clearTimeout(_supabaseSaveDebounce);
   _supabaseSaveDebounce = null;
-  _supabaseDirty = false;
+  _supabaseDirty        = false;
 }
 
 function validateAll(){let ok=true;document.querySelectorAll('.emp-card').forEach(card=>{if(!validateEmployee(card.dataset.empId).empValid)ok=false;});return ok;}
@@ -2735,7 +2772,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.20';
+const APP_VERSION = 'v1.0.22';
 
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
