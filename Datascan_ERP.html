@@ -53,6 +53,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .field-group textarea{resize:vertical;min-height:64px;line-height:1.5}
 .emp-card{border:0.5px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.75rem;background:var(--bg2)}
 .emp-card.has-errors{border:1.5px solid var(--danger-border)}
+.emp-card.no-break-warn{border-left:4px solid var(--amber,#F4A93A)}
+.block-hrs-badge{display:inline-block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.07);border-radius:3px;padding:1px 6px;margin-left:auto}
+.block-hrs-badge.neg{color:#e07070}
+.no-break-warning-list{margin-top:6px;padding:7px 10px;background:rgba(244,169,58,0.12);border-left:3px solid #F4A93A;border-radius:0 4px 4px 0;font-size:11.5px;color:#F4A93A;display:none}
+.no-break-warning-list.visible{display:block}
+.no-break-warning-list ul{margin:4px 0 0 14px;padding:0}
+.no-break-warning-list li{margin-bottom:2px}
 .emp-card.role-supervisor{border-left:4px solid #185fa5;background:var(--info-bg)}
 .emp-card.role-assistant{border-left:4px solid #854f0b;background:var(--warn-bg)}
 .emp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.65rem}
@@ -1070,6 +1077,10 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <button class="btn btn-primary" id="submit-btn" onclick="submitSheet()" disabled><i class="ti ti-send"></i> Submit</button>
   </div>
   <div class="submit-hint" id="submit-hint">Complete all fields, employee times, sign, and attach a scan to enable submit</div>
+  <div class="no-break-warning-list" id="no-break-warning-list">
+    <strong><i class="ti ti-alert-triangle" style="margin-right:4px"></i>No break recorded for employees with 8+ consecutive hours:</strong>
+    <ul id="no-break-warning-items"></ul>
+  </div>
   <div class="autosave-bar" id="autosave-bar"><i class="ti ti-device-floppy"></i> <span id="autosave-text">Not yet saved to server</span></div>
   <div class="submission-status not-submitted" id="submission-status">
     <i class="ti ti-clock-pause"></i>
@@ -1396,6 +1407,30 @@ function checkSubmitReady(){
   } else {
     hint.innerHTML='<i class="ti ti-alert-circle" style="color:#f4c26a"></i> <span style="color:#f4c26a">Still needed: </span><span style="color:rgba(255,255,255,0.75)">'+missing.join(' &bull; ')+'</span>';
   }
+
+  // No-break warning list — shown when submit is ready but some employees have 8h+ with no break
+  const warnDiv   = document.getElementById('no-break-warning-list');
+  const warnItems = document.getElementById('no-break-warning-items');
+  if(warnDiv && warnItems){
+    const noBreakEmps = [];
+    document.querySelectorAll('.emp-card').forEach(card=>{
+      const eid = card.dataset.empId;
+      if(hasNoBreakWarning(eid)){
+        const fname = document.getElementById('fname-'+eid);
+        const lname = card.querySelectorAll('input[type=text]')[1];
+        const name  = [fname?.value.trim(), lname?.value.trim()].filter(Boolean).join(' ') || 'Employee';
+        const paidMins = getPaidSegs(eid,null).reduce((s,p)=>s+(p.out-p.in),0);
+        noBreakEmps.push(`${name} &mdash; ${(paidMins/60).toFixed(1)}h with no break`);
+      }
+    });
+    if(ready && noBreakEmps.length){
+      warnItems.innerHTML = noBreakEmps.map(n=>`<li>${n}</li>`).join('');
+      warnDiv.classList.add('visible');
+    } else {
+      warnDiv.classList.remove('visible');
+    }
+  }
+
   // Trigger local backup on any state change
   onFormChange();
 }
@@ -1450,7 +1485,12 @@ function setInp(id,state,msg){
 }
 
 function getPaidSegs(empId,excludeId){
-  return(empBlocks[empId]||[]).filter(b=>b.type!=='brk'&&b.blockId!==excludeId).map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in);
+  return(empBlocks[empId]||[]).filter(b=>b.type!=='brk'&&b.blockId!==excludeId).map(b=>{
+    let inM=toMins(b.inVal), outM=toMins(b.outVal);
+    // If both are plain HH:MM epoch minutes and out < in, it's a next-day punch — add 1440
+    if(inM!==null&&outM!==null&&outM<inM&&!(b.inVal||'').includes('T')) outM+=1440;
+    return {in:inM, out:outM};
+  }).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in);
 }
 function getMergedPaid(empId,excludeId){
   const segs=getPaidSegs(empId,excludeId).sort((a,b)=>a.in-b.in);
@@ -1534,6 +1574,51 @@ function validateEmployee(empId){
   });
   const paidMins=getPaidSegs(empId,null).reduce((s,p)=>s+(p.out-p.in),0);
   const badge=document.getElementById('badge-'+empId);if(badge)badge.textContent=(paidMins/60).toFixed(1)+' hrs';
+  // Refresh per-block hours badges
+  (empBlocks[empId]||[]).forEach(b=>{
+    const bel=document.getElementById('bhrs-'+b.blockId);
+    if(bel) bel.innerHTML=blockHrsBadge(empId,b);
+  });
+  // No-break card highlight + "No Break" label on the break block
+  const noBreak = hasNoBreakWarning(empId);
+  const empCard=document.querySelector('.emp-card[data-emp-id="'+empId+'"]');
+  if(empCard) empCard.classList.toggle('no-break-warn', noBreak);
+  // Show/hide "No Break" in red inside the default break block
+  const brkBlock = (empBlocks[empId]||[]).find(b=>b.type==='brk'&&b.isDefault);
+  if(brkBlock){
+    const brkErr = document.getElementById('berr-'+brkBlock.blockId);
+    if(brkErr){
+      if(noBreak && !brkBlock.inVal && !brkBlock.outVal){
+        brkErr.innerHTML='<span style="color:var(--danger-text);font-weight:700"><i class="ti ti-alert-circle" style="margin-right:3px"></i>No Break</span>';
+        brkErr.classList.add('show');
+      } else if(brkErr.innerHTML.includes('No Break')){
+        brkErr.innerHTML='';
+        brkErr.classList.remove('show');
+      }
+    }
+  }
+
+  // >12 hour check — runs after all time is entered, not while typing
+  (empBlocks[empId]||[]).filter(b=>b.type!=='brk').forEach(b=>{
+    if(!b.inVal||!b.outVal) return;
+    let inM=toMins(b.inVal), outM=toMins(b.outVal);
+    if(inM===null||outM===null) return;
+    if(outM<inM) outM+=1440;
+    if((outM-inM)>720){
+      const hrs=((outM-inM)/60).toFixed(1);
+      const typeLabel=b.isPrimary?'count':(b.type==='variance'?'variance':'paid');
+      const el=document.getElementById('berr-'+b.blockId);
+      if(el){
+        el.innerHTML=`<span style="color:var(--warn-text,#F4A93A);font-weight:600"><i class="ti ti-alert-triangle" style="margin-right:3px"></i>${hrs}h span — confirm this is correct</span>`;
+        el.classList.add('show');
+      }
+    } else {
+      // Clear any previous >12h warning (don't clear other errors)
+      const el=document.getElementById('berr-'+b.blockId);
+      if(el && el.innerHTML.includes('span — confirm')) { el.innerHTML=''; el.classList.remove('show'); }
+    }
+  });
+
   const card=document.querySelector('.emp-card[data-emp-id="'+empId+'"]');if(card)card.classList.toggle('has-errors',!empValid);
   calcTotals();checkSubmitReady();
   return{empValid};
@@ -1639,6 +1724,98 @@ function removeBlock(empId,blockId){
   validateEmployee(empId);
 }
 
+// ── Per-block hours display ──────────────────────────────────────────────────
+// Returns a display string for the hours badge on a punch card, or '' if not computable.
+// count  → "X.Xh"  (paid hours)
+// brk    → "Paid Xm" (break is PAID so shows as positive)
+// variance → "X.Xh" (extra paid hours)
+// travel → "Xh total − Xh paid = Xh travel" → simplified to "X.Xh travel"
+function blockHrsBadge(empId, block){
+  const {type, isPrimary, inVal, outVal, blockId} = block;
+  if(!inVal || !outVal) return '';
+
+  function minsFromPair(i, o){
+    if(!i || !o) return null;
+    let im = toMins(i), om = toMins(o);
+    if(im===null || om===null) return null;
+    if(om < im) om += 1440; // next-day
+    return Math.max(0, om - im);
+  }
+
+  const mins = minsFromPair(inVal, outVal);
+  if(mins === null) return '';
+
+  if(isPrimary || type === 'paid'){
+    // Count / additional paid — show total paid hours
+    const h = (mins/60).toFixed(1);
+    return `<span class="block-hrs-badge">${h}h</span>`;
+  }
+
+  if(type === 'brk'){
+    // Break is paid time — show "Paid Xm" or "Paid X.Xh"
+    if(mins < 60) return `<span class="block-hrs-badge">Paid ${mins}m</span>`;
+    return `<span class="block-hrs-badge">Paid ${(mins/60).toFixed(1)}h</span>`;
+  }
+
+  if(type === 'variance'){
+    // Additional paid hours
+    const h = (mins/60).toFixed(1);
+    return `<span class="block-hrs-badge">${h}h</span>`;
+  }
+
+  if(type === 'travel'){
+    // Travel hrs − paid hrs (count + variance) = net travel hrs
+    const allBlocks = empBlocks[empId] || [];
+    const paidMins = getPaidSegs(empId, blockId).reduce((s,p)=>s+(p.out-p.in), 0);
+    const travelNet = Math.max(0, mins - paidMins);
+    const th = (mins/60).toFixed(1);
+    const ph = (paidMins/60).toFixed(1);
+    const nh = (travelNet/60).toFixed(1);
+    if(paidMins > 0)
+      return `<span class="block-hrs-badge">${th}h − ${ph}h paid = ${nh}h travel</span>`;
+    return `<span class="block-hrs-badge">${th}h travel</span>`;
+  }
+
+  return '';
+}
+
+// ── No-break detection ────────────────────────────────────────────────────────
+// Returns true if employee has ≥ 8 consecutive paid hours with no break that overlaps
+function hasNoBreakWarning(empId){
+  const blocks = empBlocks[empId] || [];
+  const fname  = document.getElementById('fname-' + empId);
+  if(!fname || !fname.value.trim()) return false;
+
+  // Gather paid segments sorted by start
+  const paid = getPaidSegs(empId, null).sort((a,b)=>a.in-b.in);
+  if(!paid.length) return false;
+
+  // Merge overlapping/adjacent paid segments into contiguous spans
+  const merged = [];
+  paid.forEach(s => {
+    if(merged.length && s.in <= merged[merged.length-1].out)
+      merged[merged.length-1].out = Math.max(merged[merged.length-1].out, s.out);
+    else merged.push({...s});
+  });
+
+  // Check if any merged span ≥ 480 minutes (8h)
+  const longSpans = merged.filter(s => (s.out - s.in) >= 480);
+  if(!longSpans.length) return false;
+
+  // Check if any break falls within a long span
+  const brkSegs = blocks
+    .filter(b => b.type === 'brk' && b.inVal && b.outVal)
+    .map(b => { let i=toMins(b.inVal), o=toMins(b.outVal); if(o<i) o+=1440; return {in:i, out:o}; })
+    .filter(b => b.in!==null && b.out!==null);
+
+  // For each long span, check if a break exists inside it
+  for(const span of longSpans){
+    const covered = brkSegs.some(b => b.in >= span.in && b.out <= span.out);
+    if(!covered) return true; // long span with no break → warn
+  }
+  return false;
+}
+
 function makeBlockEl(empId,block,blocks){
   const{blockId,type,isPrimary,isDefault}=block;
   const canRemove=!isPrimary&&!isDefault;
@@ -1671,10 +1848,12 @@ function makeBlockEl(empId,block,blocks){
       :`onBlockChange('${empId}',${blockId},'out',this.value)`;
   const div=document.createElement('div');
   div.className='time-block '+cardCls;div.id='block-'+blockId;
+  const hrsBadge = blockHrsBadge(empId, block);
   div.innerHTML=`
     <div class="time-block-header">
       <span class="block-badge ${badgeCls}">${label}</span>
       <div style="display:flex;align-items:center;gap:6px">
+        <span class="block-hrs-display" id="bhrs-${blockId}">${hrsBadge}</span>
         ${canRemove?`<button class="block-remove" onclick="removeBlock('${empId}',${blockId})"><i class="ti ti-x"></i></button>`:''}
       </div>
     </div>
@@ -2169,11 +2348,33 @@ function onFormChange(){
   _autoSaveDirty = true;
   _supabaseDirty = true; // mark Supabase backup as needing save
   setAutosaveStatus('saving','Saving...');
+  // Local backup — fires 2s after last change
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(()=>{ saveToLocal(); _autoSaveDirty=false; }, 2000);
+  // Supabase server save — fires 8s after last change (debounced)
+  // Ensures data is on the server well before the 30s polling interval
+  clearTimeout(_supabaseSaveDebounce);
+  _supabaseSaveDebounce = setTimeout(async()=>{
+    if(_formLocked||!currentUser||!_supabaseDirty) return;
+    const state = collectFormState();
+    const hasData = state.supervisor||state.customer||state.store;
+    if(!hasData) return;
+    try{
+      await saveTimesheet('draft', true);
+      _supabaseDirty = false;
+      _recordServerSave();
+    } catch(e){
+      console.error('[debounce save] Supabase write failed:', e.message, e);
+      setAutosaveStatus('error', 'Save failed — check connection');
+    }
+  }, 8000);
 }
 
-// Auto-save draft to Supabase every 3 minutes if logged in and form has data
+// Debounced Supabase save — fires 8 seconds after the last form change
+// This ensures data reaches the server promptly without hammering on every keystroke
+let _supabaseSaveDebounce = null;
+
+// Auto-save draft to Supabase every 30 seconds (belt-and-suspenders backup)
 // _supabaseDirty is set true whenever form data changes (via onFormChange)
 // and cleared after a successful Supabase draft save
 let _supabaseDirty = false;
@@ -2195,13 +2396,18 @@ function startSupabaseAutoSave(){
       _supabaseDirty = false; // mark clean after successful save
       setAutosaveStatus('saved','Auto-saved '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}));
       setTimeout(()=>setAutosaveStatus('idle',''), 4000);
-    } catch(e){ setAutosaveStatus('error','Auto-save failed — will retry'); }
+    } catch(e){
+      console.error('[autosave] Supabase write failed:', e.message);
+      setAutosaveStatus('error','Auto-save failed — will retry');
+    }
   }, 30*1000); // poll every 30s, only saves when dirty
 }
 
 function stopSupabaseAutoSave(){
   if(_supabaseDraftTimer) clearInterval(_supabaseDraftTimer);
   _supabaseDraftTimer = null;
+  clearTimeout(_supabaseSaveDebounce);
+  _supabaseSaveDebounce = null;
   _supabaseDirty = false;
 }
 
@@ -2232,7 +2438,11 @@ waitForSupabase(()=>{
   window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   // Stamp version on login screen
   const vEl = document.getElementById('login-version');
-  if(vEl) vEl.textContent = APP_VERSION;
+  if(vEl){
+    const isLocal = location.protocol === 'file:';
+    vEl.innerHTML = APP_VERSION +
+      (isLocal ? ' &nbsp;&#9888; <span style="color:#F4A93A;font-size:10px">Local file — saves may be blocked. Use GitHub Pages for testing.</span>' : '');
+  }
   // Check existing session
   getSupabase().auth.getSession().then(async ({data})=>{
     if(data.session?.user) await onSignedIn(data.session.user);
@@ -2525,7 +2735,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.9';
+const APP_VERSION = 'v1.0.20';
 
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
@@ -2597,10 +2807,10 @@ async function onSignedIn(user){
 
   // Show app chrome
   document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('main-wrap').style.display = '';
+  document.getElementById('main-wrap').style.display = 'none'; // hidden until role routing decides
   document.getElementById('user-bar').style.display  = 'flex';
   updateGearVisibility();
-  initSidebar();
+  initSidebar(); // wraps DOM into sidebar shell — must run before role routing
   document.getElementById('nav-tabs').style.display  = 'block';
 
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
@@ -3429,18 +3639,39 @@ function initQAKeyListener(){
   });
 }
 
-function toggleQAMode(mode){
+async function toggleQAMode(mode){
+  // Re-fetch profile fresh from Supabase so SQL changes take effect
+  // without requiring a re-login (avoids stale in-memory permissions_override)
+  if(currentUser){
+    const {data:freshProfile} = await getSupabase()
+      .from('profiles')
+      .select('permissions_override, role')
+      .eq('id', currentUser.id)
+      .single();
+    if(freshProfile){
+      // Merge fresh override into currentProfile
+      currentProfile = { ...currentProfile, ...freshProfile };
+    }
+  }
+
   const config = currentProfile?.permissions_override?.qa_config;
+  const role   = currentProfile?.role || '';
+
+  // Admins always have QA/UAT access — no per-profile flag required
+  const isAdmin = ['admin','super_admin'].includes(role) || can('manage_users');
+
   if(mode === 'qa'){
-    if(!config?.qa_enabled){
-      return; // silently ignore
+    if(!isAdmin && !config?.qa_enabled){
+      console.warn('[QA] qa_enabled not set for this user. Set permissions_override.qa_config.qa_enabled = true in Supabase.');
+      return;
     }
     _qaModeActive  = !_qaModeActive;
     _qaUserConfig  = config || null;
     applyQAMode('qa');
   } else if(mode === 'uat'){
-    if(!config?.uat_enabled){
-      return; // silently ignore
+    if(!isAdmin && !config?.uat_enabled){
+      console.warn('[QA] uat_enabled not set for this user. Set permissions_override.qa_config.uat_enabled = true in Supabase.');
+      return;
     }
     _uatModeActive = !_uatModeActive;
     _qaUserConfig  = config || null;
@@ -3743,11 +3974,14 @@ async function switchTestRole(roleKey){
   }
 
   updateGearVisibility();
+  // Re-initialise sidebar so it shows/hides correctly for the simulated role
+  initSidebar();
 }
 
 async function doLogout(){
   await getSupabase().auth.signOut();
   stopTimesheetSubscription();
+  _loadSubmissionsInFlight = false; // reset on logout so next login loads cleanly
   currentUser = null; currentProfile = null; _userPermissions = {}; _userScopeType = 'own';
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('main-wrap').style.display = 'none';
@@ -3814,10 +4048,14 @@ function switchTab(tab){
 }
 
 // ── Load submissions from Supabase ────────────────────────────────────────
+let _loadSubmissionsInFlight = false;
 async function loadSubmissions(){
+  // Guard against concurrent calls (e.g. realtime event firing during initial login load)
+  if(_loadSubmissionsInFlight){ console.log('[loadSubmissions] skipped — already in flight'); return; }
+  _loadSubmissionsInFlight = true;
   const container = document.getElementById('ts-list');
   const loading   = document.getElementById('ts-loading');
-  if(!currentUser) return;
+  if(!currentUser){ _loadSubmissionsInFlight = false; return; }
   loading.style.display='block';
   container.innerHTML='';
 
@@ -3829,8 +4067,8 @@ async function loadSubmissions(){
 
   loading.style.display='none';
 
-  if(error){ container.innerHTML='<div class="ts-empty"><i class="ti ti-alert-circle"></i><p>Error loading submissions</p></div>'; return; }
-  if(!data||!data.length){ container.innerHTML='<div class="ts-empty"><i class="ti ti-clipboard-x"></i><p>No submissions yet</p></div>'; return; }
+  if(error){ container.innerHTML='<div class="ts-empty"><i class="ti ti-alert-circle"></i><p>Error loading submissions</p></div>'; _loadSubmissionsInFlight=false; return; }
+  if(!data||!data.length){ container.innerHTML='<div class="ts-empty"><i class="ti ti-clipboard-x"></i><p>No submissions yet</p></div>'; _loadSubmissionsInFlight=false; return; }
 
   // Update pending count badge
   const pending = data.filter(t=>t.status==='submitted').length;
@@ -3909,6 +4147,7 @@ async function loadSubmissions(){
       }
     }
   });
+  _loadSubmissionsInFlight = false;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3935,6 +4174,7 @@ function clearForm(){
   // Reset state
   currentTimesheetId=null;
   _formLocked=false;
+  _supabaseDirty=false; // clear dirty flag so autosave can't fire on stale data
   checkSubmitReady();
   setAutosaveStatus('idle','');
 }
@@ -3990,7 +4230,9 @@ async function loadDraftTimesheet(tsId){
     .in('employee_id', (await getSupabase().from('employees').select('id').eq('timesheet_id', tsId)).data?.map(e=>e.id)||[])
     .order('display_order', {ascending:true});
 
-  console.log('[loadDraft] ts=',ts?.id,'emps=',emps?.length,'blocks=',blocks?.length,'empsErr=',empsErr,'blocksErr=',blocksErr);
+  console.log('[loadDraft] ts=',ts?.id,'emps=',emps?.length,'blocks=',blocks?.length);
+  if(empsErr)   console.error('[loadDraft] employees error:', empsErr);
+  if(blocksErr) console.error('[loadDraft] blocks error:',    blocksErr);
 
   // ── 2. Show form screen ────────────────────────────────────
   _formLocked = false;
@@ -4002,6 +4244,7 @@ async function loadDraftTimesheet(tsId){
   document.getElementById('tab-mgr')?.classList.remove('active');
 
   // ── 3. Clear form (no default employees) ──────────────────
+  stopSupabaseAutoSave(); // stop any running timer before clearing form — prevents stale save
   clearForm();
   currentTimesheetId = tsId;
 
@@ -4055,18 +4298,51 @@ async function loadDraftTimesheet(tsId){
 
       // ── 6. Restore time blocks ──────────────────────────
       const myBlocks = empBlocks[eid] || [];
-      const dbBlocks = (blocks||[]).filter(b => b.employee_id === emp.id);
+      // Sort db blocks by display_order so they map predictably to card slots
+      const dbBlocks = (blocks||[])
+        .filter(b => b.employee_id === emp.id)
+        .sort((a,b) => (a.display_order||0) - (b.display_order||0));
+
+      // Track which myBlocks have already been matched to avoid double-assignment
+      const usedBlockIds = new Set();
+
+      const toFull = v => {
+        if(!v) return '';
+        // Already has date component — use as-is
+        if(v.includes('T')) return v;
+        // Plain HH:MM — prepend job date if available, else today
+        const jobDateEl = document.getElementById('job-date');
+        const datePrefix = (jobDateEl && jobDateEl.value) || new Date().toISOString().split('T')[0];
+        return datePrefix + 'T' + v;
+      };
+
       dbBlocks.forEach((db) => {
-        // Match by type and is_primary flag
-        const blk = myBlocks.find(b =>
-          b.type === (db.block_type || db.type) &&
-          (b.isPrimary === db.is_primary || (!b.isPrimary && !db.is_primary))
-        ) || myBlocks.find(b => b.type === (db.block_type || db.type));
-        if(!blk) return;
-        const toFull = v => {
-          if(!v) return '';
-          return v.includes('T') ? v : (new Date().toISOString().split('T')[0] + 'T' + v);
-        };
+        const dbType = db.block_type || db.type;
+        const dbPrimary = db.is_primary === true || db.is_primary === 'true';
+
+        // Match: exact type + primary flag, not already used
+        let blk = myBlocks.find(b =>
+          !usedBlockIds.has(b.blockId) &&
+          b.type === dbType &&
+          b.isPrimary === dbPrimary
+        );
+        // Fallback: match type only, not already used
+        if(!blk) blk = myBlocks.find(b =>
+          !usedBlockIds.has(b.blockId) &&
+          b.type === dbType
+        );
+
+        // Last resort: add a new block of this type if none matched
+        if(!blk){
+          const newBlockId = ++blockCounter;
+          blk = { blockId: newBlockId, type: dbType, isPrimary: dbPrimary,
+                   isDefault: false, inVal: '', outVal: '' };
+          myBlocks.push(blk);
+          const container = document.getElementById('blocks-' + eid);
+          if(container) container.appendChild(makeBlockEl(eid, blk, myBlocks));
+        }
+
+        usedBlockIds.add(blk.blockId);
         blk.inVal  = toFull(db.time_in  || '');
         blk.outVal = toFull(db.time_out || '');
         const inEl  = document.getElementById('bin-'  + blk.blockId);
@@ -4266,11 +4542,19 @@ async function openDetail(ts){
 
   function blockMins(b){
     if(!b.time_in||!b.time_out) return 0;
-    const tin=b.time_in.includes('T')?b.time_in.split('T')[1]:b.time_in;
+    // Use full datetime if available (handles cross-day punches correctly)
+    if(b.time_in.includes('T') && b.time_out.includes('T')){
+      const d1=new Date(b.time_in), d2=new Date(b.time_out);
+      if(!isNaN(d1)&&!isNaN(d2)) return Math.max(0, Math.round((d2-d1)/60000));
+    }
+    // Plain HH:MM fallback — add 24h if out < in (next-day punch)
+    const tin =b.time_in.includes('T') ?b.time_in.split('T')[1] :b.time_in;
     const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out;
     const[hi,mi]=tin.split(':').map(Number);
     const[ho,mo]=tout.split(':').map(Number);
-    return Math.max(0,(ho*60+mo)-(hi*60+mi));
+    let diff=(ho*60+mo)-(hi*60+mi);
+    if(diff<0) diff+=1440; // next-day punch
+    return Math.max(0,diff);
   }
 
   const gridRows = validEmps.map(e=>{
@@ -4453,13 +4737,21 @@ function initSidebar(){
   if(!sidebar) return;
   // Show/hide based on role
   const isField = isFieldRole();
+  const shell   = document.getElementById('app-shell');
   if(isField){
     sidebar.classList.remove('sb-visible');
     document.body.classList.remove('has-sidebar');
   } else {
     sidebar.classList.add('sb-visible');
     document.body.classList.add('has-sidebar');
-    wrapAppShell();
+    if(!shell){
+      // First login — defer DOM restructure one tick so sidebar is painted first
+      setTimeout(wrapAppShell, 0);
+    } else {
+      // Shell already exists (e.g. switching back from a field role test) —
+      // just ensure it's visible and correctly laid out, no re-wrap needed
+      shell.style.display = 'flex';
+    }
   }
   // Settings button visibility
   const settingsBtn = document.getElementById('sb-settings');
@@ -4767,6 +5059,19 @@ async function createUser(){
   if(btn){ btn.disabled=true; btn.textContent='Creating...'; }
 
   try{
+    // Pre-flight: check if this email already exists in profiles
+    // Avoids the cryptic Postgres constraint error message
+    const {data:existing} = await getSupabase()
+      .from('profiles')
+      .select('id, email')
+      .eq('email', email)
+      .maybeSingle();
+    if(existing){
+      alert(`A user with the email "${email}" already exists.\nIf you need to update their role or details, use the Edit button on their existing account.`);
+      if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-user-plus"></i> Create user'; }
+      return;
+    }
+
     // Insert into auth.users via RPC (we'll use a database function)
     const {data, error} = await getSupabase().rpc('create_app_user', {
       p_email:    email,
@@ -4778,15 +5083,21 @@ async function createUser(){
 
     const newUserId = data;
 
-    // Patch auth.users to ensure no NULL string fields (prevents 500 on login)
-    // email_change and similar columns must be '' not NULL
-    await getSupabase().from('_auth_user_patch').upsert({
-      id: newUserId,
-      email_change: '',
-      email_change_token_new: '',
-      email_change_token_current: '',
-      phone_change: '',
-    }).catch(()=>{}); // best-effort; also handled by fix_auth_user_nulls RPC if available
+    // Fix NULL string columns in auth.users that cause "Database error querying schema"
+    // on first login. Supabase requires these columns to be '' not NULL.
+    // Try RPC first (most reliable), fall back to direct update via service role.
+    try {
+      await getSupabase().rpc('fix_auth_user_nulls', { p_user_id: newUserId });
+    } catch(fixErr){
+      console.warn('[createUser] fix_auth_user_nulls RPC not available:', fixErr.message);
+      // Fallback: try direct update on auth.users via the admin client
+      // This will only work if RLS allows it or service role is used
+      try {
+        await getSupabase().rpc('fix_new_user_auth_fields', { p_user_id: newUserId });
+      } catch(_){
+        console.warn('[createUser] fix_new_user_auth_fields also unavailable — user may get login error');
+      }
+    }
 
     // Update profile with additional fields
     const profileUpdate = {
@@ -4807,7 +5118,18 @@ async function createUser(){
     loadWizUsers();
     alert('✓ User created successfully. They can log in with the provided password.');
   } catch(err){
-    alert('Error creating user: '+err.message);
+    // Translate known Postgres/Supabase constraint errors into plain English
+    let msg = err.message || 'Unknown error';
+    if(msg.includes('users_email_partial_key') || msg.includes('duplicate key') || msg.includes('already exists')){
+      msg = `A user with the email "${email}" already exists.\nIf you need to update their details, use the Edit button on their existing account.`;
+    } else if(msg.includes('password') && msg.includes('short')){
+      msg = 'Password is too short. Please use at least 8 characters.';
+    } else if(msg.includes('invalid') && msg.includes('email')){
+      msg = 'The email address format is not valid. Please check and try again.';
+    } else if(msg.includes('permission') || msg.includes('policy')){
+      msg = 'You do not have permission to create users. Please contact your administrator.';
+    }
+    alert(msg);
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-user-plus"></i> Create user'; }
   }
 }
@@ -5685,7 +6007,12 @@ async function uploadScans(timesheetId){
 async function saveTimesheet(statusVal, silent=false){
   if(!currentUser){ alert('Please sign in first.'); return; }
   // Prevent concurrent saves — only one save at a time
-  if(silent && _savingInProgress){ console.log('[save] skipped — save already in progress'); return; }
+  if(_savingInProgress){
+    if(silent){ console.log('[save] skipped — save already in progress'); return; }
+    // Non-silent (manual save/submit): wait up to 5s for in-progress save to finish
+    let waited = 0;
+    while(_savingInProgress && waited < 5000){ await new Promise(r=>setTimeout(r,200)); waited+=200; }
+  }
   if(!silent && !validateAll()){ alert('Please fix highlighted errors before submitting.'); return; }
   _savingInProgress = true;
 
@@ -5710,6 +6037,14 @@ async function saveTimesheet(statusVal, silent=false){
       supervisor_sig:     sigData,
       supervisor_signed_at: statusVal === 'submitted' ? new Date().toISOString() : null,
     };
+
+    // Safety guard: if silent auto-save fires but currentTimesheetId is null,
+    // it means we're between timesheets (mid-navigation). Don't INSERT a new record.
+    if(silent && !currentTimesheetId){
+      console.warn('[saveTimesheet] silent save skipped — no currentTimesheetId (mid-navigation)');
+      _savingInProgress = false;
+      return;
+    }
 
     let timesheetId;
 
@@ -5801,6 +6136,7 @@ async function saveTimesheet(statusVal, silent=false){
     clearLocalDraft(); // Clear local backup on successful save
     _supabaseDirty = false; // Mark Supabase as up to date
     _recordServerSave(); // Update server timestamp in autosave bar
+    console.log('[saveTimesheet] ✓ saved to Supabase, tsId=', currentTimesheetId, 'status=', statusVal);
     if(statusVal === 'submitted'){
       setSubmissionStatus('pending');
       updateStatus('submitted');
@@ -5815,9 +6151,22 @@ async function saveTimesheet(statusVal, silent=false){
 
   } catch(err){
     if(!silent) hideSaving();
-    console.error(err);
-    if(!silent) alert('Error saving timesheet: ' + (err.message || JSON.stringify(err)));
-    else setAutosaveStatus('error','Auto-save failed — will retry');
+    const msg = err.message || JSON.stringify(err);
+    console.error('[saveTimesheet] error (silent='+silent+'):', msg, err);
+    if(!silent){
+      let displayMsg = msg;
+      if(msg.includes('travel_only') && (msg.includes('column') || msg.includes('does not exist'))){
+        displayMsg = 'Database column missing: travel_only\n\n' +
+              'Please run this SQL in your Supabase SQL Editor:\n\n' +
+              'ALTER TABLE employees ADD COLUMN IF NOT EXISTS travel_only boolean DEFAULT false;\n\n' +
+              'Then try submitting again.';
+      }
+      alert('Error saving timesheet: ' + displayMsg);
+    } else {
+      // Surface silent save errors in the autosave bar so they're never invisible
+      setAutosaveStatus('error', 'Auto-save failed: ' + msg.slice(0,60));
+      console.error('[saveTimesheet] silent save failed — data NOT on server:', msg);
+    }
   } finally {
     _savingInProgress = false;
   }
@@ -6072,7 +6421,22 @@ async function openDetailScreen(ts, isManager=false){
   const validEmps=(emps||[]).filter(e=>e.first_name||e.last_name);
   let totalPaidMins=0,totalBrkMins=0,empCount=0;
 
-  function bMins(b){ if(!b||!b.time_in||!b.time_out)return 0; const tin=b.time_in.includes('T')?b.time_in.split('T')[1]:b.time_in; const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out; const[hi,mi]=tin.split(':').map(Number);const[ho,mo]=tout.split(':').map(Number);return Math.max(0,(ho*60+mo)-(hi*60+mi)); }
+  function bMins(b){
+    if(!b||!b.time_in||!b.time_out) return 0;
+    // Full datetime — handles cross-day correctly
+    if(b.time_in.includes('T')&&b.time_out.includes('T')){
+      const d1=new Date(b.time_in),d2=new Date(b.time_out);
+      if(!isNaN(d1)&&!isNaN(d2)) return Math.max(0,Math.round((d2-d1)/60000));
+    }
+    // Plain HH:MM — add 1440 if next-day punch
+    const tin =b.time_in.includes('T') ?b.time_in.split('T')[1] :b.time_in;
+    const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out;
+    const[hi,mi]=tin.split(':').map(Number);
+    const[ho,mo]=tout.split(':').map(Number);
+    let diff=(ho*60+mo)-(hi*60+mi);
+    if(diff<0) diff+=1440;
+    return Math.max(0,diff);
+  }
 
   const gridRows=validEmps.map(e=>{
     const eBlocks=blocksByEmp[e.id]||[];
