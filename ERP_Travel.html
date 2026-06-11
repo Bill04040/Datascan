@@ -452,7 +452,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.15';
+const APP_VERSION  = 'v1.0.16';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -490,7 +490,6 @@ waitForSupabase(()=>{
 
   // Listen for auth changes
   getSupabase().auth.onAuthStateChange(async(event, session)=>{
-    if(event === 'SIGNED_IN' && session?.user) await onSignedIn(session.user);
     if(event === 'SIGNED_OUT') showLoginScreen();
   });
 });
@@ -506,80 +505,24 @@ async function doLogin(){
   if(!email || !pass){ err.textContent = 'Please enter your email and password.'; return; }
 
   btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Signing in...';
+  btn.innerHTML = 'Signing in...';
 
-  // Guard: ensure Supabase client is ready
-  if(!getSupabase()){
-    err.textContent = 'App not ready — please refresh the page and try again.';
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
-    return;
-  }
-
-  let data, error;
   try{
-    const result = await getSupabase().auth.signInWithPassword({email, password:pass});
-    data  = result.data;
-    error = result.error;
-  } catch(e){
-    err.textContent = 'Connection error: ' + e.message;
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
-    console.error('[doLogin] signInWithPassword threw:', e);
-    return;
-  }
-
-  console.log('[doLogin] auth result — error:', error, 'user:', data?.user?.id||'null');
-
-  if(error){
-    err.textContent = error.message.includes('Invalid login') || error.message.includes('invalid')
-      ? 'Incorrect email or password.' : error.message;
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
-    return;
-  }
-
-  if(!data?.user){
-    err.textContent = 'Login did not return a user — please try again.';
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
-    console.error('[doLogin] no user in response:', data);
-    return;
-  }
-
-  console.log('[doLogin] auth succeeded for', data.user.email);
-  // onAuthStateChange is the primary trigger — but add a fallback poll in case it doesn't fire
-  // (can happen when localStorage is blocked or Supabase session persistence fails)
-  let authStateReceived = false;
-  const origHandler = getSupabase().auth.onAuthStateChange;
-
-  // Poll getSession every 200ms for up to 3 seconds as fallback
-  let pollCount = 0;
-  const pollTimer = setInterval(async()=>{
-    pollCount++;
-    if(authStateReceived || pollCount > 15){
-      clearInterval(pollTimer);
+    const {data, error} = await getSupabase().auth.signInWithPassword({email, password:pass});
+    if(error){
+      err.textContent = error.message.includes('Invalid') ? 'Incorrect email or password.' : error.message;
+      btn.disabled = false;
+      btn.innerHTML = 'Sign in';
       return;
     }
-    const {data:sd} = await getSupabase().auth.getSession();
-    if(sd?.session?.user){
-      clearInterval(pollTimer);
-      authStateReceived = true;
-      console.log('[doLogin] fallback poll got session — calling onSignedIn');
-      await onSignedIn(sd.session.user);
-    }
-  }, 200);
-
-  // Mark as received if onAuthStateChange fires naturally
-  getSupabase().auth.onAuthStateChange((event, session)=>{
-    if(event === 'SIGNED_IN' && session?.user){
-      authStateReceived = true;
-      clearInterval(pollTimer);
-    }
-  });
+    if(data?.user) await onSignedIn(data.user);
+  } catch(e){
+    err.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.innerHTML = 'Sign in';
+  }
 }
 
-// ── Post-login ────────────────────────────────────────────────────────────────
 async function onSignedIn(user){
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-err');
