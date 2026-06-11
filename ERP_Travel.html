@@ -451,7 +451,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.11';
+const APP_VERSION  = 'v1.0.12';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -546,8 +546,36 @@ async function doLogin(){
     return;
   }
 
-  console.log('[doLogin] auth succeeded for', data.user.email, '— waiting for onAuthStateChange');
-  // Do NOT call onSignedIn directly — onAuthStateChange fires reliably and is the single entry point
+  console.log('[doLogin] auth succeeded for', data.user.email);
+  // onAuthStateChange is the primary trigger — but add a fallback poll in case it doesn't fire
+  // (can happen when localStorage is blocked or Supabase session persistence fails)
+  let authStateReceived = false;
+  const origHandler = getSupabase().auth.onAuthStateChange;
+
+  // Poll getSession every 200ms for up to 3 seconds as fallback
+  let pollCount = 0;
+  const pollTimer = setInterval(async()=>{
+    pollCount++;
+    if(authStateReceived || pollCount > 15){
+      clearInterval(pollTimer);
+      return;
+    }
+    const {data:sd} = await getSupabase().auth.getSession();
+    if(sd?.session?.user){
+      clearInterval(pollTimer);
+      authStateReceived = true;
+      console.log('[doLogin] fallback poll got session — calling onSignedIn');
+      await onSignedIn(sd.session.user);
+    }
+  }, 200);
+
+  // Mark as received if onAuthStateChange fires naturally
+  getSupabase().auth.onAuthStateChange((event, session)=>{
+    if(event === 'SIGNED_IN' && session?.user){
+      authStateReceived = true;
+      clearInterval(pollTimer);
+    }
+  });
 }
 
 // ── Post-login ────────────────────────────────────────────────────────────────
