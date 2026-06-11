@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <title>Datascan Travel Log</title>
-<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"
-  onerror="console.warn('Tabler icons failed to load — icons will be hidden')"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"
+  onerror="console.warn('Tabler icons failed — continuing without icons')"/>
 <style>
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -450,9 +450,9 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT                                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.13';
+const APP_VERSION  = 'v1.0.15';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -467,20 +467,8 @@ let _activeTrip    = null; // active travel_log row
 function getSupabase(){ return window._supabase; }
 
 function waitForSupabase(cb){
-  // Check for both CDN formats: window.supabase (UMD) or window.supabase.createClient
-  const ready = ()=> window.supabase && window.supabase.createClient;
-  if(ready()){ cb(); return; }
-  let attempts = 0;
-  const t = setInterval(()=>{
-    attempts++;
-    if(ready()){ clearInterval(t); cb(); return; }
-    if(attempts > 100){ // 5 second timeout
-      clearInterval(t);
-      const err = document.getElementById('login-err');
-      if(err) err.textContent = 'Failed to load app resources. Please refresh the page.';
-      console.error('[boot] Supabase failed to load after 5s');
-    }
-  }, 50);
+  if(window.supabase){ cb(); return; }
+  const t = setInterval(()=>{ if(window.supabase){ clearInterval(t); cb(); } }, 50);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
