@@ -404,7 +404,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.3';
+const APP_VERSION  = 'v1.0.4';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -460,7 +460,29 @@ async function doLogin(){
   btn.disabled = true;
   btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Signing in...';
 
-  const {data, error} = await getSupabase().auth.signInWithPassword({email, password:pass});
+  // Guard: ensure Supabase client is ready
+  if(!getSupabase()){
+    err.textContent = 'App not ready — please refresh the page and try again.';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    return;
+  }
+
+  let data, error;
+  try{
+    const result = await getSupabase().auth.signInWithPassword({email, password:pass});
+    data  = result.data;
+    error = result.error;
+  } catch(e){
+    err.textContent = 'Connection error: ' + e.message;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    console.error('[doLogin] signInWithPassword threw:', e);
+    return;
+  }
+
+  console.log('[doLogin] auth result — error:', error, 'user:', data?.user?.id||'null');
+
   if(error){
     err.textContent = error.message.includes('Invalid login') || error.message.includes('invalid')
       ? 'Incorrect email or password.' : error.message;
@@ -468,8 +490,17 @@ async function doLogin(){
     btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
     return;
   }
-  // Directly call onSignedIn — don't rely solely on onAuthStateChange
-  if(data?.user) await onSignedIn(data.user);
+
+  if(!data?.user){
+    err.textContent = 'Login did not return a user — please try again.';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    console.error('[doLogin] no user in response:', data);
+    return;
+  }
+
+  console.log('[doLogin] calling onSignedIn for', data.user.email);
+  await onSignedIn(data.user);
 }
 
 // ── Post-login ────────────────────────────────────────────────────────────────
