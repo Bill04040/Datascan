@@ -171,6 +171,8 @@ body{background:#0f1e30;color:#f0f4f8}
 }
 .job-card:active{background:var(--bg3);border-color:var(--blue)}
 .job-card.selected{border-color:var(--green);background:rgba(106,179,79,.08)}
+.job-card.disabled{opacity:.38;pointer-events:none;cursor:default;filter:grayscale(.4)}
+.job-card.active-trip{border-color:var(--amber);background:rgba(244,169,58,.07);box-shadow:0 0 0 1px rgba(244,169,58,.25)}
 .job-client{font-size:16px;font-weight:700;color:#fff;margin-bottom:2px}
 .job-meta{font-size:13px;color:var(--text2);display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .job-meta-item{display:flex;align-items:center;gap:4px}
@@ -452,7 +454,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.16';
+const APP_VERSION  = 'v1.0.22';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -602,7 +604,7 @@ async function loadTodaysJobs(){
   // Query by supervisor_id first
   let {data, error} = await getSupabase()
     .from('timesheets')
-    .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id')
+    .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id, dest_lat, dest_lng, dest_address')
     .eq('supervisor_id', currentUser.id)
     .eq('job_date', today)
     .order('created_at', {ascending: false});
@@ -614,7 +616,7 @@ async function loadTodaysJobs(){
   if((!data || !data.length) && !error && currentProfile?.full_name){
     const fallback = await getSupabase()
       .from('timesheets')
-      .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id')
+      .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id, dest_lat, dest_lng, dest_address')
       .eq('job_date', today)
       .ilike('supervisor_name', currentProfile.full_name.trim())
       .order('created_at', {ascending: false});
@@ -644,15 +646,28 @@ async function loadTodaysJobs(){
   const tsIds = data.map(t=>t.id);
   const {data:existingLogs} = await getSupabase()
     .from('travel_logs')
-    .select('timesheet_id, status')
-    .in('timesheet_id', tsIds);
+    .select('id, timesheet_id, status, vehicle_plate, vehicle_make, vehicle_model, miles_start, started_at')
+    .in('timesheet_id', tsIds)
+    .order('created_at', {ascending: false});
   const logMap = {};
-  (existingLogs||[]).forEach(l=>{ logMap[l.timesheet_id] = l.status; });
+  (existingLogs||[]).forEach(l=>{
+    if(!logMap[l.timesheet_id]) logMap[l.timesheet_id] = l; // keep most recent
+  });
+
+  // Check if any trip is active — if so only that card is selectable
+  const hasActiveTrip = Object.values(logMap).some(l=>l.status==='active');
 
   data.forEach(ts=>{
-    const logStatus = logMap[ts.id];
-    const hasLog    = !!logStatus;
+    const log       = logMap[ts.id];
+    const logStatus = log?.status || null;
+    const hasLog    = !!log;
     const isActive  = logStatus === 'active';
+    const isSetup   = logStatus === 'setup';
+    const isDone    = logStatus === 'completed';
+
+    // Grey out cards that aren't the active trip
+    const isDisabled = hasActiveTrip && !isActive;
+    const isClickable = !isDisabled;
 
     const statusPillMap = {
       draft:     '<span class="pill pill-draft">Draft</span>',
@@ -662,21 +677,34 @@ async function loadTodaysJobs(){
     };
     const tsPill = statusPillMap[ts.status] || '';
 
-    const logBadge = hasLog
-      ? (isActive
-          ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"></i> Trip in progress</span>'
-          : '<span class="pill pill-draft">Log complete</span>')
+    const logBadge = isActive
+      ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"></i> Trip in progress</span>'
+      : isSetup
+      ? '<span class="pill pill-active" style="background:rgba(30,95,174,.2);color:#90b8f0"><i class="ti ti-users"></i> Check-in incomplete</span>'
+      : isDone
+      ? '<span class="pill pill-approved">Log complete</span>'
       : '<span style="font-size:12px;color:var(--text3)">No travel log yet</span>';
 
-    const city  = [ts.city, ts.state].filter(Boolean).join(', ');
-    const date  = ts.job_date
+    const actionLabel = isActive
+      ? 'Resume trip <i class="ti ti-chevron-right"></i>'
+      : isSetup
+      ? 'Continue check-in <i class="ti ti-chevron-right"></i>'
+      : isDone
+      ? 'View summary <i class="ti ti-chevron-right"></i>'
+      : 'Start trip <i class="ti ti-chevron-right"></i>';
+
+    const city = [ts.city, ts.state].filter(Boolean).join(', ');
+    const date = ts.job_date
       ? new Date(ts.job_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
       : '';
 
     const card = document.createElement('button');
-    card.className = 'job-card';
+    card.className = 'job-card'
+      + (isActive  ? ' active-trip' : '')
+      + (isDisabled ? ' disabled'   : '');
+
     card.innerHTML = `
-      <div class="job-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div class="job-client">${ts.client_name || 'Unknown Client'}</div>
         ${tsPill}
       </div>
@@ -688,32 +716,143 @@ async function loadTodaysJobs(){
       <div class="job-divider"></div>
       <div class="job-footer">
         ${logBadge}
-        <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--green);font-weight:600">
-          ${isActive ? 'Continue <i class="ti ti-chevron-right"></i>' : hasLog ? 'View <i class="ti ti-chevron-right"></i>' : 'Start trip <i class="ti ti-chevron-right"></i>'}
+        <div style="display:flex;align-items:center;gap:4px;font-size:12px;
+          color:${isClickable?'var(--green)':'var(--text3)'};font-weight:600">
+          ${isDisabled ? 'Unavailable' : actionLabel}
         </div>
       </div>`;
-    card.onclick = () => selectJob(ts, logStatus);
+
+    if(isClickable) card.onclick = () => selectJob(ts, log);
     list.appendChild(card);
   });
 }
 
-// ── Select a job ──────────────────────────────────────────────────────────────
-function selectJob(ts, existingLogStatus){
+// ── Select a job — resumes at correct step based on log status ───────────────
+async function selectJob(ts, log){
   _activeJob = ts;
 
-  // Update trip screen header
   document.getElementById('trip-screen-title').textContent = ts.client_name || 'Trip';
   document.getElementById('trip-screen-sub').textContent =
     [ts.store_number ? 'Store '+ts.store_number : '', ts.city, ts.state].filter(Boolean).join(' · ');
-
-  // Show trip tab in bottom nav
   document.getElementById('nav-trip').style.display = 'flex';
-
-  // Navigate to trip screen
   showScreen('trip');
 
-  // Show step 3 — vehicle selection
-  showVehicleSelection();
+  const logStatus = log?.status || null;
+
+  if(logStatus === 'active'){
+    // ── Resume active trip ────────────────────────────────────────────────────
+    _activeTrip = log;
+    // Restore vehicle + passenger state from Supabase
+    await _resumeActiveTrip(log);
+
+  } else if(logStatus === 'setup'){
+    // ── Resume passenger check-in ─────────────────────────────────────────────
+    _activeTrip = log;
+    // Restore vehicle from log record
+    _selectedVehicle = {
+      plate:        log.vehicle_plate,
+      make:         log.vehicle_make,
+      model:        log.vehicle_model,
+      year:         log.vehicle_year,
+      color:        log.vehicle_color,
+      capacity:     log.vehicle_capacity,
+      vehicle_type: log.vehicle_type,
+    };
+    _startingMileage = log.miles_start;
+    showPassengerCheckIn();
+
+  } else if(logStatus === 'completed'){
+    // ── Show read-only trip summary ───────────────────────────────────────────
+    showTripSummary(log);
+
+  } else {
+    // ── No log yet — start fresh ──────────────────────────────────────────────
+    loadTripState(); // restore any locally saved vehicle/state
+    showVehicleSelection();
+  }
+}
+
+// ── Resume an active trip ─────────────────────────────────────────────────────
+async function _resumeActiveTrip(log){
+  // Restore vehicle
+  _selectedVehicle = {
+    plate:        log.vehicle_plate,
+    make:         log.vehicle_make,
+    model:        log.vehicle_model,
+    year:         log.vehicle_year,
+    color:        log.vehicle_color,
+    capacity:     log.vehicle_capacity,
+    vehicle_type: log.vehicle_type,
+  };
+  _startingMileage = log.miles_start;
+
+  // Restore passengers from travel_passengers table
+  const {data:pax} = await getSupabase()
+    .from('travel_passengers')
+    .select('profile_id, full_name, role')
+    .eq('travel_log_id', log.id);
+  _passengers = pax || [];
+
+  // Resume active trip screen
+  showTripActive(log);
+}
+
+// ── Read-only completed trip summary ─────────────────────────────────────────
+// Dev reset button for summary screen (plain string — no nested backtick)
+const resetSummaryBtn =
+  '<div style="margin-top:1rem;padding:1rem;background:rgba(163,45,45,.1);' +
+  'border:1px dashed rgba(163,45,45,.4);border-radius:var(--radius)">' +
+  '<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;' +
+  'letter-spacing:.08em;margin-bottom:.625rem">&#9888; Dev / Test Only</div>' +
+  '<button class="btn btn-danger btn-sm" onclick="resetCompletedTrip()">' +
+  '<i class="ti ti-trash"></i> Delete trip record &amp; start over' +
+  '</button></div>';
+
+function showTripSummary(log){
+  _activeTrip = log; // store so resetCompletedTrip can reference it
+  setStepBar(4);
+  const content = document.getElementById('trip-content');
+  const started   = log.started_at   ? new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const completed = log.completed_at ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const miles     = log.miles_end && log.miles_start ? (log.miles_end - log.miles_start).toLocaleString() + ' mi' : '—';
+
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      <div style="background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.25);
+        border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;text-align:center">
+        <i class="ti ti-circle-check" style="font-size:36px;color:var(--green);display:block;margin-bottom:.5rem"></i>
+        <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">Trip Complete</div>
+        <div style="font-size:12px;color:var(--text2)">This trip has been logged and submitted</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Trip Summary</div>
+          <span style="font-size:11px;color:var(--text3)">Read only</span>
+        </div>
+        <div class="info-row"><div class="info-label">Vehicle</div>
+          <div class="info-value">${[log.vehicle_plate,log.vehicle_make,log.vehicle_model].filter(Boolean).join(' · ')}</div></div>
+        <div class="info-row"><div class="info-label">Departed</div>
+          <div class="info-value">${started}</div></div>
+        <div class="info-row"><div class="info-label">Arrived</div>
+          <div class="info-value">${completed}</div></div>
+        <div class="info-row"><div class="info-label">Miles driven</div>
+          <div class="info-value">${miles}</div></div>
+        <div class="info-row"><div class="info-label">Start odometer</div>
+          <div class="info-value">${log.miles_start?.toLocaleString()||'—'}</div></div>
+        <div class="info-row"><div class="info-label">End odometer</div>
+          <div class="info-value">${log.miles_end?.toLocaleString()||'—'}</div></div>
+      </div>
+      <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);
+        border-radius:var(--radius);padding:.875rem;margin-top:.5rem;
+        font-size:13px;color:var(--text2);line-height:1.6">
+        <i class="ti ti-info-circle" style="color:var(--blue)"></i>
+        To correct employee times for this job, open the timesheet in the
+        <strong style="color:#fff">Datascan Timesheet</strong> app.
+      </div>
+      <button class="btn btn-ghost" style="margin-top:1rem" onclick="showScreen('home')">
+        <i class="ti ti-arrow-left"></i> Back to jobs
+      </button>
+      ${_isDevUser() ? resetSummaryBtn : ''}
+    </div>`;
 }
 
 // ── Step bar renderer ─────────────────────────────────────────────────────────
@@ -1127,11 +1266,37 @@ async function showPassengerCheckIn(){
 
       <div style="margin-top:1.25rem">
         <button class="btn btn-success" id="pax-continue-btn"
-          onclick="confirmPassengers()" disabled>
+          onclick="promptStartTrip()" disabled>
           <i class="ti ti-flag"></i> Confirm & Start Trip
         </button>
         <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:.5rem"
           id="pax-count-hint">Select at least 1 passenger to continue</div>
+      </div>
+
+      <!-- Confirmation banner — shown on button tap -->
+      <div id="start-trip-confirm" style="display:none;margin-top:.875rem;
+        background:rgba(244,169,58,.1);border:1.5px solid rgba(244,169,58,.4);
+        border-radius:var(--radius);padding:1rem">
+        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:.875rem">
+          <i class="ti ti-alert-triangle" style="color:var(--amber);font-size:22px;flex-shrink:0;margin-top:1px"></i>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:4px">
+              Ready to depart?
+            </div>
+            <div style="font-size:13px;color:var(--text2);line-height:1.6">
+              Once the trip starts, the meet spot is locked — no additional passengers
+              can be added at this location. Make sure everyone boarding here is checked in.
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.625rem">
+          <button class="btn btn-ghost btn-sm" onclick="cancelStartTrip()">
+            <i class="ti ti-arrow-left"></i> Go back
+          </button>
+          <button class="btn btn-success btn-sm" id="final-start-btn" onclick="confirmPassengers()">
+            <i class="ti ti-steering-wheel"></i> Start trip
+          </button>
+        </div>
       </div>
     </div>`;
 
@@ -1238,6 +1403,22 @@ function updatePaxCount(){
     : 'Select at least 1 passenger to continue';
 }
 
+function promptStartTrip(){
+  if(_boardedIds.size === 0){ showToast('Select at least one passenger','error'); return; }
+  // Show confirmation banner, hide the main button
+  document.getElementById('start-trip-confirm').style.display = '';
+  document.getElementById('pax-continue-btn').style.display   = 'none';
+  document.getElementById('pax-count-hint').style.display     = 'none';
+  // Scroll banner into view
+  document.getElementById('start-trip-confirm').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function cancelStartTrip(){
+  document.getElementById('start-trip-confirm').style.display = 'none';
+  document.getElementById('pax-continue-btn').style.display   = '';
+  document.getElementById('pax-count-hint').style.display     = '';
+}
+
 async function confirmPassengers(){
   if(_boardedIds.size === 0){ showToast('Select at least one passenger','error'); return; }
 
@@ -1254,6 +1435,20 @@ async function confirmPassengers(){
   btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Starting trip...';
 
   try{
+    // Capture meet spot coordinates (Option A — auto silent capture)
+    let originLat = null, originLng = null;
+    try{
+      const pos = await new Promise((resolve, reject)=>{
+        navigator.geolocation.getCurrentPosition(resolve, reject,
+          {enableHighAccuracy:true, timeout:8000, maximumAge:0});
+      });
+      originLat = pos.coords.latitude;
+      originLng = pos.coords.longitude;
+      console.log('[meet spot] captured:', originLat, originLng);
+    } catch(gpsErr){
+      console.warn('[meet spot] GPS unavailable:', gpsErr.message);
+    }
+
     const logPayload = {
       timesheet_id:    _activeJob.id,
       driver_id:       currentUser.id,
@@ -1269,6 +1464,8 @@ async function confirmPassengers(){
       miles_start:     _startingMileage,
       status:          'active',
       started_at:      new Date().toISOString(),
+      origin_lat:      originLat,
+      origin_lng:      originLng,
     };
 
     const {data:log, error:logErr} = await getSupabase()
@@ -1305,42 +1502,334 @@ async function confirmPassengers(){
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// STEP 4 — ACTIVE TRIP (placeholder for next build)
 // ══════════════════════════════════════════════════════════════════════════════
+// STEP 4 — ACTIVE TRIP: GPS tracking, live map, geofence, arrived submit
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GPS state ─────────────────────────────────────────────────────────────────
+let _gpsWatchId       = null;
+let _lastPingTime     = 0;
+let _currentPos       = null;
+let _tripMap          = null;
+let _driverMarker     = null;
+let _directionsRenderer = null;
+let _arrivedFired     = false;
+let _arrivedAt        = null;  // timestamp when arrival was detected/confirmed
+let _gpsOfflineBuffer = [];
+const PING_INTERVAL   = 30000;
+const GEOFENCE_M      = 75;
+const MAPS_KEY        = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+
+function haversineMeters(lat1,lng1,lat2,lng2){
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
 function showTripActive(log){
+  _activeTrip=log; _arrivedFired=false;
   setStepBar(4);
-  const content = document.getElementById('trip-content');
-  const started = new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('top-bar-sub').textContent='En Route';
+  const content=document.getElementById('trip-content');
+  const started=new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const paxCount=_passengers.length;
+  const paxNames=_passengers.map(p=>p.full_name).join(', ');
+  const vehStr=[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ');
+  const destStr=_activeJob.client_name+' · '+[_activeJob.city,_activeJob.state].filter(Boolean).join(', ');
 
-  content.innerHTML = `
-    <div style="padding:1rem;padding-bottom:5rem">
-      <div style="background:rgba(106,179,79,.12);border:1px solid rgba(106,179,79,.3);
-        border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;text-align:center">
-        <i class="ti ti-steering-wheel" style="font-size:40px;color:var(--green);margin-bottom:.75rem;display:block"></i>
-        <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">Trip Started</div>
-        <div style="font-size:13px;color:var(--text2)">Departed ${started} · ${_passengers.length} passenger${_passengers.length!==1?'s':''} aboard</div>
-      </div>
+  // Build dev reset panel as plain string — avoids nested template literal browser parse issue
+  const devResetBtn = _isDevUser()
+    ? '<div style="margin-top:1.5rem;padding:1rem;background:rgba(163,45,45,.1);' +
+      'border:1px dashed rgba(163,45,45,.4);border-radius:var(--radius)">' +
+      '<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;' +
+      'letter-spacing:.08em;margin-bottom:.625rem">&#9888; Dev / Test Only</div>' +
+      '<button class="btn btn-danger btn-sm" onclick="resetTrip()">' +
+      '<i class="ti ti-refresh"></i> Reset trip — re-do passenger check-in' +
+      '</button></div>'
+    : '';
 
-      <div class="card">
-        <div class="card-header"><div class="card-title">Trip Summary</div></div>
-        <div class="info-row"><div class="info-label">Vehicle</div>
-          <div class="info-value">${[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ')}</div></div>
-        <div class="info-row"><div class="info-label">Start miles</div>
-          <div class="info-value">${_startingMileage?.toLocaleString()}</div></div>
-        <div class="info-row"><div class="info-label">Job</div>
-          <div class="info-value">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div></div>
-        <div class="info-row"><div class="info-label">Passengers</div>
-          <div class="info-value">${_passengers.map(p=>p.full_name).join(', ')}</div></div>
-      </div>
-
-      <div class="trip-banner" style="margin-top:1rem">
-        <i class="ti ti-map-route"></i>
+  content.innerHTML=`
+    <div style="padding:1rem;padding-bottom:6rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.875rem">
+        <span class="ping-dot"></span>
         <div>
-          <div class="trip-banner-title">GPS tracking coming next</div>
-          <div class="trip-banner-sub">Waypoints, arrival submit, and return trip will be built step by step</div>
+          <div style="font-size:14px;font-weight:700;color:#fff">En Route — <span id="trip-status-text">Locating...</span></div>
+          <div style="font-size:12px;color:var(--text2)">Departed ${started} · ${paxCount} passenger${paxCount!==1?'s':''} aboard</div>
         </div>
       </div>
+      <div id="trip-map"></div>
+      <div class="trip-stat-row">
+        <div class="trip-stat"><div class="trip-stat-val" id="stat-distance">—</div><div class="trip-stat-lbl">Distance</div></div>
+        <div class="trip-stat"><div class="trip-stat-val" id="stat-eta">—</div><div class="trip-stat-lbl">ETA</div></div>
+      </div>
+      <div class="arrival-banner" id="arrival-banner">
+        <i class="ti ti-map-pin-check" style="font-size:32px;color:var(--green);margin-bottom:.5rem;display:block"></i>
+        <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">You have arrived!</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:.5rem">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:1rem" id="arrived-time-display"></div>
+        <div class="field" style="text-align:left">
+          <label>Ending mileage <span style="color:#f87171">*</span>
+            <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none">
+              (must be greater than start: ${_startingMileage?.toLocaleString()||'—'})
+            </span>
+          </label>
+          <input type="number" id="ending-miles"
+            placeholder="Current odometer"
+            inputmode="numeric"
+            min="${(_startingMileage||0)+1}"
+            style="font-size:18px"
+            oninput="onEndMilesInput(this)"/>
+          <div id="miles-err" style="font-size:12px;color:#f87171;margin-top:4px;display:none"></div>
+        </div>
+        <button class="btn btn-success" id="confirm-arrival-btn" style="margin-top:.75rem"
+          onclick="submitArrival()" disabled>
+          <i class="ti ti-flag-check"></i> Confirm Arrival
+        </button>
+      </div>
+      <div class="card" style="margin-top:.75rem">
+        <div class="card-header"><div class="card-title">Trip Details</div></div>
+        <div class="info-row"><div class="info-label">Destination</div><div class="info-value">${destStr}</div></div>
+        <div class="info-row"><div class="info-label">Vehicle</div><div class="info-value">${vehStr}</div></div>
+        <div class="info-row"><div class="info-label">Passengers</div><div class="info-value">${paxNames}</div></div>
+        <div class="info-row"><div class="info-label">GPS</div><div class="info-value" id="gps-status-text" style="color:var(--text3)">Acquiring signal...</div></div>
+      </div>
+      <button class="btn btn-ghost" style="margin-top:.5rem" onclick="showArrivalBanner(true)">
+        <i class="ti ti-map-pin"></i> I have arrived (manual)
+      </button>
+      ${devResetBtn}
     </div>`;
+  setTimeout(()=>initTripMap(log),200);
+  startGPS(log);
+}
+
+function initTripMap(log){
+  const mapEl=document.getElementById('trip-map');
+  if(!mapEl||!window.google||!window.google.maps) return;
+  _tripMap=new google.maps.Map(mapEl,{
+    zoom:13,center:{lat:30.5,lng:-88.1},mapTypeId:'roadmap',
+    disableDefaultUI:true,zoomControl:true,
+    styles:[
+      {featureType:'all',elementType:'geometry',stylers:[{color:'#1a2e4a'}]},
+      {featureType:'water',elementType:'geometry',stylers:[{color:'#0d1e30'}]},
+      {featureType:'road',elementType:'geometry',stylers:[{color:'#2d4a6a'}]},
+      {featureType:'road',elementType:'labels.text.fill',stylers:[{color:'#8a9bb0'}]},
+      {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
+    ]
+  });
+  _directionsRenderer=new google.maps.DirectionsRenderer({
+    map:_tripMap,suppressMarkers:false,
+    polylineOptions:{strokeColor:'#6AB34F',strokeWeight:4}
+  });
+  const dLat=_activeJob.dest_lat, dLng=_activeJob.dest_lng;
+  if(dLat&&dLng){
+    new google.maps.Marker({position:{lat:dLat,lng:dLng},map:_tripMap,title:_activeJob.client_name,
+      icon:{path:google.maps.SymbolPath.CIRCLE,scale:10,fillColor:'#6AB34F',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
+  }
+  _driverMarker=new google.maps.Marker({map:_tripMap,title:'Your location',
+    icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:'#1E5FAE',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
+}
+
+function startGPS(log){
+  if(!navigator.geolocation){
+    const el=document.getElementById('gps-status-text');
+    if(el) el.textContent='GPS not available on this device';
+    return;
+  }
+  _gpsWatchId=navigator.geolocation.watchPosition(
+    pos=>onGPSUpdate(pos,log),
+    err=>{
+      const msgs=['','Permission denied','Position unavailable','Timeout'];
+      const el=document.getElementById('gps-status-text');
+      if(el) el.textContent=msgs[err.code]||'GPS error';
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:5000}
+  );
+}
+
+function stopGPS(){
+  if(_gpsWatchId!==null){ navigator.geolocation.clearWatch(_gpsWatchId); _gpsWatchId=null; }
+}
+
+async function onGPSUpdate(pos,log){
+  const lat=pos.coords.latitude,lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy,spd=pos.coords.speed,hdg=pos.coords.heading;
+  _currentPos={lat,lng};
+  if(_driverMarker){ _driverMarker.setPosition({lat,lng}); if(_tripMap) _tripMap.panTo({lat,lng}); }
+  const statusEl=document.getElementById('gps-status-text');
+  if(statusEl) statusEl.textContent='±'+Math.round(acc)+'m accuracy';
+  const destLat=_activeJob.dest_lat, destLng=_activeJob.dest_lng;
+  if(destLat&&destLng&&window.google){
+    const distM=haversineMeters(lat,lng,destLat,destLng);
+    const distEl=document.getElementById('stat-distance');
+    if(distEl) distEl.textContent=distM<1609?Math.round(distM)+'m':(distM/1609.34).toFixed(1)+' mi';
+    const dirSvc=new google.maps.DirectionsService();
+    dirSvc.route({origin:{lat,lng},destination:{lat:destLat,lng:destLng},travelMode:google.maps.TravelMode.DRIVING},(result,status)=>{
+      if(status==='OK'){
+        _directionsRenderer?.setDirections(result);
+        const leg=result.routes[0]?.legs[0];
+        const etaEl=document.getElementById('stat-eta');
+        if(etaEl&&leg) etaEl.textContent=leg.duration.text;
+        document.getElementById('trip-status-text').textContent=leg?leg.distance.text+' away':'En Route';
+      }
+    });
+    if(!_arrivedFired&&distM<=GEOFENCE_M){ _arrivedFired=true; showArrivalBanner(false); }
+  }
+  const now=Date.now();
+  if(now-_lastPingTime>=PING_INTERVAL){
+    _lastPingTime=now;
+    const ping={travel_log_id:log.id,lat,lng,accuracy:acc||null,speed:spd||null,heading:hdg||null};
+    try{ await getSupabase().from('gps_pings').insert(ping); }
+    catch(e){ _gpsOfflineBuffer.push(ping); }
+    if(_gpsOfflineBuffer.length>0){
+      try{ await getSupabase().from('gps_pings').insert(_gpsOfflineBuffer); _gpsOfflineBuffer=[]; }catch(e2){}
+    }
+  }
+}
+
+function showArrivalBanner(isManual){
+  const banner=document.getElementById('arrival-banner');
+  if(banner){ banner.classList.add('show'); banner.scrollIntoView({behavior:'smooth',block:'center'}); }
+  // Record and display arrived time
+  _arrivedAt = new Date().toISOString();
+  const timeEl = document.getElementById('arrived-time-display');
+  if(timeEl) timeEl.textContent = 'Arrived at ' +
+    new Date(_arrivedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  if(!isManual) showToast('You have arrived at the destination!','success');
+}
+
+function onEndMilesInput(inp){
+  const val     = parseInt(inp.value||'0');
+  const minVal  = (_startingMileage||0) + 1;
+  const errEl   = document.getElementById('miles-err');
+  const btn     = document.getElementById('confirm-arrival-btn');
+  if(!inp.value){
+    errEl.style.display='none';
+    btn.disabled = true;
+    return;
+  }
+  if(val <= (_startingMileage||0)){
+    errEl.textContent = 'Ending mileage must be greater than starting mileage (' + (_startingMileage||0).toLocaleString() + ')';
+    errEl.style.display='block';
+    inp.style.borderColor='#f87171';
+    btn.disabled = true;
+  } else {
+    errEl.style.display='none';
+    inp.style.borderColor='';
+    btn.disabled = false;
+  }
+}
+
+async function submitArrival(){
+  const endMiles = parseInt(document.getElementById('ending-miles')?.value||'0');
+  if(!endMiles || endMiles <= (_startingMileage||0)){
+    showToast('Ending mileage must be greater than starting mileage','error'); return;
+  }
+  const completedAt = _arrivedAt || new Date().toISOString();
+  const btn = document.getElementById('confirm-arrival-btn');
+  if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
+  try{
+    await getSupabase().from('travel_logs').update({
+      miles_end:    endMiles,
+      status:       'completed',
+      completed_at: completedAt,
+    }).eq('id', _activeTrip.id);
+
+    // Update local record so summary screen has correct data
+    _activeTrip.miles_end    = endMiles;
+    _activeTrip.completed_at = completedAt;
+
+    await pushTravelBlocksToTimesheet();
+    stopGPS();
+    clearTripState();
+
+    showToast('Arrival confirmed — trip complete!','success');
+    // Show summary screen instead of jumping to home
+    setTimeout(()=>{
+      showTripSummary(_activeTrip);
+      _activeTrip = null;
+      loadTodaysJobs(); // refresh job list in background
+    }, 800);
+  } catch(e){
+    showToast('Error: '+e.message,'error');
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-flag-check"></i> Confirm Arrival'; }
+  }
+}
+
+async function pushTravelBlocksToTimesheet(){
+  if(!_activeTrip?.timesheet_id) return;
+  const {data:emps}=await getSupabase().from('employees').select('id').eq('timesheet_id',_activeTrip.timesheet_id).limit(1);
+  const empId=emps?.[0]?.id;
+  if(!empId) return;
+  await getSupabase().from('time_blocks').insert({
+    employee_id:empId,timesheet_id:_activeTrip.timesheet_id,
+    block_type:'travel',time_in:_activeTrip.started_at,time_out:new Date().toISOString(),
+    is_primary:false,is_default:false,display_order:99,
+  });
+  console.log('[travel block] pushed to timesheet');
+}
+
+// ── Dev user check ────────────────────────────────────────────────────────────
+function _isDevUser(){
+  const email = (currentProfile?.email||currentUser?.email||'').toLowerCase();
+  return ['supervisor@datascan.com','nford@datascan.com'].includes(email);
+}
+
+// ── Reset trip (dev/test only) ────────────────────────────────────────────────
+// Reset from completed summary screen
+async function resetCompletedTrip(){
+  const logId = _activeTrip?.id;
+  if(!logId){ showToast('No trip record found — refresh the page','error'); return; }
+  if(!confirm('Delete this completed trip record and all related data? This cannot be undone.')) return;
+  try{
+    await getSupabase().from('travel_passengers').delete().eq('travel_log_id', logId);
+    await getSupabase().from('gps_pings').delete().eq('travel_log_id', logId);
+    await getSupabase().from('travel_logs').delete().eq('id', logId);
+    stopGPS();
+    _activeTrip=null; _selectedVehicle=null; _startingMileage=null;
+    _passengers=[]; _arrivedAt=null; _arrivedFired=false;
+    clearTripState();
+    document.getElementById('nav-trip').style.display='none';
+    showToast('Trip deleted — ready to start over','success');
+    showScreen('home');
+    await loadTodaysJobs();
+  } catch(e){
+    console.error('[resetCompletedTrip]', e);
+    showToast('Delete failed: '+e.message,'error');
+  }
+}
+
+async function resetTrip(){
+  if(!_activeTrip) return;
+  if(!confirm('Reset this trip? This will delete the travel log record and all passengers so you can re-test the full check-in flow.')) return;
+
+  try{
+    // Delete passengers first (FK constraint)
+    await getSupabase().from('travel_passengers').delete().eq('travel_log_id', _activeTrip.id);
+    // Delete GPS pings
+    await getSupabase().from('gps_pings').delete().eq('travel_log_id', _activeTrip.id);
+    // Delete travel log
+    await getSupabase().from('travel_logs').delete().eq('id', _activeTrip.id);
+
+    // Stop GPS
+    stopGPS();
+
+    // Reset state
+    _activeTrip      = null;
+    _selectedVehicle = null;
+    _startingMileage = null;
+    _passengers      = [];
+    _arrivedFired    = false;
+    clearTripState();
+
+    showToast('Trip reset — starting from vehicle selection','success');
+    document.getElementById('nav-trip').style.display = 'none';
+    showScreen('home');
+    await loadTodaysJobs();
+
+  } catch(e){
+    showToast('Reset failed: ' + e.message, 'error');
+    console.error('[resetTrip]', e);
+  }
 }
 
 // ── Screen navigation ─────────────────────────────────────────────────────────
