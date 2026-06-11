@@ -404,7 +404,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.2';
+const APP_VERSION  = 'v1.0.3';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -474,51 +474,65 @@ async function doLogin(){
 
 // ── Post-login ────────────────────────────────────────────────────────────────
 async function onSignedIn(user){
-  currentUser = user;
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
 
-  // Load profile
-  const {data:profile} = await getSupabase()
-    .from('profiles').select('*').eq('id', user.id).single();
-  currentProfile = profile || { full_name: user.email, role: 'unknown' };
+  try {
+    currentUser = user;
 
-  // Check driver approval
-  const {data:approval} = await getSupabase()
-    .from('driver_approvals')
-    .select('*')
-    .eq('user_id', user.id)
-    .maybeSingle();
-  driverApproval = approval;
+    // Load profile — use maybeSingle so missing profile doesn't throw
+    const {data:profile, error:profErr} = await getSupabase()
+      .from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if(profErr) console.warn('[onSignedIn] profile error:', profErr.message);
+    currentProfile = profile || { full_name: user.email, role: 'unknown' };
 
-  // Hide login
-  document.getElementById('login-screen').classList.add('hidden');
+    // Check driver approval
+    const {data:approval, error:drvErr} = await getSupabase()
+      .from('driver_approvals')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if(drvErr) console.warn('[onSignedIn] driver approval error:', drvErr.message);
+    driverApproval = approval;
 
-  const isApproved = approval && approval.status === 'approved';
+    // Hide login screen
+    document.getElementById('login-screen').classList.add('hidden');
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
 
-  if(!isApproved){
-    // Show not-approved screen — nothing else visible
-    document.getElementById('not-approved-screen').classList.add('active');
-    document.getElementById('app-shell').classList.remove('active');
-    return;
+    const isApproved = approval && approval.status === 'approved';
+
+    if(!isApproved){
+      document.getElementById('not-approved-screen').classList.add('active');
+      document.getElementById('app-shell').classList.remove('active');
+      return;
+    }
+
+    // Show app shell
+    document.getElementById('not-approved-screen').classList.remove('active');
+    document.getElementById('app-shell').classList.add('active');
+
+    // Populate profile UI
+    const name     = currentProfile.full_name || user.email;
+    const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('avatar-initials').textContent = initials;
+    document.getElementById('pm-name').textContent  = name;
+    document.getElementById('pm-role').textContent  = 'Approved Driver';
+
+    // Set date subtitle
+    const today = new Date();
+    document.getElementById('home-date-sub').textContent =
+      today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+    // Load today's jobs
+    await loadTodaysJobs();
+
+  } catch(e) {
+    console.error('[onSignedIn] unexpected error:', e);
+    if(err) err.textContent = 'Login error: ' + (e.message || 'unexpected error — check console');
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
+    // Show login screen again so user can retry
+    document.getElementById('login-screen').classList.remove('hidden');
   }
-
-  // Show app shell
-  document.getElementById('not-approved-screen').classList.remove('active');
-  document.getElementById('app-shell').classList.add('active');
-
-  // Populate profile UI
-  const name  = currentProfile.full_name || user.email;
-  const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  document.getElementById('avatar-initials').textContent = initials;
-  document.getElementById('pm-name').textContent = name;
-  document.getElementById('pm-role').textContent = 'Approved Driver';
-
-  // Set date subtitle
-  const today = new Date();
-  document.getElementById('home-date-sub').textContent =
-    today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-
-  // Load today's jobs
-  await loadTodaysJobs();
 }
 
 // ── Load today's jobs (today's timesheets for this supervisor) ─────────────────
