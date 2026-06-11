@@ -451,7 +451,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.8';
+const APP_VERSION  = 'v1.0.9';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -479,7 +479,7 @@ waitForSupabase(()=>{
   if(vEl){
     const isLocal = location.protocol === 'file:';
     vEl.innerHTML = APP_VERSION +
-      (isLocal ? ' &nbsp;&#9888; <span style="color:#F4A93A;font-size:10px">Local file — saves may fail. Use GitHub Pages.</span>' : '');
+      (isLocal ? ' &nbsp;&#9888; <span style="color:#F4A93A;font-size:10px">Local file — saves may fail. Use GitHub Pages.<\/span>' : '');
   }
 
   // Restore session
@@ -505,13 +505,13 @@ async function doLogin(){
   if(!email || !pass){ err.textContent = 'Please enter your email and password.'; return; }
 
   btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Signing in...';
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"><\/i> Signing in...';
 
   // Guard: ensure Supabase client is ready
   if(!getSupabase()){
     err.textContent = 'App not ready — please refresh the page and try again.';
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    btn.innerHTML = '<i class="ti ti-login"><\/i> Sign in';
     return;
   }
 
@@ -523,7 +523,7 @@ async function doLogin(){
   } catch(e){
     err.textContent = 'Connection error: ' + e.message;
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    btn.innerHTML = '<i class="ti ti-login"><\/i> Sign in';
     console.error('[doLogin] signInWithPassword threw:', e);
     return;
   }
@@ -534,14 +534,14 @@ async function doLogin(){
     err.textContent = error.message.includes('Invalid login') || error.message.includes('invalid')
       ? 'Incorrect email or password.' : error.message;
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    btn.innerHTML = '<i class="ti ti-login"><\/i> Sign in';
     return;
   }
 
   if(!data?.user){
     err.textContent = 'Login did not return a user — please try again.';
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login"></i> Sign in';
+    btn.innerHTML = '<i class="ti ti-login"><\/i> Sign in';
     console.error('[doLogin] no user in response:', data);
     return;
   }
@@ -575,7 +575,7 @@ async function onSignedIn(user){
 
     // Hide login screen
     document.getElementById('login-screen').classList.add('hidden');
-    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"><\/i> Sign in'; }
 
     const isApproved = approval && approval.status === 'approved';
 
@@ -607,7 +607,7 @@ async function onSignedIn(user){
   } catch(e) {
     console.error('[onSignedIn] unexpected error:', e);
     if(err) err.textContent = 'Login error: ' + (e.message || 'unexpected error — check console');
-    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"><\/i> Sign in'; }
     // Show login screen again so user can retry
     document.getElementById('login-screen').classList.remove('hidden');
   }
@@ -655,18 +655,18 @@ async function loadTodaysJobs(){
 
   if(error){
     list.innerHTML = `<div class="empty-state">
-      <i class="ti ti-alert-circle empty-icon"></i>
-      <div class="empty-title">Could not load jobs</div>
-      <div class="empty-msg">${error.message}</div>
-    </div>`; return;
+      <i class="ti ti-alert-circle empty-icon"><\/i>
+      <div class="empty-title">Could not load jobs<\/div>
+      <div class="empty-msg">${error.message}<\/div>
+    <\/div>`; return;
   }
 
   if(!data || !data.length){
     list.innerHTML = `<div class="empty-state">
-      <i class="ti ti-calendar-off empty-icon"></i>
-      <div class="empty-title">No jobs today</div>
-      <div class="empty-msg">No timesheets found for today.<br>Create a timesheet in the Datascan app first.</div>
-    </div>`; return;
+      <i class="ti ti-calendar-off empty-icon"><\/i>
+      <div class="empty-title">No jobs today<\/div>
+      <div class="empty-msg">No timesheets found for today.<br>Create a timesheet in the Datascan app first.<\/div>
+    <\/div>`; return;
   }
 
   // Check which jobs already have an active travel log
@@ -684,18 +684,18 @@ async function loadTodaysJobs(){
     const isActive  = logStatus === 'active';
 
     const statusPillMap = {
-      draft:     '<span class="pill pill-draft">Draft</span>',
-      submitted: '<span class="pill pill-submitted">Pending Review</span>',
-      approved:  '<span class="pill pill-approved">Approved</span>',
-      rejected:  '<span class="pill pill-rejected">Rejected</span>',
+      draft:     '<span class="pill pill-draft">Draft<\/span>',
+      submitted: '<span class="pill pill-submitted">Pending Review<\/span>',
+      approved:  '<span class="pill pill-approved">Approved<\/span>',
+      rejected:  '<span class="pill pill-rejected">Rejected<\/span>',
     };
     const tsPill = statusPillMap[ts.status] || '';
 
     const logBadge = hasLog
       ? (isActive
-          ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"></i> Trip in progress</span>'
-          : '<span class="pill pill-draft">Log complete</span>')
-      : '<span style="font-size:12px;color:var(--text3)">No travel log yet</span>';
+          ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"><\/i> Trip in progress<\/span>'
+          : '<span class="pill pill-draft">Log complete<\/span>')
+      : '<span style="font-size:12px;color:var(--text3)">No travel log yet<\/span>';
 
     const city  = [ts.city, ts.state].filter(Boolean).join(', ');
     const date  = ts.job_date
@@ -706,21 +706,21 @@ async function loadTodaysJobs(){
     card.className = 'job-card';
     card.innerHTML = `
       <div class="job-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div class="job-client">${ts.client_name || 'Unknown Client'}</div>
+        <div class="job-client">${ts.client_name || 'Unknown Client'}<\/div>
         ${tsPill}
-      </div>
+      <\/div>
       <div class="job-meta">
-        ${ts.store_number ? `<div class="job-meta-item"><i class="ti ti-building-store"></i> Store ${ts.store_number}</div>` : ''}
-        ${city ? `<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${city}</div>` : ''}
-        ${date ? `<div class="job-meta-item"><i class="ti ti-calendar"></i> ${date}</div>` : ''}
-      </div>
-      <div class="job-divider"></div>
+        ${ts.store_number ? `<div class="job-meta-item"><i class="ti ti-building-store"><\/i> Store ${ts.store_number}<\/div>` : ''}
+        ${city ? `<div class="job-meta-item"><i class="ti ti-map-pin"><\/i> ${city}<\/div>` : ''}
+        ${date ? `<div class="job-meta-item"><i class="ti ti-calendar"><\/i> ${date}<\/div>` : ''}
+      <\/div>
+      <div class="job-divider"><\/div>
       <div class="job-footer">
         ${logBadge}
         <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--green);font-weight:600">
-          ${isActive ? 'Continue <i class="ti ti-chevron-right"></i>' : hasLog ? 'View <i class="ti ti-chevron-right"></i>' : 'Start trip <i class="ti ti-chevron-right"></i>'}
-        </div>
-      </div>`;
+          ${isActive ? 'Continue <i class="ti ti-chevron-right"><\/i>' : hasLog ? 'View <i class="ti ti-chevron-right"><\/i>' : 'Start trip <i class="ti ti-chevron-right"><\/i>'}
+        <\/div>
+      <\/div>`;
     card.onclick = () => selectJob(ts, logStatus);
     list.appendChild(card);
   });
@@ -755,14 +755,14 @@ function renderStepBar(activeStep){
   ];
   return `<div class="step-bar">
     ${steps.map((s,i)=>`
-      ${i>0?`<div class="step-connector ${activeStep>s.n?'done':''}"></div>`:''}
+      ${i>0?`<div class="step-connector ${activeStep>s.n?'done':''}"><\/div>`:''}
       <div class="step-item">
         <div class="step-dot ${activeStep>s.n?'done':activeStep===s.n?'active':'pending'}">
-          ${activeStep>s.n?'<i class="ti ti-check" style="font-size:13px"></i>':s.n}
-        </div>
-        <div class="step-label ${activeStep===s.n?'active':''}">${s.label}</div>
-      </div>`).join('')}
-  </div>`;
+          ${activeStep>s.n?'<i class="ti ti-check" style="font-size:13px"><\/i>':s.n}
+        <\/div>
+        <div class="step-label ${activeStep===s.n?'active':''}">${s.label}<\/div>
+      <\/div>`).join('')}
+  <\/div>`;
 }
 
 // ── STEP 3 — Vehicle selection ────────────────────────────────────────────────
@@ -829,28 +829,28 @@ function setStepBar(active){
   }
   const steps = [{n:1,label:'Job'},{n:2,label:'Vehicle'},{n:3,label:'Passengers'},{n:4,label:'Trip'}];
   el.innerHTML = `<div class="step-bar">${steps.map((s,i)=>`
-    ${i>0?`<div class="step-connector ${active>s.n?'done':''}"></div>`:''}
+    ${i>0?`<div class="step-connector ${active>s.n?'done':''}"><\/div>`:''}
     <div class="step-item">
       <div class="step-dot ${active>s.n?'done':active===s.n?'active':'pending'}">
-        ${active>s.n?'<i class="ti ti-check" style="font-size:13px"></i>':s.n}
-      </div>
-      <div class="step-label ${active===s.n?'active':''}">${s.label}</div>
-    </div>`).join('')}</div>`;
+        ${active>s.n?'<i class="ti ti-check" style="font-size:13px"><\/i>':s.n}
+      <\/div>
+      <div class="step-label ${active===s.n?'active':''}">${s.label}<\/div>
+    <\/div>`).join('')}<\/div>`;
 }
 
 // ── Job chip (reused across steps) ───────────────────────────────────────────
 function jobChip(backFn){
   return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;
     padding:.6rem .875rem;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border)">
-    <i class="ti ti-building-store" style="color:var(--text3);font-size:16px"></i>
+    <i class="ti ti-building-store" style="color:var(--text3);font-size:16px"><\/i>
     <div>
-      <div style="font-size:13px;font-weight:700;color:#fff">${_activeJob.client_name||'Job'}</div>
-      <div style="font-size:11px;color:var(--text2)">${[_activeJob.store_number?'Store '+_activeJob.store_number:'',_activeJob.city,_activeJob.state].filter(Boolean).join(' · ')}</div>
-    </div>
+      <div style="font-size:13px;font-weight:700;color:#fff">${_activeJob.client_name||'Job'}<\/div>
+      <div style="font-size:11px;color:var(--text2)">${[_activeJob.store_number?'Store '+_activeJob.store_number:'',_activeJob.city,_activeJob.state].filter(Boolean).join(' · ')}<\/div>
+    <\/div>
     <button class="btn btn-ghost btn-sm" style="margin-left:auto;width:auto;padding:5px 10px" onclick="${backFn}">
-      <i class="ti ti-arrow-left"></i> Back
-    </button>
-  </div>`;
+      <i class="ti ti-arrow-left"><\/i> Back
+    <\/button>
+  <\/div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -873,28 +873,28 @@ function showVehicleSelection(){
   _selectedState = defaultState;
 
   const stateOptions = US_STATES.map(s=>
-    `<option value="${s}" ${s===defaultState?'selected':''}>${s}</option>`
+    '<option value="'+s+'" '+(s===defaultState?'selected':'')+'>'+s+'<\/option>'
   ).join('');
 
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
       ${jobChip("showScreen('home')")}
 
-      <div class="screen-title" style="margin-bottom:4px">Select Vehicle</div>
+      <div class="screen-title" style="margin-bottom:4px">Select Vehicle<\/div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">
         Step 2 of 4 — Scan or enter plate number
-      </div>
+      <\/div>
 
       <!-- Scan simulation button -->
       <button class="btn btn-ghost" style="margin-bottom:1rem;border:1.5px dashed var(--border)"
         onclick="simulatePlateScan()">
-        <i class="ti ti-camera" style="font-size:18px"></i>
+        <i class="ti ti-camera" style="font-size:18px"><\/i>
         Scan plate / QR code
-      </button>
+      <\/button>
 
       <!-- Plate + State row -->
       <div class="field">
-        <label>Plate number <span style="color:#f87171">*</span></label>
+        <label>Plate number <span style="color:#f87171">*<\/span><\/label>
         <div style="display:flex;gap:8px">
           <input type="text" id="veh-plate-inp"
             placeholder="e.g. TEST01"
@@ -909,53 +909,53 @@ function showVehicleSelection(){
               font-family:inherit;outline:none;-webkit-appearance:none;text-align:center"
             onchange="onStateChange(this.value)">
             ${stateOptions}
-          </select>
+          <\/select>
           <button class="btn btn-primary" style="width:auto;padding:0 18px;font-size:18px"
             onclick="lookupVehicleFromUI()">
-            <i class="ti ti-search"></i>
-          </button>
-        </div>
-        <div class="field-hint">Plate + state must match a registered vehicle</div>
-      </div>
+            <i class="ti ti-search"><\/i>
+          <\/button>
+        <\/div>
+        <div class="field-hint">Plate + state must match a registered vehicle<\/div>
+      <\/div>
 
       <!-- Vehicle result -->
-      <div id="veh-result"></div>
+      <div id="veh-result"><\/div>
 
       <!-- Mileage (shown after valid lookup) -->
       <div id="veh-mileage-wrap" style="display:${savedPlate&&savedMiles?'':'none'}">
         <div class="field">
-          <label>Starting mileage <span style="color:#f87171">*</span></label>
+          <label>Starting mileage <span style="color:#f87171">*<\/span><\/label>
           <input type="number" id="veh-miles-inp"
             placeholder="Current odometer reading"
             inputmode="numeric" min="0"
             value="${savedMiles}"
             oninput="onMileageInput(this.value)"/>
-          <div class="field-hint">Enter the odometer reading before departure</div>
-        </div>
-      </div>
+          <div class="field-hint">Enter the odometer reading before departure<\/div>
+        <\/div>
+      <\/div>
 
       <!-- Error banner (shown on invalid plate) -->
       <div id="veh-error-banner" style="display:none;background:rgba(163,45,45,.15);
         border:1px solid rgba(163,45,45,.4);border-radius:var(--radius);
         padding:1rem;margin-bottom:1rem">
         <div style="display:flex;gap:10px;align-items:flex-start">
-          <i class="ti ti-circle-x" style="color:#f87171;font-size:20px;flex-shrink:0;margin-top:1px"></i>
+          <i class="ti ti-circle-x" style="color:#f87171;font-size:20px;flex-shrink:0;margin-top:1px"><\/i>
           <div>
-            <div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:3px">Vehicle Not Found</div>
-            <div id="veh-error-msg" style="font-size:12px;color:var(--text2);line-height:1.6"></div>
-          </div>
-        </div>
-      </div>
+            <div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:3px">Vehicle Not Found<\/div>
+            <div id="veh-error-msg" style="font-size:12px;color:var(--text2);line-height:1.6"><\/div>
+          <\/div>
+        <\/div>
+      <\/div>
 
       <!-- Continue -->
       <div style="margin-top:1.25rem">
         <button class="btn btn-success" id="veh-continue-btn"
           onclick="confirmVehicle()"
           ${savedPlate&&savedMiles?'':'disabled'}>
-          <i class="ti ti-users"></i> Continue to Passengers
-        </button>
-      </div>
-    </div>`;
+          <i class="ti ti-users"><\/i> Continue to Passengers
+        <\/button>
+      <\/div>
+    <\/div>`;
 
   // If returning with saved vehicle, re-render the result card
   if(hasSaved && _selectedVehicle){
@@ -1024,7 +1024,7 @@ async function lookupVehicle(plate, state){
 
   errorBanner.style.display  = 'none';
   resultEl.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:.5rem 0">
-    <i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Looking up ${plate} · ${state}...</div>`;
+    <i class="ti ti-loader-2" style="animation:spin .7s linear infinite"><\/i> Looking up ${plate} · ${state}...<\/div>`;
 
   // Query vehicles table — plate + state, active only
   const {data:veh, error} = await getSupabase()
@@ -1049,7 +1049,7 @@ async function lookupVehicle(plate, state){
     // Plate not found — show stopper
     resultEl.innerHTML = '';
     errorBanner.style.display = '';
-    errorMsg.innerHTML = `Plate <strong style="color:#fff">${plate} · ${state}</strong> was not found in the vehicle registry.<br><br>
+    errorMsg.innerHTML = `Plate <strong style="color:#fff">${plate} · ${state}<\/strong> was not found in the vehicle registry.<br><br>
       Check that the plate number and state are correct, or contact your manager to register this vehicle.`;
     plateInp.classList.add('error');
     plateInp.classList.remove('success');
@@ -1082,15 +1082,15 @@ function renderVehicleCard(veh){
   document.getElementById('veh-result').innerHTML = `
     <div class="veh-info-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-        <div class="veh-info-plate">${veh.plate} <span style="font-size:14px;font-weight:600;color:rgba(255,255,255,.5)">${veh.state||''}</span></div>
+        <div class="veh-info-plate">${veh.plate} <span style="font-size:14px;font-weight:600;color:rgba(255,255,255,.5)">${veh.state||''}<\/span><\/div>
         <span style="background:rgba(30,95,174,.3);color:#90b8f0;font-size:11px;font-weight:700;
           padding:3px 9px;border-radius:20px;text-transform:uppercase">
-          <i class="ti ti-bus"></i> ${typeLabels[veh.vehicle_type]||veh.vehicle_type}
-        </span>
-      </div>
-      <div class="veh-info-detail">${detail||'Vehicle'}</div>
-      <div class="veh-info-sub">${subs}</div>
-    </div>`;
+          <i class="ti ti-bus"><\/i> ${typeLabels[veh.vehicle_type]||veh.vehicle_type}
+        <\/span>
+      <\/div>
+      <div class="veh-info-detail">${detail||'Vehicle'}<\/div>
+      <div class="veh-info-sub">${subs}<\/div>
+    <\/div>`;
 }
 
 function onMileageInput(val){
@@ -1133,36 +1133,36 @@ async function showPassengerCheckIn(){
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;
         padding:.6rem .875rem;background:rgba(106,179,79,.08);border-radius:var(--radius-sm);
         border:1px solid rgba(106,179,79,.25)">
-        <i class="ti ti-bus" style="color:var(--green);font-size:16px"></i>
+        <i class="ti ti-bus" style="color:var(--green);font-size:16px"><\/i>
         <div>
-          <div style="font-size:13px;font-weight:700;color:#fff">${vehSummary}</div>
-          <div style="font-size:11px;color:var(--text2)">Start miles: ${_startingMileage?.toLocaleString()||'—'}</div>
-        </div>
+          <div style="font-size:13px;font-weight:700;color:#fff">${vehSummary}<\/div>
+          <div style="font-size:11px;color:var(--text2)">Start miles: ${_startingMileage?.toLocaleString()||'—'}<\/div>
+        <\/div>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto;width:auto;padding:5px 10px"
           onclick="showVehicleSelection()">
-          <i class="ti ti-pencil"></i>
-        </button>
-      </div>
+          <i class="ti ti-pencil"><\/i>
+        <\/button>
+      <\/div>
 
-      <div class="screen-title" style="margin-bottom:4px">Passenger Check-In</div>
+      <div class="screen-title" style="margin-bottom:4px">Passenger Check-In<\/div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">
         Step 3 of 4 — Select crew members boarding this vehicle
-      </div>
+      <\/div>
 
       <div id="pax-loading">
-        <div class="spinner"></div>
-      </div>
-      <div id="pax-list" style="display:none"></div>
+        <div class="spinner"><\/div>
+      <\/div>
+      <div id="pax-list" style="display:none"><\/div>
 
       <div style="margin-top:1.25rem">
         <button class="btn btn-success" id="pax-continue-btn"
           onclick="confirmPassengers()" disabled>
-          <i class="ti ti-flag"></i> Confirm & Start Trip
-        </button>
+          <i class="ti ti-flag"><\/i> Confirm & Start Trip
+        <\/button>
         <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:.5rem"
-          id="pax-count-hint">Select at least 1 passenger to continue</div>
-      </div>
-    </div>`;
+          id="pax-count-hint">Select at least 1 passenger to continue<\/div>
+      <\/div>
+    <\/div>`;
 
   await loadPassengers();
 }
@@ -1184,10 +1184,10 @@ async function loadPassengers(){
 
   if(error || !profiles?.length){
     listEl.innerHTML = `<div class="empty-state">
-      <i class="ti ti-users-off empty-icon"></i>
-      <div class="empty-title">No crew members found</div>
-      <div class="empty-msg">No other users in the system yet.<br>Add employees to proceed.</div>
-    </div>`;
+      <i class="ti ti-users-off empty-icon"><\/i>
+      <div class="empty-title">No crew members found<\/div>
+      <div class="empty-msg">No other users in the system yet.<br>Add employees to proceed.<\/div>
+    <\/div>`;
     return;
   }
 
@@ -1212,28 +1212,28 @@ function renderPassengerList(){
 
   listEl.innerHTML = `
     <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;
-      letter-spacing:.08em;margin-bottom:.75rem">Available crew</div>
+      letter-spacing:.08em;margin-bottom:.75rem">Available crew<\/div>
     ${_availablePassengers.map(p=>{
       const rc = roleColors[p.role] || roleColors.employee;
       const initials = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
       const boarded  = _boardedIds.has(p.id);
       return `<div class="pax-card ${boarded?'boarded':''}" id="pax-card-${p.id}"
         onclick="togglePassenger('${p.id}')">
-        <div class="pax-avatar" style="background:${rc.bg}">${initials}</div>
+        <div class="pax-avatar" style="background:${rc.bg}">${initials}<\/div>
         <div class="pax-info">
-          <div class="pax-name">${p.full_name}</div>
+          <div class="pax-name">${p.full_name}<\/div>
           <div style="font-size:11px;color:${rc.color};font-weight:600;text-transform:uppercase;
-            letter-spacing:.04em">${(p.role||'employee').replace('_',' ')}</div>
-        </div>
+            letter-spacing:.04em">${(p.role||'employee').replace('_',' ')}<\/div>
+        <\/div>
         <div class="pax-check" id="pax-check-${p.id}">
           <i class="ti ${boarded?'ti-circle-check':'ti-circle'}"
-            style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"></i>
-        </div>
-      </div>`;
+            style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"><\/i>
+        <\/div>
+      <\/div>`;
     }).join('')}
     <div style="font-size:12px;color:var(--text3);margin-top:.75rem;text-align:center">
       Tap to board / un-board crew members
-    </div>`;
+    <\/div>`;
 
   updatePaxCount();
 }
@@ -1251,7 +1251,7 @@ function togglePassenger(profileId){
   const boarded = _boardedIds.has(profileId);
   if(card)  card.classList.toggle('boarded', boarded);
   if(check) check.innerHTML = `<i class="ti ${boarded?'ti-circle-check':'ti-circle'}"
-    style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"></i>`;
+    style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"><\/i>`;
 
   updatePaxCount();
   saveTripState(); // persist boarding state
@@ -1280,7 +1280,7 @@ async function confirmPassengers(){
   // Create travel_log record in Supabase
   const btn = document.getElementById('pax-continue-btn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Starting trip...';
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"><\/i> Starting trip...';
 
   try{
     const logPayload = {
@@ -1329,7 +1329,7 @@ async function confirmPassengers(){
     console.error('[confirmPassengers]', e);
     showToast('Error starting trip: ' + e.message, 'error');
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-flag"></i> Confirm & Start Trip';
+    btn.innerHTML = '<i class="ti ti-flag"><\/i> Confirm & Start Trip';
   }
 }
 
@@ -1345,31 +1345,31 @@ function showTripActive(log){
     <div style="padding:1rem;padding-bottom:5rem">
       <div style="background:rgba(106,179,79,.12);border:1px solid rgba(106,179,79,.3);
         border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;text-align:center">
-        <i class="ti ti-steering-wheel" style="font-size:40px;color:var(--green);margin-bottom:.75rem;display:block"></i>
-        <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">Trip Started</div>
-        <div style="font-size:13px;color:var(--text2)">Departed ${started} · ${_passengers.length} passenger${_passengers.length!==1?'s':''} aboard</div>
-      </div>
+        <i class="ti ti-steering-wheel" style="font-size:40px;color:var(--green);margin-bottom:.75rem;display:block"><\/i>
+        <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">Trip Started<\/div>
+        <div style="font-size:13px;color:var(--text2)">Departed ${started} · ${_passengers.length} passenger${_passengers.length!==1?'s':''} aboard<\/div>
+      <\/div>
 
       <div class="card">
-        <div class="card-header"><div class="card-title">Trip Summary</div></div>
-        <div class="info-row"><div class="info-label">Vehicle</div>
-          <div class="info-value">${[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ')}</div></div>
-        <div class="info-row"><div class="info-label">Start miles</div>
-          <div class="info-value">${_startingMileage?.toLocaleString()}</div></div>
-        <div class="info-row"><div class="info-label">Job</div>
-          <div class="info-value">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div></div>
-        <div class="info-row"><div class="info-label">Passengers</div>
-          <div class="info-value">${_passengers.map(p=>p.full_name).join(', ')}</div></div>
-      </div>
+        <div class="card-header"><div class="card-title">Trip Summary<\/div><\/div>
+        <div class="info-row"><div class="info-label">Vehicle<\/div>
+          <div class="info-value">${[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ')}<\/div><\/div>
+        <div class="info-row"><div class="info-label">Start miles<\/div>
+          <div class="info-value">${_startingMileage?.toLocaleString()}<\/div><\/div>
+        <div class="info-row"><div class="info-label">Job<\/div>
+          <div class="info-value">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}<\/div><\/div>
+        <div class="info-row"><div class="info-label">Passengers<\/div>
+          <div class="info-value">${_passengers.map(p=>p.full_name).join(', ')}<\/div><\/div>
+      <\/div>
 
       <div class="trip-banner" style="margin-top:1rem">
-        <i class="ti ti-map-route"></i>
+        <i class="ti ti-map-route"><\/i>
         <div>
-          <div class="trip-banner-title">GPS tracking coming next</div>
-          <div class="trip-banner-sub">Waypoints, arrival submit, and return trip will be built step by step</div>
-        </div>
-      </div>
-    </div>`;
+          <div class="trip-banner-title">GPS tracking coming next<\/div>
+          <div class="trip-banner-sub">Waypoints, arrival submit, and return trip will be built step by step<\/div>
+        <\/div>
+      <\/div>
+    <\/div>`;
 }
 
 // ── Screen navigation ─────────────────────────────────────────────────────────
@@ -1411,7 +1411,7 @@ function showLoginScreen(){
   document.getElementById('login-password').value = '';
   document.getElementById('login-err').textContent = '';
   document.getElementById('login-btn').disabled = false;
-  document.getElementById('login-btn').innerHTML = '<i class="ti ti-login"></i> Sign in';
+  document.getElementById('login-btn').innerHTML = '<i class="ti ti-login"><\/i> Sign in';
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
