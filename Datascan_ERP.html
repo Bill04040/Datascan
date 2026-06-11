@@ -2831,7 +2831,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.29';
+const APP_VERSION = 'v1.0.30';
 const MAPS_API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 
 // ── Geocode an address using Google Maps API ──────────────────────────────────
@@ -6382,12 +6382,19 @@ async function saveTimesheet(statusVal, silent=false){
       } catch(geoErr){ console.warn('[geocode] failed:', geoErr.message); }
     }
 
-    // Safety guard: if silent auto-save fires but currentTimesheetId is null,
-    // it means we're between timesheets (mid-navigation). Don't INSERT a new record.
+    // Safety guard: only skip silent saves when there's genuinely no data entered.
+    // A silent autosave on a new timesheet (no currentTimesheetId) should still INSERT
+    // if the user has entered real job info — otherwise the first save is always lost.
     if(silent && !currentTimesheetId){
-      console.warn('[saveTimesheet] silent save skipped — no currentTimesheetId (mid-navigation)');
-      _savingInProgress = false;
-      return;
+      const _hasSup   = !!document.getElementById('ji-supervisor')?.value.trim();
+      const _hasJob   = !!document.getElementById('ji-customer')?.value.trim();
+      const _hasStore = !!document.getElementById('ji-store')?.value.trim();
+      if(!_hasSup && !_hasJob && !_hasStore){
+        console.warn('[saveTimesheet] silent save skipped — no real data yet');
+        _savingInProgress = false;
+        return;
+      }
+      console.log('[saveTimesheet] silent save with new timesheet — proceeding with INSERT');
     }
 
     let timesheetId;
