@@ -264,6 +264,53 @@ body{background:#0f1e30;color:#f0f4f8}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.success{border-color:var(--green);background:rgba(11,29,52,.95)}
 #toast.error{border-color:var(--red);background:rgba(11,29,52,.95)}
+/* ── Passenger card ────────────────────────────────────────────────────────── */
+.pax-card{display:flex;align-items:center;gap:12px;padding:.875rem;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:.625rem;cursor:pointer;transition:border-color .15s,background .15s;
+  -webkit-tap-highlight-color:transparent}
+.pax-card:active{background:var(--bg3)}
+.pax-card.boarded{border-color:var(--green);background:rgba(106,179,79,.08)}
+.pax-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.pax-info{flex:1;min-width:0}
+.pax-name{font-size:15px;font-weight:600;color:#fff;margin-bottom:2px}
+.pax-check{flex-shrink:0}
+
+/* ── Step indicator ────────────────────────────────────────────────────────── */
+.step-bar{display:flex;align-items:center;padding:.75rem 1rem;background:var(--bg2);border-bottom:1px solid var(--border)}
+.step-item{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
+.step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid var(--border)}
+.step-dot.done{background:var(--green);border-color:var(--green);color:#fff}
+.step-dot.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.step-dot.pending{background:transparent;border-color:var(--border);color:var(--text3)}
+.step-label{font-size:10px;color:var(--text3);font-weight:500;text-align:center}
+.step-label.active{color:var(--text1)}
+.step-connector{height:2px;flex:1;background:var(--border);margin-bottom:14px}
+.step-connector.done{background:var(--green)}
+/* ── Vehicle tabs ────────────────────────────────────────────────────────── */
+.veh-tabs{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem}
+.veh-tab{padding:.6rem .25rem;background:var(--bg2);border:none;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;border-right:1px solid var(--border);transition:background .15s}
+.veh-tab:last-child{border-right:none}
+.veh-tab i{font-size:18px}
+.veh-tab.active{background:var(--blue);color:#fff}
+/* ── Vehicle form ────────────────────────────────────────────────────────── */
+.field{margin-bottom:.875rem}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+.field input,.field select{width:100%;padding:13px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text1);font-size:16px;font-family:inherit;outline:none;-webkit-appearance:none}
+.field input:focus,.field select:focus{border-color:var(--blue)}
+.field input::placeholder{color:var(--text3)}
+.field input.success{border-color:var(--green)}
+.field input.error{border-color:#f87171}
+.field-hint{font-size:12px;color:var(--text3);margin-top:4px}
+/* ── Vehicle info card ───────────────────────────────────────────────────── */
+.veh-info-card{background:rgba(106,179,79,.08);border:1px solid rgba(106,179,79,.3);border-radius:var(--radius);padding:1rem;margin-bottom:1rem}
+.veh-info-plate{font-size:22px;font-weight:900;color:#fff;letter-spacing:.12em;margin-bottom:.5rem}
+.veh-info-detail{font-size:14px;color:var(--green);font-weight:600;margin-bottom:2px}
+.veh-info-sub{font-size:12px;color:var(--text2)}
+/* ── QR simulator ────────────────────────────────────────────────────────── */
+.qr-sim{background:var(--bg2);border:2px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;margin-bottom:1rem}
+.qr-sim-icon{font-size:48px;color:var(--text3);margin-bottom:.75rem}
 </style>
 </head>
 <body>
@@ -404,7 +451,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.4';
+const APP_VERSION  = 'v1.0.8';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -573,15 +620,36 @@ async function loadTodaysJobs(){
   loading.style.display = 'block';
   list.innerHTML = '';
 
-  // Today's date in YYYY-MM-DD
-  const today = new Date().toISOString().split('T')[0];
+  // Use local date not UTC to avoid timezone-related off-by-one issues
+  const now   = new Date();
+  const today = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0');
 
-  const {data, error} = await getSupabase()
+  console.log('[loadTodaysJobs] querying for date:', today, 'supervisor_id:', currentUser.id);
+
+  // Query by supervisor_id first
+  let {data, error} = await getSupabase()
     .from('timesheets')
-    .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name')
+    .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id')
     .eq('supervisor_id', currentUser.id)
     .eq('job_date', today)
     .order('created_at', {ascending: false});
+
+  console.log('[loadTodaysJobs] by supervisor_id — rows:', data?.length, 'error:', error?.message);
+
+  // Fallback: if no results, try matching by supervisor_name (in case timesheet was
+  // created by another user but assigned to this supervisor by name)
+  if((!data || !data.length) && !error && currentProfile?.full_name){
+    const fallback = await getSupabase()
+      .from('timesheets')
+      .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id')
+      .eq('job_date', today)
+      .ilike('supervisor_name', currentProfile.full_name.trim())
+      .order('created_at', {ascending: false});
+    console.log('[loadTodaysJobs] fallback by supervisor_name:', fallback.data?.length, 'error:', fallback.error?.message);
+    if(fallback.data?.length) data = fallback.data;
+  }
 
   loading.style.display = 'none';
 
@@ -673,31 +741,634 @@ function selectJob(ts, existingLogStatus){
   // Navigate to trip screen
   showScreen('trip');
 
-  // For now — show a placeholder until trip steps are built
+  // Show step 3 — vehicle selection
+  showVehicleSelection();
+}
+
+// ── Step bar renderer ─────────────────────────────────────────────────────────
+function renderStepBar(activeStep){
+  const steps = [
+    {n:1, label:'Job'},
+    {n:2, label:'Vehicle'},
+    {n:3, label:'Passengers'},
+    {n:4, label:'Trip'},
+  ];
+  return `<div class="step-bar">
+    ${steps.map((s,i)=>`
+      ${i>0?`<div class="step-connector ${activeStep>s.n?'done':''}"></div>`:''}
+      <div class="step-item">
+        <div class="step-dot ${activeStep>s.n?'done':activeStep===s.n?'active':'pending'}">
+          ${activeStep>s.n?'<i class="ti ti-check" style="font-size:13px"></i>':s.n}
+        </div>
+        <div class="step-label ${activeStep===s.n?'active':''}">${s.label}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── STEP 3 — Vehicle selection ────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
+let _selectedVehicle = null;
+let _startingMileage = null;
+let _selectedState   = null; // 2-letter state for plate lookup
+let _passengers      = []; // confirmed boarding list
+
+const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID',
+  'IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE',
+  'NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN',
+  'TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+
+// Get/set driver's last used state from localStorage
+function getDriverState(){
+  try{ return localStorage.getItem('tl_driver_state')||null; } catch(e){ return null; }
+}
+function setDriverState(st){
+  try{ localStorage.setItem('tl_driver_state', st); } catch(e){}
+}
+
+// ── Local storage helpers ─────────────────────────────────────────────────────
+function tripStateKey(){ return 'tl_trip_' + (_activeJob?.id||'none'); }
+
+function saveTripState(){
+  try{
+    localStorage.setItem(tripStateKey(), JSON.stringify({
+      vehicle:    _selectedVehicle,
+      miles:      _startingMileage,
+      state:      _selectedState,
+      passengers: _passengers,
+      ts: Date.now(),
+    }));
+  } catch(e){ console.warn('[saveTripState]', e); }
+}
+
+function loadTripState(){
+  try{
+    const raw = localStorage.getItem(tripStateKey());
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    // Expire after 24h
+    if(Date.now() - s.ts > 86400000){ localStorage.removeItem(tripStateKey()); return false; }
+    _selectedVehicle = s.vehicle || null;
+    _startingMileage = s.miles   || null;
+    _selectedState   = s.state   || null;
+    _passengers      = s.passengers || [];
+    return true;
+  } catch(e){ return false; }
+}
+
+function clearTripState(){
+  try{ localStorage.removeItem(tripStateKey()); } catch(e){}
+}
+
+// ── Step bar ──────────────────────────────────────────────────────────────────
+function setStepBar(active){
+  let el = document.getElementById('trip-step-bar');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'trip-step-bar';
+    document.getElementById('app-content').insertBefore(el, document.getElementById('app-content').firstChild);
+  }
+  const steps = [{n:1,label:'Job'},{n:2,label:'Vehicle'},{n:3,label:'Passengers'},{n:4,label:'Trip'}];
+  el.innerHTML = `<div class="step-bar">${steps.map((s,i)=>`
+    ${i>0?`<div class="step-connector ${active>s.n?'done':''}"></div>`:''}
+    <div class="step-item">
+      <div class="step-dot ${active>s.n?'done':active===s.n?'active':'pending'}">
+        ${active>s.n?'<i class="ti ti-check" style="font-size:13px"></i>':s.n}
+      </div>
+      <div class="step-label ${active===s.n?'active':''}">${s.label}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ── Job chip (reused across steps) ───────────────────────────────────────────
+function jobChip(backFn){
+  return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;
+    padding:.6rem .875rem;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+    <i class="ti ti-building-store" style="color:var(--text3);font-size:16px"></i>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#fff">${_activeJob.client_name||'Job'}</div>
+      <div style="font-size:11px;color:var(--text2)">${[_activeJob.store_number?'Store '+_activeJob.store_number:'',_activeJob.city,_activeJob.state].filter(Boolean).join(' · ')}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto;width:auto;padding:5px 10px" onclick="${backFn}">
+      <i class="ti ti-arrow-left"></i> Back
+    </button>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 2 — VEHICLE SELECTION
+// ══════════════════════════════════════════════════════════════════════════════
+function showVehicleSelection(){
+  setStepBar(2);
   const content = document.getElementById('trip-content');
+
+  // Restore saved state
+  const hasSaved = loadTripState();
+  const savedPlate = _selectedVehicle?.plate || '';
+  const savedMiles = _startingMileage || '';
+
+  // Determine default state: saved trip state > last driver state > job state
+  const defaultState = _selectedState
+    || getDriverState()
+    || (_activeJob?.state||'').toUpperCase().slice(0,2)
+    || 'AL';
+  _selectedState = defaultState;
+
+  const stateOptions = US_STATES.map(s=>
+    `<option value="${s}" ${s===defaultState?'selected':''}>${s}</option>`
+  ).join('');
+
   content.innerHTML = `
-    <div class="trip-banner">
-      <i class="ti ti-map-route"></i>
-      <div>
-        <div class="trip-banner-title">Trip setup coming next</div>
-        <div class="trip-banner-sub">Vehicle selection, passenger check-in and GPS tracking will be built step by step</div>
+    <div style="padding:1rem;padding-bottom:5rem">
+      ${jobChip("showScreen('home')")}
+
+      <div class="screen-title" style="margin-bottom:4px">Select Vehicle</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">
+        Step 2 of 4 — Scan or enter plate number
       </div>
-    </div>
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${ts.client_name || 'Job'}</div>
-        <span class="pill pill-driver"><i class="ti ti-steering-wheel"></i> Approved Driver</span>
+
+      <!-- Scan simulation button -->
+      <button class="btn btn-ghost" style="margin-bottom:1rem;border:1.5px dashed var(--border)"
+        onclick="simulatePlateScan()">
+        <i class="ti ti-camera" style="font-size:18px"></i>
+        Scan plate / QR code
+      </button>
+
+      <!-- Plate + State row -->
+      <div class="field">
+        <label>Plate number <span style="color:#f87171">*</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="veh-plate-inp"
+            placeholder="e.g. TEST01"
+            autocapitalize="characters" autocorrect="off" spellcheck="false"
+            style="flex:1;text-transform:uppercase;font-size:18px;font-weight:700;letter-spacing:.08em"
+            value="${savedPlate}"
+            oninput="this.value=this.value.toUpperCase();clearVehicleResult()"
+            onblur="lookupVehicleFromUI()"/>
+          <select id="veh-state-sel"
+            style="width:72px;padding:13px 8px;background:var(--bg2);border:1px solid var(--border);
+              border-radius:var(--radius-sm);color:var(--text1);font-size:15px;font-weight:700;
+              font-family:inherit;outline:none;-webkit-appearance:none;text-align:center"
+            onchange="onStateChange(this.value)">
+            ${stateOptions}
+          </select>
+          <button class="btn btn-primary" style="width:auto;padding:0 18px;font-size:18px"
+            onclick="lookupVehicleFromUI()">
+            <i class="ti ti-search"></i>
+          </button>
+        </div>
+        <div class="field-hint">Plate + state must match a registered vehicle</div>
       </div>
-      <div>
-        <div class="info-row"><div class="info-label">Store</div><div class="info-value">${ts.store_number || '—'}</div></div>
-        <div class="info-row"><div class="info-label">Location</div><div class="info-value">${[ts.city,ts.state].filter(Boolean).join(', ')||'—'}</div></div>
-        <div class="info-row"><div class="info-label">Date</div><div class="info-value">${ts.job_date||'—'}</div></div>
-        <div class="info-row"><div class="info-label">TS Status</div><div class="info-value">${ts.status||'—'}</div></div>
-        <div class="info-row"><div class="info-label">Driver</div><div class="info-value">${currentProfile?.full_name||'—'}</div></div>
+
+      <!-- Vehicle result -->
+      <div id="veh-result"></div>
+
+      <!-- Mileage (shown after valid lookup) -->
+      <div id="veh-mileage-wrap" style="display:${savedPlate&&savedMiles?'':'none'}">
+        <div class="field">
+          <label>Starting mileage <span style="color:#f87171">*</span></label>
+          <input type="number" id="veh-miles-inp"
+            placeholder="Current odometer reading"
+            inputmode="numeric" min="0"
+            value="${savedMiles}"
+            oninput="onMileageInput(this.value)"/>
+          <div class="field-hint">Enter the odometer reading before departure</div>
+        </div>
       </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-ghost btn-sm" onclick="showScreen('home')"><i class="ti ti-arrow-left"></i> Back</button>
+
+      <!-- Error banner (shown on invalid plate) -->
+      <div id="veh-error-banner" style="display:none;background:rgba(163,45,45,.15);
+        border:1px solid rgba(163,45,45,.4);border-radius:var(--radius);
+        padding:1rem;margin-bottom:1rem">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <i class="ti ti-circle-x" style="color:#f87171;font-size:20px;flex-shrink:0;margin-top:1px"></i>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:3px">Vehicle Not Found</div>
+            <div id="veh-error-msg" style="font-size:12px;color:var(--text2);line-height:1.6"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Continue -->
+      <div style="margin-top:1.25rem">
+        <button class="btn btn-success" id="veh-continue-btn"
+          onclick="confirmVehicle()"
+          ${savedPlate&&savedMiles?'':'disabled'}>
+          <i class="ti ti-users"></i> Continue to Passengers
+        </button>
+      </div>
+    </div>`;
+
+  // If returning with saved vehicle, re-render the result card
+  if(hasSaved && _selectedVehicle){
+    renderVehicleCard(_selectedVehicle);
+    if(_startingMileage) checkContinueReady();
+  }
+}
+
+// ── Simulate plate scan (pre-fills TEST01 for testing) ───────────────────────
+// Read plate and state from UI and call lookupVehicle
+function lookupVehicleFromUI(){
+  const plate = (document.getElementById('veh-plate-inp')?.value||'').trim().toUpperCase();
+  const state = document.getElementById('veh-state-sel')?.value || _selectedState;
+  if(plate) lookupVehicle(plate, state);
+}
+
+function onStateChange(state){
+  _selectedState = state;
+  setDriverState(state); // persist as last used state
+  clearVehicleResult();
+  const plate = (document.getElementById('veh-plate-inp')?.value||'').trim().toUpperCase();
+  if(plate) lookupVehicle(plate, state);
+}
+
+function simulatePlateScan(){
+  const inp = document.getElementById('veh-plate-inp');
+  if(!inp) return;
+  inp.value = 'TEST01';
+  // Set state to AL to match test vehicle
+  const stateSel = document.getElementById('veh-state-sel');
+  if(stateSel){ stateSel.value = 'AL'; _selectedState = 'AL'; setDriverState('AL'); }
+  showToast('📷 Plate scanned: TEST01 · AL','success');
+  lookupVehicle('TEST01','AL');
+}
+
+function clearVehicleResult(){
+  document.getElementById('veh-result').innerHTML = '';
+  document.getElementById('veh-error-banner').style.display = 'none';
+  document.getElementById('veh-mileage-wrap').style.display = 'none';
+  document.getElementById('veh-continue-btn').disabled = true;
+  _selectedVehicle = null;
+  _startingMileage = null;
+}
+
+// ── Vehicle lookup — plate determines type ────────────────────────────────────
+async function lookupVehicle(plate, state){
+  plate = (plate||'').trim().toUpperCase();
+  state = (state || _selectedState || getDriverState() || '').toUpperCase().slice(0,2);
+  const resultEl     = document.getElementById('veh-result');
+  const errorBanner  = document.getElementById('veh-error-banner');
+  const errorMsg     = document.getElementById('veh-error-msg');
+  const mileageWrap  = document.getElementById('veh-mileage-wrap');
+  const continueBtn  = document.getElementById('veh-continue-btn');
+  const plateInp     = document.getElementById('veh-plate-inp');
+
+  if(!plate){
+    clearVehicleResult(); return;
+  }
+  if(!state){
+    errorBanner.style.display='';
+    errorMsg.textContent='Please select a state before looking up the plate.';
+    return;
+  }
+
+  _selectedState = state;
+
+  errorBanner.style.display  = 'none';
+  resultEl.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:.5rem 0">
+    <i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Looking up ${plate} · ${state}...</div>`;
+
+  // Query vehicles table — plate + state, active only
+  const {data:veh, error} = await getSupabase()
+    .from('vehicles')
+    .select('*')
+    .eq('plate', plate)
+    .eq('state', state)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if(error){
+    resultEl.innerHTML = '';
+    errorBanner.style.display = '';
+    errorMsg.textContent = 'Database error: ' + error.message;
+    plateInp.classList.add('error');
+    _selectedVehicle = null;
+    continueBtn.disabled = true;
+    return;
+  }
+
+  if(!veh){
+    // Plate not found — show stopper
+    resultEl.innerHTML = '';
+    errorBanner.style.display = '';
+    errorMsg.innerHTML = `Plate <strong style="color:#fff">${plate} · ${state}</strong> was not found in the vehicle registry.<br><br>
+      Check that the plate number and state are correct, or contact your manager to register this vehicle.`;
+    plateInp.classList.add('error');
+    plateInp.classList.remove('success');
+    mileageWrap.style.display = 'none';
+    continueBtn.disabled = true;
+    _selectedVehicle = null;
+    return;
+  }
+
+  // Found
+  _selectedVehicle = veh;
+  plateInp.classList.remove('error');
+  plateInp.classList.add('success');
+  errorBanner.style.display = 'none';
+  renderVehicleCard(veh);
+  mileageWrap.style.display = '';
+
+  // Restore mileage if saved
+  if(_startingMileage){
+    const milesInp = document.getElementById('veh-miles-inp');
+    if(milesInp) milesInp.value = _startingMileage;
+    checkContinueReady();
+  }
+}
+
+function renderVehicleCard(veh){
+  const typeLabels = {fleet:'Fleet vehicle',rental:'Rental vehicle',personal:'Personal vehicle'};
+  const detail = [veh.year, veh.make, veh.model].filter(Boolean).join(' ');
+  const subs   = [veh.color, veh.capacity ? veh.capacity+' passengers' : null].filter(Boolean).join(' · ');
+  document.getElementById('veh-result').innerHTML = `
+    <div class="veh-info-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <div class="veh-info-plate">${veh.plate} <span style="font-size:14px;font-weight:600;color:rgba(255,255,255,.5)">${veh.state||''}</span></div>
+        <span style="background:rgba(30,95,174,.3);color:#90b8f0;font-size:11px;font-weight:700;
+          padding:3px 9px;border-radius:20px;text-transform:uppercase">
+          <i class="ti ti-bus"></i> ${typeLabels[veh.vehicle_type]||veh.vehicle_type}
+        </span>
+      </div>
+      <div class="veh-info-detail">${detail||'Vehicle'}</div>
+      <div class="veh-info-sub">${subs}</div>
+    </div>`;
+}
+
+function onMileageInput(val){
+  _startingMileage = parseInt(val)||null;
+  checkContinueReady();
+}
+
+function checkContinueReady(){
+  const btn = document.getElementById('veh-continue-btn');
+  if(btn) btn.disabled = !(_selectedVehicle && _startingMileage && _startingMileage > 0);
+}
+
+function confirmVehicle(){
+  if(!_selectedVehicle){ showToast('Please look up a vehicle first','error'); return; }
+  if(!_startingMileage || _startingMileage <= 0){ showToast('Please enter starting mileage','error'); return; }
+  saveTripState();
+  showPassengerCheckIn();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 3 — PASSENGER CHECK-IN
+// ══════════════════════════════════════════════════════════════════════════════
+let _availablePassengers = []; // pool from profiles
+let _boardedIds = new Set();   // profile ids checked as boarded
+
+async function showPassengerCheckIn(){
+  setStepBar(3);
+  const content = document.getElementById('trip-content');
+
+  // Vehicle summary chip
+  const vehSummary = _selectedVehicle
+    ? [_selectedVehicle.plate, _selectedVehicle.year, _selectedVehicle.make, _selectedVehicle.model].filter(Boolean).join(' · ')
+    : 'No vehicle';
+
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      ${jobChip("showVehicleSelection()")}
+
+      <!-- Vehicle chip -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;
+        padding:.6rem .875rem;background:rgba(106,179,79,.08);border-radius:var(--radius-sm);
+        border:1px solid rgba(106,179,79,.25)">
+        <i class="ti ti-bus" style="color:var(--green);font-size:16px"></i>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#fff">${vehSummary}</div>
+          <div style="font-size:11px;color:var(--text2)">Start miles: ${_startingMileage?.toLocaleString()||'—'}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;width:auto;padding:5px 10px"
+          onclick="showVehicleSelection()">
+          <i class="ti ti-pencil"></i>
+        </button>
+      </div>
+
+      <div class="screen-title" style="margin-bottom:4px">Passenger Check-In</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">
+        Step 3 of 4 — Select crew members boarding this vehicle
+      </div>
+
+      <div id="pax-loading">
+        <div class="spinner"></div>
+      </div>
+      <div id="pax-list" style="display:none"></div>
+
+      <div style="margin-top:1.25rem">
+        <button class="btn btn-success" id="pax-continue-btn"
+          onclick="confirmPassengers()" disabled>
+          <i class="ti ti-flag"></i> Confirm & Start Trip
+        </button>
+        <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:.5rem"
+          id="pax-count-hint">Select at least 1 passenger to continue</div>
+      </div>
+    </div>`;
+
+  await loadPassengers();
+}
+
+async function loadPassengers(){
+  const loadingEl = document.getElementById('pax-loading');
+  const listEl    = document.getElementById('pax-list');
+
+  // Fetch 3 random profiles excluding the driver
+  const {data:profiles, error} = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, role, email')
+    .neq('id', currentUser.id)
+    .not('full_name', 'is', null)
+    .limit(20); // fetch more, then pick 3 random
+
+  loadingEl.style.display = 'none';
+  listEl.style.display = '';
+
+  if(error || !profiles?.length){
+    listEl.innerHTML = `<div class="empty-state">
+      <i class="ti ti-users-off empty-icon"></i>
+      <div class="empty-title">No crew members found</div>
+      <div class="empty-msg">No other users in the system yet.<br>Add employees to proceed.</div>
+    </div>`;
+    return;
+  }
+
+  // Pick 3 random from the pool
+  const shuffled = profiles.sort(()=>Math.random()-.5).slice(0,3);
+  _availablePassengers = shuffled;
+
+  // Restore any previously boarded passengers
+  _boardedIds = new Set((_passengers||[]).map(p=>p.profile_id));
+
+  renderPassengerList();
+}
+
+function renderPassengerList(){
+  const listEl = document.getElementById('pax-list');
+  const roleColors = {
+    supervisor:       {bg:'rgba(30,95,174,.2)',  color:'#90b8f0'},
+    assistant:        {bg:'rgba(106,179,79,.15)',color:'#a0d890'},
+    employee:         {bg:'rgba(255,255,255,.1)',color:'rgba(255,255,255,.6)'},
+    district_manager: {bg:'rgba(244,169,58,.15)',color:'#FAC775'},
+  };
+
+  listEl.innerHTML = `
+    <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;
+      letter-spacing:.08em;margin-bottom:.75rem">Available crew</div>
+    ${_availablePassengers.map(p=>{
+      const rc = roleColors[p.role] || roleColors.employee;
+      const initials = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const boarded  = _boardedIds.has(p.id);
+      return `<div class="pax-card ${boarded?'boarded':''}" id="pax-card-${p.id}"
+        onclick="togglePassenger('${p.id}')">
+        <div class="pax-avatar" style="background:${rc.bg}">${initials}</div>
+        <div class="pax-info">
+          <div class="pax-name">${p.full_name}</div>
+          <div style="font-size:11px;color:${rc.color};font-weight:600;text-transform:uppercase;
+            letter-spacing:.04em">${(p.role||'employee').replace('_',' ')}</div>
+        </div>
+        <div class="pax-check" id="pax-check-${p.id}">
+          <i class="ti ${boarded?'ti-circle-check':'ti-circle'}"
+            style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"></i>
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:12px;color:var(--text3);margin-top:.75rem;text-align:center">
+      Tap to board / un-board crew members
+    </div>`;
+
+  updatePaxCount();
+}
+
+function togglePassenger(profileId){
+  if(_boardedIds.has(profileId)){
+    _boardedIds.delete(profileId);
+  } else {
+    _boardedIds.add(profileId);
+  }
+
+  // Update card style
+  const card  = document.getElementById('pax-card-'+profileId);
+  const check = document.getElementById('pax-check-'+profileId);
+  const boarded = _boardedIds.has(profileId);
+  if(card)  card.classList.toggle('boarded', boarded);
+  if(check) check.innerHTML = `<i class="ti ${boarded?'ti-circle-check':'ti-circle'}"
+    style="font-size:24px;color:${boarded?'var(--green)':'var(--border)'}"></i>`;
+
+  updatePaxCount();
+  saveTripState(); // persist boarding state
+}
+
+function updatePaxCount(){
+  const count   = _boardedIds.size;
+  const btn     = document.getElementById('pax-continue-btn');
+  const hint    = document.getElementById('pax-count-hint');
+  if(btn)  btn.disabled = count === 0;
+  if(hint) hint.textContent = count > 0
+    ? `${count} passenger${count>1?'s':''} boarding this vehicle`
+    : 'Select at least 1 passenger to continue';
+}
+
+async function confirmPassengers(){
+  if(_boardedIds.size === 0){ showToast('Select at least one passenger','error'); return; }
+
+  // Build passengers list from boarded IDs
+  _passengers = _availablePassengers
+    .filter(p => _boardedIds.has(p.id))
+    .map(p => ({ profile_id: p.id, full_name: p.full_name, role: p.role }));
+
+  saveTripState();
+
+  // Create travel_log record in Supabase
+  const btn = document.getElementById('pax-continue-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Starting trip...';
+
+  try{
+    const logPayload = {
+      timesheet_id:    _activeJob.id,
+      driver_id:       currentUser.id,
+      driver_name:     currentProfile?.full_name || '',
+      vehicle_id:      _selectedVehicle.id || null,
+      vehicle_plate:   _selectedVehicle.plate,
+      vehicle_type:    _selectedVehicle.vehicle_type || 'fleet',
+      vehicle_year:    _selectedVehicle.year   || null,
+      vehicle_make:    _selectedVehicle.make   || null,
+      vehicle_model:   _selectedVehicle.model  || null,
+      vehicle_color:   _selectedVehicle.color  || null,
+      vehicle_capacity:_selectedVehicle.capacity || null,
+      miles_start:     _startingMileage,
+      status:          'active',
+      started_at:      new Date().toISOString(),
+    };
+
+    const {data:log, error:logErr} = await getSupabase()
+      .from('travel_logs')
+      .insert(logPayload)
+      .select()
+      .single();
+
+    if(logErr) throw logErr;
+
+    // Insert passengers
+    const paxPayload = _passengers.map(p=>({
+      travel_log_id: log.id,
+      profile_id:    p.profile_id,
+      full_name:     p.full_name,
+      role:          p.role,
+      boarded_at:    new Date().toISOString(),
+      waypoint:      'meet_spot',
+    }));
+    const {error:paxErr} = await getSupabase()
+      .from('travel_passengers').insert(paxPayload);
+    if(paxErr) console.warn('[passengers] insert error:', paxErr.message);
+
+    _activeTrip = log;
+    clearTripState(); // clean up localStorage now that it's in Supabase
+    showTripActive(log);
+
+  } catch(e){
+    console.error('[confirmPassengers]', e);
+    showToast('Error starting trip: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-flag"></i> Confirm & Start Trip';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 4 — ACTIVE TRIP (placeholder for next build)
+// ══════════════════════════════════════════════════════════════════════════════
+function showTripActive(log){
+  setStepBar(4);
+  const content = document.getElementById('trip-content');
+  const started = new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      <div style="background:rgba(106,179,79,.12);border:1px solid rgba(106,179,79,.3);
+        border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;text-align:center">
+        <i class="ti ti-steering-wheel" style="font-size:40px;color:var(--green);margin-bottom:.75rem;display:block"></i>
+        <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">Trip Started</div>
+        <div style="font-size:13px;color:var(--text2)">Departed ${started} · ${_passengers.length} passenger${_passengers.length!==1?'s':''} aboard</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Trip Summary</div></div>
+        <div class="info-row"><div class="info-label">Vehicle</div>
+          <div class="info-value">${[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ')}</div></div>
+        <div class="info-row"><div class="info-label">Start miles</div>
+          <div class="info-value">${_startingMileage?.toLocaleString()}</div></div>
+        <div class="info-row"><div class="info-label">Job</div>
+          <div class="info-value">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div></div>
+        <div class="info-row"><div class="info-label">Passengers</div>
+          <div class="info-value">${_passengers.map(p=>p.full_name).join(', ')}</div></div>
+      </div>
+
+      <div class="trip-banner" style="margin-top:1rem">
+        <i class="ti ti-map-route"></i>
+        <div>
+          <div class="trip-banner-title">GPS tracking coming next</div>
+          <div class="trip-banner-sub">Waypoints, arrival submit, and return trip will be built step by step</div>
+        </div>
+      </div>
     </div>`;
 }
 
