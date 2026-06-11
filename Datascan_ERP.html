@@ -571,8 +571,19 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .edit-mode-bar{background:#185fa5;color:#fff;padding:.6rem 1rem;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;position:sticky;top:48px;z-index:9}
 .edit-mode-bar i{font-size:16px}
 .edit-cell{position:relative}
-.edit-time-input{font-size:11px;padding:3px 5px;border:1.5px solid #185fa5;border-radius:4px;background:#fff;color:#1a1a1a;font-family:monospace;width:80px;text-align:center}
-.edit-time-input.changed{border-color:#854f0b;background:#fffbeb}
+.edit-time-input{font-size:12px;padding:3px 6px;border:1.5px solid #185fa5;border-radius:4px;background:var(--bg1,#fff);color:var(--text1,#1a1a1a);font-family:monospace;width:58px;text-align:center}
+.edit-time-input.changed{border-color:#854f0b;background:#fffbeb;color:#412402}
+.edit-time-input.invalid{border-color:#a32d2d;background:#fcebeb;color:#501313}
+.edit-date-input{font-size:11px;padding:2px 5px;border:1px solid var(--border2,#ccc);border-radius:4px;background:var(--bg1,#fff);color:var(--text1,#1a1a1a);font-family:monospace;width:90px;text-align:center;margin-top:2px;cursor:pointer}
+.edit-date-input.changed{border-color:#854f0b;background:#fffbeb}
+.ampm-toggle{display:inline-flex;border:1px solid var(--border2,#ccc);border-radius:4px;overflow:hidden;margin-top:2px}
+.ampm-btn{padding:2px 7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:var(--bg2,#f5f5f5);color:var(--text2,#666);font-family:inherit;transition:background .1s}
+.ampm-btn.active{background:#0B1D34;color:#fff}
+.ampm-btn.active.changed{background:#854f0b;color:#fff}
+.edit-cell-wrap{display:flex;flex-direction:column;align-items:center;gap:1px;padding:2px 0}
+.edit-original{font-size:10px;color:var(--text3,#999);text-decoration:line-through;margin-top:2px}
+.edit-changed-badge{font-size:9px;color:#854f0b;font-weight:700;margin-top:1px}
+.edit-err-badge{font-size:9px;color:#a32d2d;font-weight:700;margin-top:1px}
 .edit-cancel-btn{background:rgba(255,255,255,0.2);border:none;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit}
 .edit-save-btn{background:#6abf3a;border:none;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto}
 
@@ -1024,6 +1035,32 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   <div class="field-row">
     <div class="field-group"><label>City <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-city" placeholder="City" oninput="checkSubmitReady()"/></div>
     <div class="field-group"><label>State <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-state" placeholder="AL" maxlength="2" style="text-transform:uppercase" oninput="checkSubmitReady()"/></div>
+  </div>
+  <!-- Address + dev coords — visible to test users only -->
+  <div id="ji-address-row" style="display:none">
+    <div class="field-group" style="margin-top:.5rem">
+      <label>Street address <span style="font-size:11px;color:var(--text3);font-weight:400">(improves GPS accuracy)</span></label>
+      <input type="text" id="ji-address" placeholder="e.g. 1234 Main St" oninput="onFormChange()"/>
+    </div>
+  </div>
+  <div id="ji-coords-row" style="display:none;margin-top:.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
+      <div class="field-group">
+        <label style="color:var(--amber)">Lat <span style="font-size:10px">(dev)</span></label>
+        <input type="number" id="ji-dest-lat" step="any" placeholder="auto" oninput="onFormChange()"
+          style="border-color:rgba(244,169,58,.4);background:rgba(244,169,58,.05)"/>
+      </div>
+      <div class="field-group">
+        <label style="color:var(--amber)">Lon <span style="font-size:10px">(dev)</span></label>
+        <input type="number" id="ji-dest-lng" step="any" placeholder="auto" oninput="onFormChange()"
+          style="border-color:rgba(244,169,58,.4);background:rgba(244,169,58,.05)"/>
+      </div>
+      <div class="field-group">
+        <label style="color:var(--amber)">Geocoded address <span style="font-size:10px">(dev)</span></label>
+        <input type="text" id="ji-dest-addr" placeholder="populated on save" readonly
+          style="border-color:rgba(244,169,58,.4);background:rgba(244,169,58,.05);font-size:11px;color:var(--text2)"/>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2190,6 +2227,7 @@ function collectFormState(){
     store:       document.getElementById('ji-store')?.value||'',
     city:        document.getElementById('ji-city')?.value||'',
     state:       document.getElementById('ji-state')?.value||'',
+    address:     document.getElementById('ji-address')?.value||'',
     employees:   [],
     scans:       scans.map(s=>({scanId:s.scanId,name:s.name,dataUrl:s.dataUrl,isPdf:s.isPdf}))
   };
@@ -2772,7 +2810,26 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.23';
+const APP_VERSION = 'v1.0.28';
+const MAPS_API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+
+// ── Geocode an address using Google Maps API ──────────────────────────────────
+async function geocodeAddress(address){
+  try{
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${MAPS_API_KEY}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if(data.status === 'OK' && data.results.length > 0){
+      const loc = data.results[0].geometry.location;
+      return { lat: loc.lat, lng: loc.lng, formatted: data.results[0].formatted_address };
+    }
+    console.warn('[geocode] no results for:', address, data.status);
+    return null;
+  } catch(e){
+    console.error('[geocode] error:', e.message);
+    return null;
+  }
+}
 
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
@@ -2848,6 +2905,15 @@ async function onSignedIn(user){
   document.getElementById('user-bar').style.display  = 'flex';
   updateGearVisibility();
   initSidebar(); // wraps DOM into sidebar shell — must run before role routing
+
+  // Show address + dev coord fields for test users only
+  const _testEmails = ['nford@datascan.com','supervisor@datascan.com'];
+  const _userEmail  = currentProfile?.email || currentUser?.email || '';
+  const _isTestUser = _testEmails.some(e => _userEmail.toLowerCase() === e.toLowerCase());
+  const addrRow   = document.getElementById('ji-address-row');
+  const coordsRow = document.getElementById('ji-coords-row');
+  if(addrRow)   addrRow.style.display   = _isTestUser ? '' : 'none';
+  if(coordsRow) coordsRow.style.display = _isTestUser ? '' : 'none';
   document.getElementById('nav-tabs').style.display  = 'block';
 
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
@@ -4292,6 +4358,14 @@ async function loadDraftTimesheet(tsId){
   s('ji-store',      ts.store_number    || '');
   s('ji-city',       ts.city            || '');
   s('ji-state',      ts.state           || '');
+  // Restore dev fields (address + coords) if present on record
+  s('ji-address',   ''); // clear — not stored on ts, user re-enters if needed
+  const _latEl2  = document.getElementById('ji-dest-lat');
+  const _lngEl2  = document.getElementById('ji-dest-lng');
+  const _addrEl2 = document.getElementById('ji-dest-addr');
+  if(_latEl2)  _latEl2.value  = ts.dest_lat     || '';
+  if(_lngEl2)  _lngEl2.value  = ts.dest_lng     || '';
+  if(_addrEl2) _addrEl2.value = ts.dest_address || '';
   const custEl = document.getElementById('ji-customer');
   if(custEl){ custEl.value = ts.client_name||''; custEl.dataset.clientCode = ts.client_code||''; }
 
@@ -4492,13 +4566,14 @@ function fmt12WithDate(t){
   let dateStr="", timeStr=t;
   if(t.includes("T")){ const parts=t.split("T"); dateStr=parts[0]; timeStr=parts[1]; }
   const[h,m]=timeStr.split(":").map(Number);
-  const ampm=h<12?"a":"p";
+  const ampm=h<12?"AM":"PM";
   const hr=h%12===0?12:h%12;
-  const time=hr+":"+String(m).padStart(2,"0")+ampm;
+  const time=hr+":"+String(m).padStart(2,"0")+" "+ampm;
   if(!dateStr) return time;
   const d=new Date(dateStr+"T00:00:00");
-  const dateLbl=(d.getMonth()+1)+"/"+(d.getDate());
-  return `<span style="display:flex;flex-direction:column;align-items:center;line-height:1.2"><span>${time}</span><span style="font-size:10px;color:var(--text2);font-weight:600">${dateLbl}</span></span>`;
+  const yy=String(d.getFullYear()).slice(2);
+  const dateLbl=(d.getMonth()+1)+"/"+(d.getDate())+"/"+yy;
+  return `<span style="display:flex;flex-direction:column;align-items:center;line-height:1.3"><span style="font-size:13px;font-weight:600">${time}</span><span style="font-size:10px;color:var(--text2);font-weight:500">${dateLbl}</span></span>`;
 }
 // Calc hours between two HH:MM strings
 function calcHrs(inT,outT){
@@ -4996,6 +5071,13 @@ async function loadWizUsers(search=''){
     : _allUsers;
 
   const {data:roles} = await getSupabase().from('role_definitions').select('role_key,role_label').order('sort_order');
+  _lastUserSearch = search;
+
+  // Load all driver approvals in one query for the status column
+  const {data:driverRows} = await getSupabase()
+    .from('driver_approvals').select('user_id, status, vehicle_classes');
+  const driverMap = {};
+  (driverRows||[]).forEach(d=>{ driverMap[d.user_id] = d; });
 
   body.innerHTML = `
     <div class="wizard-toolbar">
@@ -5007,16 +5089,25 @@ async function loadWizUsers(search=''){
     </div>
     <table class="user-table">
       <thead><tr>
-        <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th style="width:120px">Actions</th>
+        <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Driver</th><th style="width:120px">Actions</th>
       </tr></thead>
       <tbody>
         ${filtered.map(u=>{
           const roleLabel = roles?.find(r=>r.role_key===u.role)?.role_label || u.role || '—';
+          const drv = driverMap[u.id];
+          const driverCell = drv
+            ? drv.status==='approved'
+              ? '<span style="color:var(--success-text,#6abf3a);font-size:12px;font-weight:600"><i class="ti ti-circle-check"></i> Approved</span>'
+              : drv.status==='suspended'
+              ? '<span style="color:var(--warn-text,#b07a00);font-size:12px;font-weight:600"><i class="ti ti-pause-circle"></i> Suspended</span>'
+              : '<span style="color:var(--danger-text);font-size:12px;font-weight:600"><i class="ti ti-circle-x"></i> Revoked</span>'
+            : '<span style="font-size:12px;color:var(--text3)">—</span>';
           return `<tr class="${u.is_active===false?'inactive':''}">
             <td style="font-weight:600">${u.full_name||'—'}</td>
             <td style="color:var(--text2)">${u.email}</td>
             <td><span class="role-badge">${roleLabel}</span></td>
             <td><span class="status-dot ${u.is_active===false?'inactive':'active'}"></span>${u.is_active===false?'Inactive':'Active'}</td>
+            <td>${driverCell}</td>
             <td>
               <div style="display:flex;gap:4px">
                 <button class="wiz-btn secondary" style="padding:4px 8px;font-size:11px" title="Edit user" onclick="openEditUserModal('${u.id}')">
@@ -5184,6 +5275,7 @@ async function openEditUserModal(userId){
   const {data:roles}  = await getSupabase().from('role_definitions').select('role_key,role_label').eq('is_active',true).order('sort_order');
   const {data:groups} = await getSupabase().from('user_groups').select('group_key,group_label').order('sort_order');
   const {data:profile}= await getSupabase().from('profiles').select('*').eq('id',userId).single();
+  const {data:drvApproval} = await getSupabase().from('driver_approvals').select('*').eq('user_id',userId).maybeSingle();
   const roleOpts  = (roles||[]).map(r=>`<option value="${r.role_key}" ${profile.role===r.role_key?'selected':''}>${r.role_label}</option>`).join('');
   const groupOpts = '<option value="">— none —</option>'+(groups||[]).map(g=>`<option value="${g.group_key}" ${profile.id_group===g.group_key?'selected':''}>${g.group_label}</option>`).join('');
   openWizModal('Edit user', `
@@ -5225,6 +5317,41 @@ async function openEditUserModal(userId){
         }).join('')}
       </div>
       <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-alert-triangle" style="color:var(--warn-text)"></i> Highlighted = overridden from role default</p>
+    </div>
+    <div style="margin-top:1rem;border-top:0.5px solid var(--border2);padding-top:1rem" id="eu-driver-section">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+        <span style="background:#1E5FAE;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.06em"><i class="ti ti-steering-wheel"></i> DRIVER</span>
+        <span style="font-size:13px;font-weight:700;color:var(--text)">Travel Log — Driver Approval</span>
+      </div>
+      <div id="eu-driver-status-display" style="margin-bottom:.75rem"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:.75rem">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="eu-drv-fleet"   style="accent-color:#6abf3a"/> Fleet vehicles
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="eu-drv-rental"  style="accent-color:#6abf3a"/> Rental vehicles
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="eu-drv-personal" style="accent-color:#6abf3a"/> Personal vehicles
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="wiz-btn success" onclick="setDriverStatus('${profile.id}','approved')"
+          style="font-size:12px;padding:5px 12px">
+          <i class="ti ti-circle-check"></i> Approve driver
+        </button>
+        <button type="button" class="wiz-btn" onclick="setDriverStatus('${profile.id}','suspended')"
+          style="font-size:12px;padding:5px 12px;background:var(--warn-bg);color:var(--warn-text);border-color:var(--warn-text)">
+          <i class="ti ti-pause-circle"></i> Suspend
+        </button>
+        <button type="button" class="wiz-btn danger" onclick="setDriverStatus('${profile.id}','revoked')"
+          style="font-size:12px;padding:5px 12px">
+          <i class="ti ti-circle-x"></i> Revoke
+        </button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:.5rem">
+        <i class="ti ti-info-circle"></i> Approved drivers can access the Datascan Travel Log app. Suspended/revoked drivers see a blocked screen on login.
+      </p>
     </div>
     <div style="margin-top:1rem;border-top:0.5px solid var(--border2);padding-top:1rem">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
@@ -5302,6 +5429,34 @@ async function openEditUserModal(userId){
       <button class="wiz-btn primary" onclick="saveEditUser('${userId}')"><i class="ti ti-device-floppy"></i> Save changes</button>
     </div>`);
   await renderOrgTreePicker('eu-org-tree','eu-org-id','eu-org-type','eu-org-selected', profile);
+
+  // Populate driver approval section
+  const drvStatusEl = document.getElementById('eu-driver-status-display');
+  if(drvStatusEl){
+    if(drvApproval){
+      const sColors = {approved:'var(--success-text,#6abf3a)',suspended:'var(--warn-text,#b07a00)',revoked:'var(--danger-text)'};
+      const sIcons  = {approved:'ti-circle-check',suspended:'ti-pause-circle',revoked:'ti-circle-x'};
+      const col = sColors[drvApproval.status]||'var(--text2)';
+      const ico = sIcons[drvApproval.status]||'ti-question-mark';
+      const approvedAt = drvApproval.approved_at
+        ? new Date(drvApproval.approved_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+        : '';
+      drvStatusEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
+        <i class="ti ${ico}" style="color:${col};font-size:16px"></i>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:${col}">${drvApproval.status.charAt(0).toUpperCase()+drvApproval.status.slice(1)}</div>
+          ${approvedAt?`<div style="font-size:11px;color:var(--text3)">Since ${approvedAt}</div>`:''}
+        </div>
+      </div>`;
+      const classes = drvApproval.vehicle_classes||[];
+      const fe=document.getElementById('eu-drv-fleet'), re=document.getElementById('eu-drv-rental'), pe=document.getElementById('eu-drv-personal');
+      if(fe) fe.checked=classes.includes('fleet');
+      if(re) re.checked=classes.includes('rental');
+      if(pe) pe.checked=classes.includes('personal');
+    } else {
+      drvStatusEl.innerHTML='<div style="font-size:13px;color:var(--text3);padding:6px 0"><i class="ti ti-steering-wheel-off"></i> Not approved as a driver — use the buttons below to approve.</div>';
+    }
+  }
 }
 
 async function saveEditUser(userId){
@@ -5408,6 +5563,61 @@ async function resetPassword(userId){
   closeWizModal();
   alert('✓ Password reset successfully. Share the new password with the user securely.');
 }
+// ── Driver approval management ────────────────────────────────────────────────
+async function setDriverStatus(userId, newStatus){
+  const classes = [];
+  if(document.getElementById('eu-drv-fleet')?.checked)    classes.push('fleet');
+  if(document.getElementById('eu-drv-rental')?.checked)   classes.push('rental');
+  if(document.getElementById('eu-drv-personal')?.checked) classes.push('personal');
+
+  const now = new Date().toISOString();
+  const payload = {
+    user_id:          userId,
+    status:           newStatus,
+    vehicle_classes:  classes,
+    approved_by:      currentUser.id,
+    approved_at:      newStatus === 'approved' ? now : undefined,
+    revoked_by:       ['suspended','revoked'].includes(newStatus) ? currentUser.id : undefined,
+    revoked_at:       ['suspended','revoked'].includes(newStatus) ? now : undefined,
+  };
+
+  // Remove undefined keys
+  Object.keys(payload).forEach(k => payload[k]===undefined && delete payload[k]);
+
+  const {error} = await getSupabase()
+    .from('driver_approvals')
+    .upsert(payload, {onConflict: 'user_id'});
+
+  if(error){
+    alert('Error updating driver status: ' + error.message);
+    return;
+  }
+
+  const statusLabels = { approved:'Approved', suspended:'Suspended', revoked:'Revoked' };
+  const user = _allUsers.find(u=>u.id===userId);
+  const name = user?.full_name || 'User';
+
+  // Refresh the status display in the modal
+  const drvStatusEl = document.getElementById('eu-driver-status-display');
+  if(drvStatusEl){
+    const statusColors = { approved:'var(--success-text,#6abf3a)', suspended:'var(--warn-text,#b07a00)', revoked:'var(--danger-text)' };
+    const statusIcons  = { approved:'ti-circle-check', suspended:'ti-pause-circle', revoked:'ti-circle-x' };
+    const col = statusColors[newStatus];
+    const ico = statusIcons[newStatus];
+    drvStatusEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
+      <i class="ti ${ico}" style="color:${col};font-size:16px"></i>
+      <div style="font-size:13px;font-weight:700;color:${col}">${statusLabels[newStatus]}</div>
+      <div style="font-size:11px;color:var(--text3);margin-left:4px">Updated just now</div>
+    </div>`;
+  }
+
+  // Refresh the user table in background
+  loadWizUsers(_lastUserSearch||'');
+  alert(`✓ ${name} — driver status set to ${statusLabels[newStatus]}.`);
+}
+
+let _lastUserSearch = '';
+
 async function toggleUserActive(userId, currentlyActive){
   const {error} = await getSupabase().from('profiles').update({is_active:!currentlyActive}).eq('id',userId);
   if(error){ alert('Error: '+error.message); return; }
@@ -6068,19 +6278,62 @@ async function saveTimesheet(statusVal, silent=false){
     const sigData   = sigCanvas ? sigCanvas.toDataURL('image/png') : null;
 
     // Build timesheet record
+    const _city   = document.getElementById('ji-city').value.trim();
+    const _state  = document.getElementById('ji-state').value.trim().toUpperCase();
+    const _store  = document.getElementById('ji-store').value.trim();
+    const _client = document.getElementById('ji-customer').value.trim();
+
     const tsRecord = {
       supervisor_id:      currentUser.id,
       supervisor_name:    document.getElementById('ji-supervisor').value.trim(),
       job_date:           document.getElementById('job-date').value || null,
       client_code:        document.getElementById('ji-customer').dataset?.clientCode || null,
-      client_name:        document.getElementById('ji-customer').value.trim(),
-      store_number:       document.getElementById('ji-store').value.trim(),
-      city:               document.getElementById('ji-city').value.trim(),
-      state:              document.getElementById('ji-state').value.trim().toUpperCase(),
+      client_name:        _client,
+      store_number:       _store,
+      city:               _city,
+      state:              _state,
       status:             statusVal,
       supervisor_sig:     sigData,
       supervisor_signed_at: statusVal === 'submitted' ? new Date().toISOString() : null,
     };
+
+    // Use manually entered coords if provided (dev/test users)
+    const _manualLat = parseFloat(document.getElementById('ji-dest-lat')?.value||'');
+    const _manualLng = parseFloat(document.getElementById('ji-dest-lng')?.value||'');
+    if(!isNaN(_manualLat) && !isNaN(_manualLng)){
+      tsRecord.dest_lat = _manualLat;
+      tsRecord.dest_lng = _manualLng;
+      console.log('[geocode] using manual coords:', _manualLat, _manualLng);
+    }
+
+    // Geocode job address on first INSERT if no manual coords set
+    if(_city && _state && !currentTimesheetId && !tsRecord.dest_lat){
+      try{
+        const streetAddr = document.getElementById('ji-address')?.value.trim()||'';
+        const addrStr = streetAddr
+          ? [streetAddr, _city, _state].filter(Boolean).join(', ')
+          : [_client, _store?'Store '+_store:'', _city, _state].filter(Boolean).join(', ');
+        const geoUrl  = 'https://maps.googleapis.com/maps/api/geocode/json?address='+encodeURIComponent(addrStr)+'&key='+MAPS_KEY;
+        const geoResp = await fetch(geoUrl);
+        const geoData = await geoResp.json();
+        if(geoData.status === 'OK' && geoData.results[0]){
+          const loc = geoData.results[0].geometry.location;
+          tsRecord.dest_lat     = loc.lat;
+          tsRecord.dest_lng     = loc.lng;
+          tsRecord.dest_address = geoData.results[0].formatted_address;
+          console.log('[geocode] ✓', loc.lat, loc.lng, geoData.results[0].formatted_address);
+          // Populate dev coord fields if visible
+          const latEl  = document.getElementById('ji-dest-lat');
+          const lngEl  = document.getElementById('ji-dest-lng');
+          const addrEl = document.getElementById('ji-dest-addr');
+          if(latEl  && !latEl.value)  latEl.value  = loc.lat;
+          if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng;
+          if(addrEl) addrEl.value = geoData.results[0].formatted_address;
+        } else {
+          console.warn('[geocode] no results:', geoData.status, 'for:', addrStr);
+        }
+      } catch(geoErr){ console.warn('[geocode] failed:', geoErr.message); }
+    }
 
     // Safety guard: if silent auto-save fires but currentTimesheetId is null,
     // it means we're between timesheets (mid-navigation). Don't INSERT a new record.
@@ -6507,6 +6760,7 @@ async function openDetailScreen(ts, isManager=false){
     const isPref=e.preferred===true||e.preferred==='true';
     const tc=b=>b&&b.time_in?fmt12WithDate(b.time_in):'<span class="tsv-flag-empty">—</span>';
     const tc2=b=>b&&b.time_out?fmt12WithDate(b.time_out):'<span class="tsv-flag-empty">—</span>';
+    const storedVal=(b,f)=>b?(f==='in'?(b.time_in||''):(b.time_out||'')):'';
     const modBadge=b=>b&&b.modified_at?'<span class="tsv-modified-badge">MOD</span>':'';
     const empty='<span class="tsv-flag-empty">—</span>';
     // Build rows — first row gets rowspan cells for name/role/hrs/flags/notes
@@ -6524,17 +6778,17 @@ async function openDetailScreen(ts, isManager=false){
       rows.push(`<tr class="${!isFirst?'tsv-continuation-row':''}">
         ${isFirst?`<td class="col-role" rowspan="${rowCount}"><span class="tsv-role-pill ${rolePillCls}">${roleLbl}</span></td>`:''}
         ${isFirst?`<td class="col-name" rowspan="${rowCount}">${fullName}${travelOnlyBadge}</td>`:''}
-        <td class="col-time group-start ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(countBlock)}${modBadge(countBlock)}${contLabel}</td>
-        <td class="col-time ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(countBlock)}${modBadge(countBlock)}</td>
-        <td class="col-time group-start" data-block-id="${brk?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(brk)}</td>
-        <td class="col-time" data-block-id="${brk?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(brk)}</td>
-        <td class="col-time group-start" data-block-id="${vari?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(vari)}</td>
-        <td class="col-time" data-block-id="${vari?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(vari)}</td>
-        <td class="col-time group-start" data-block-id="${trv?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(trv)}</td>
-        <td class="col-time" data-block-id="${trv?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(trv)}</td>
-        <td class="col-time group-start" data-block-id="${setup?.id||''}" data-field="in" data-emp-id="${e.id}">${tc(setup)}</td>
-        <td class="col-time" data-block-id="${setup?.id||''}" data-field="out" data-emp-id="${e.id}">${tc2(setup)}</td>
-        ${isFirst?`<td class="col-hrs group-start" rowspan="${rowCount}">${hrsDisplay}</td>`:''}
+        <td class="col-time group-start ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(countBlock,'in')}">${tc(countBlock)}${modBadge(countBlock)}${contLabel}</td>
+        <td class="col-time ${countBlock&&countBlock.modified_at?'tsv-modified':''}" data-block-id="${countBlock?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(countBlock,'out')}">${tc2(countBlock)}${modBadge(countBlock)}</td>
+        <td class="col-time group-start" data-block-id="${brk?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(brk,'in')}">${tc(brk)}</td>
+        <td class="col-time" data-block-id="${brk?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(brk,'out')}">${tc2(brk)}</td>
+        <td class="col-time group-start" data-block-id="${vari?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(vari,'in')}">${tc(vari)}</td>
+        <td class="col-time" data-block-id="${vari?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(vari,'out')}">${tc2(vari)}</td>
+        <td class="col-time group-start" data-block-id="${trv?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(trv,'in')}">${tc(trv)}</td>
+        <td class="col-time" data-block-id="${trv?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(trv,'out')}">${tc2(trv)}</td>
+        <td class="col-time group-start" data-block-id="${setup?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(setup,'in')}">${tc(setup)}</td>
+        <td class="col-time" data-block-id="${setup?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(setup,'out')}">${tc2(setup)}</td>
+        ${isFirst?`<td class="col-hrs group-start" data-hrs-emp="${e.id}" rowspan="${rowCount}">${hrsDisplay}</td>`:''}
         ${isFirst?`<td class="col-flag group-start" rowspan="${rowCount}">${isDnr?'<span class="tsv-flag-dnr">DNR</span>':empty}</td>`:''}
         ${isFirst?`<td class="col-flag" rowspan="${rowCount}">${isPref?'<span class="tsv-flag-pref">PREF</span>':empty}</td>`:''}
         ${isFirst?`<td class="tsv-notes-cell" rowspan="${rowCount}">${e.notes&&e.notes.trim()?e.notes.trim():'—'}</td>`:''}
@@ -7020,125 +7274,368 @@ document.getElementById('mgr-modal-overlay')?.addEventListener('click',e=>{
 // ════════════════════════════════════════════════════════════
 let _editChanges = {}; // {blockId: {field, oldVal, newVal, employeeId}}
 
+// ── Edit mode state ───────────────────────────────────────────────────────────
+// _editChanges: keyed by blockId_field, stores {blockId,field,empId,oldVal,newVal,oldFullISO,newFullISO}
+
+// Parse a time string entered by the manager: accepts 455 → 04:55, 1200 → 12:00, etc.
+// Returns {h, m, valid} in 24-hour values given ampm ('AM'|'PM')
+function parseEditTime(raw, ampm){
+  const s = raw.replace(/\D/g,''); // digits only
+  if(!s) return {valid:false};
+  let h, m;
+  if(s.length <= 2){
+    // Just hours — invalid (need at least HMM)
+    return {valid:false, err:'Enter hours and minutes e.g. 455'};
+  } else if(s.length === 3){
+    // HMM
+    h = parseInt(s[0]);
+    m = parseInt(s.slice(1));
+  } else {
+    // HHMM
+    h = parseInt(s.slice(0,2));
+    m = parseInt(s.slice(2,4));
+  }
+  if(m < 0 || m > 59) return {valid:false, err:'Minutes must be 00–59'};
+  if(h < 1 || h > 12) return {valid:false, err:'Hours must be 1–12'};
+  // Convert to 24h
+  let h24 = h;
+  if(ampm==='AM' && h===12) h24 = 0;
+  else if(ampm==='PM' && h!==12) h24 = h + 12;
+  return {valid:true, h24, m};
+}
+
+// Build a full ISO datetime string from a date string (YYYY-MM-DD) + 24h time {h24,m}
+function buildISO(dateStr, h24, m){
+  return `${dateStr}T${String(h24).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`;
+}
+
+// Parse stored ISO or HH:MM value back into display parts
+function parseStoredVal(val){
+  if(!val) return {timeStr:'', dateStr:'', h:0, m:0, ampm:'AM', displayTime:'', displayDate:''};
+  const isoStr = val.includes('T') ? val : ('2000-01-01T' + val);
+  const dt = new Date(isoStr);
+  const h24 = dt.getHours(), m = dt.getMinutes();
+  const ampm = h24 < 12 ? 'AM' : 'PM';
+  const hr12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const displayTime = hr12 + ':' + String(m).padStart(2,'0');
+  const dateStr = val.includes('T') ? val.split('T')[0] : '';
+  const yy = dateStr ? String(new Date(dateStr+'T00:00:00').getFullYear()).slice(2) : '';
+  const d = dateStr ? new Date(dateStr+'T00:00:00') : null;
+  const displayDate = d ? `${d.getMonth()+1}/${d.getDate()}/${yy}` : '';
+  return {h24, m, ampm, hr12, displayTime, dateStr, displayDate};
+}
+
 function enterEditMode(){
   const ts = _currentDetailTs; if(!ts) return;
   _editChanges = {};
 
-  // Add edit mode bar
+  // Edit mode bar
   const detailBody = document.getElementById('detail-body');
-  const existingBar = document.getElementById('edit-mode-bar');
-  if(!existingBar){
+  if(!document.getElementById('edit-mode-bar')){
     const bar = document.createElement('div');
     bar.className = 'edit-mode-bar';
     bar.id = 'edit-mode-bar';
-    bar.innerHTML = `
-      <i class="ti ti-pencil"></i> Edit mode — tap any time cell to change it
+    bar.style.cssText='background:#412402;color:#FAC775;padding:.6rem 1rem;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:48px;z-index:9;border-bottom:1px solid #633806';
+    bar.innerHTML = `<i class="ti ti-pencil" style="font-size:16px"></i>
+      Edit mode — enter time as digits (e.g. 455 = 4:55), select AM/PM, pick date if needed.
       <button class="edit-cancel-btn" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
       <button class="edit-save-btn" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save changes</button>`;
     detailBody.insertBefore(bar, detailBody.firstChild);
   }
 
-  // Replace time cells in tbody with editable inputs
+  // Replace each time cell with the new edit widget
   document.querySelectorAll('.tsv-grid tbody tr').forEach(row=>{
-    const cells = row.querySelectorAll('td.col-time');
-    cells.forEach(cell=>{
-      const text = cell.textContent.trim().replace('MOD','').trim();
+    row.querySelectorAll('td.col-time').forEach(cell=>{
       const blockId = cell.dataset.blockId;
       const field   = cell.dataset.field;
       const empId   = cell.dataset.empId;
-      if(!blockId||!field) return;
+      if(!blockId || !field) return;
 
-      // Convert 12h display back to 24h for input
-      const val24 = display12to24(text);
-      const inp = document.createElement('input');
-      inp.type='time';
-      inp.className='edit-time-input';
-      inp.value=val24||'';
-      inp.dataset.original=val24||'';
-      inp.dataset.blockId=blockId;
-      inp.dataset.field=field;
-      inp.dataset.empId=empId;
-      inp.onchange=function(){
-        const changed=this.value!==this.dataset.original;
-        this.classList.toggle('changed',changed);
-        if(changed){
-          _editChanges[blockId+'_'+field]={
-            blockId,field,empId,
-            oldVal:this.dataset.original,
-            newVal:this.value
-          };
-        } else {
-          delete _editChanges[blockId+'_'+field];
-        }
-      };
-      cell.innerHTML='';
-      cell.appendChild(inp);
+      // Read current stored value from data attribute
+      const stored = cell.dataset.storedVal || '';
+      const p = parseStoredVal(stored);
+
+      const key = blockId + '_' + field;
+      const wrap = document.createElement('div');
+      wrap.className = 'edit-cell-wrap';
+      wrap.id = 'ecw-' + key;
+
+      wrap.innerHTML = `
+        <div style="display:flex;align-items:center;gap:3px">
+          <input  id="eti-${key}"
+                  class="edit-time-input"
+                  type="text" maxlength="4"
+                  value="${p.displayTime}"
+                  placeholder="HMM"
+                  data-block-id="${blockId}"
+                  data-field="${field}"
+                  data-emp-id="${empId}"
+                  data-orig-iso="${stored}"
+                  data-date="${p.dateStr}"
+                  data-ampm="${p.ampm}"
+                  style="width:56px"
+                  onblur="onEditTimeBlur(this)"
+                  oninput="onEditTimeInput(this)" />
+          <div class="ampm-toggle" id="ampm-${key}">
+            <button class="ampm-btn ${p.ampm==='AM'?'active':''}" onclick="setAmpm('${key}','AM')">AM</button>
+            <button class="ampm-btn ${p.ampm==='PM'?'active':''}" onclick="setAmpm('${key}','PM')">PM</button>
+          </div>
+        </div>
+        ${p.dateStr ? `<input id="dte-${key}"
+                class="edit-date-input"
+                type="date"
+                value="${p.dateStr}"
+                data-key="${key}"
+                onchange="onEditDateChange(this)" />` : ''}
+        <div id="ebadge-${key}" class="edit-changed-badge" style="display:none"><i class="ti ti-edit"></i> changed</div>
+        <div id="eerr-${key}" class="edit-err-badge" style="display:none"></div>
+        ${stored ? `<div id="eorig-${key}" class="edit-original" style="display:none">${p.displayTime} ${p.ampm}${p.dateStr?' · '+p.displayDate:''}</div>` : ''}
+      `;
+
+      cell.innerHTML = '';
+      cell.appendChild(wrap);
     });
   });
 
-  // Update action bar
-  const topbarBtnsEdit = document.getElementById('topbar-mgr-btns');
-  if(topbarBtnsEdit){
-    topbarBtnsEdit.style.display='flex';
-    topbarBtnsEdit.innerHTML=`
-      <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
-      <button class="topbar-mgr-btn" style="background:rgba(255,255,255,0.15);color:#fff" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
+  // Topbar buttons
+  const btns = document.getElementById('topbar-mgr-btns');
+  if(btns){
+    btns.style.display='flex';
+    btns.innerHTML=`
+      <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
+      <button class="topbar-mgr-btn" style="background:rgba(255,255,255,.15);color:#fff" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
       <button class="topbar-mgr-btn edit" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save</button>`;
   }
 }
 
-function display12to24(str){
-  if(!str||str==='—'||str==='-') return '';
-  // Format: "6:00a" or "6:00p"
-  const m=str.match(/^(\d+):(\d+)([ap])$/i);
-  if(!m) return '';
-  let h=parseInt(m[1]),min=m[2],ampm=m[3].toLowerCase();
-  if(ampm==='a'&&h===12)h=0;
-  else if(ampm==='p'&&h!==12)h+=12;
-  return String(h).padStart(2,'0')+':'+min;
+// Auto-format as user types: 455 → shows 4:55 on blur
+function onEditTimeInput(inp){
+  const raw = inp.value.replace(/\D/g,'').slice(0,4);
+  inp.value = raw; // keep digits only while typing
+  inp.classList.remove('invalid');
+  document.getElementById('eerr-'+inp.dataset.blockId+'_'+inp.dataset.field)?.style && 
+    (document.getElementById('eerr-'+inp.dataset.blockId+'_'+inp.dataset.field).style.display='none');
+}
+
+function onEditTimeBlur(inp){
+  const key = inp.dataset.blockId + '_' + inp.dataset.field;
+  const raw = inp.value.replace(/\D/g,'');
+  if(!raw){ inp.value = ''; return; }
+
+  const ampm = inp.dataset.ampm || 'AM';
+  const parsed = parseEditTime(raw, ampm);
+  const errEl = document.getElementById('eerr-'+key);
+
+  if(!parsed.valid){
+    inp.classList.add('invalid');
+    if(errEl){ errEl.textContent = parsed.err || 'Invalid time'; errEl.style.display='block'; }
+    return;
+  }
+
+  inp.classList.remove('invalid');
+  if(errEl) errEl.style.display='none';
+
+  // Format display
+  const hr12 = parsed.h24 % 12 === 0 ? 12 : parsed.h24 % 12;
+  inp.value = hr12 + ':' + String(parsed.m).padStart(2,'0');
+
+  // Build new ISO and record change
+  const dateStr = inp.dataset.date || '';
+  markEditChange(key, inp, parsed.h24, parsed.m, dateStr);
+}
+
+function setAmpm(key, ampm){
+  const toggle = document.getElementById('ampm-'+key);
+  if(!toggle) return;
+  toggle.querySelectorAll('.ampm-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent===ampm);
+  });
+  const inp = document.getElementById('eti-'+key);
+  if(!inp) return;
+  inp.dataset.ampm = ampm;
+
+  // Re-parse current time value with new AM/PM
+  const raw = inp.value.replace(/:/g,'').replace(/\D/g,'');
+  if(!raw) return;
+  const parsed = parseEditTime(raw, ampm);
+  if(!parsed.valid) return;
+  const dateStr = inp.dataset.date || '';
+  markEditChange(key, inp, parsed.h24, parsed.m, dateStr);
+  // Highlight AM/PM button if changed
+  const origAmpm = parseStoredVal(inp.dataset.origIso).ampm;
+  toggle.querySelectorAll('.ampm-btn').forEach(b=>{
+    b.classList.toggle('changed', b.classList.contains('active') && ampm !== origAmpm);
+  });
+}
+
+function onEditDateChange(dateInp){
+  const key = dateInp.dataset.key;
+  const inp = document.getElementById('eti-'+key);
+  if(!inp) return;
+  const newDate = dateInp.value; // YYYY-MM-DD
+  inp.dataset.date = newDate;
+  dateInp.classList.add('changed');
+
+  // Validate date range — no future dates, no more than 3 days before job date
+  const tsDate = _currentDetailTs?.job_date || _currentDetailTs?.created_at?.split('T')[0];
+  if(tsDate){
+    const jobD = new Date(tsDate+'T00:00:00');
+    const selD = new Date(newDate+'T00:00:00');
+    const diffDays = (selD - jobD) / 86400000;
+    const errEl = document.getElementById('eerr-'+key);
+    if(selD > new Date()){
+      if(errEl){ errEl.textContent='No future dates allowed'; errEl.style.display='block'; }
+      dateInp.classList.add('invalid'); return;
+    }
+    if(diffDays < -3){
+      if(errEl){ errEl.textContent='Max 3 days before job date'; errEl.style.display='block'; }
+      dateInp.classList.add('invalid'); return;
+    }
+    const errEl2 = document.getElementById('eerr-'+key);
+    if(errEl2) errEl2.style.display='none';
+    dateInp.classList.remove('invalid');
+  }
+
+  // Re-build ISO with new date
+  const ampm = inp.dataset.ampm || 'AM';
+  const raw = inp.value.replace(/:/g,'').replace(/\D/g,'');
+  if(!raw) return;
+  const parsed = parseEditTime(raw, ampm);
+  if(!parsed.valid) return;
+  markEditChange(key, inp, parsed.h24, parsed.m, newDate);
+}
+
+function markEditChange(key, inp, h24, m, dateStr){
+  const blockId = inp.dataset.blockId;
+  const field   = inp.dataset.field;
+  const empId   = inp.dataset.empId;
+  const origIso = inp.dataset.origIso || '';
+
+  const newISO = dateStr ? buildISO(dateStr, h24, m) : String(h24).padStart(2,'0')+':'+String(m).padStart(2,'0');
+  const changed = newISO !== origIso;
+
+  // Update badge / original display
+  const badge  = document.getElementById('ebadge-'+key);
+  const origEl = document.getElementById('eorig-'+key);
+  if(badge)  badge.style.display  = changed ? 'block' : 'none';
+  if(origEl) origEl.style.display = changed ? 'block' : 'none';
+
+  // Highlight the time input
+  inp.classList.toggle('changed', changed);
+
+  if(changed){
+    _editChanges[key] = { blockId, field, empId, oldVal: origIso, newVal: newISO };
+  } else {
+    delete _editChanges[key];
+  }
+
+  // Live hours recalc — refresh the row's hrs badge
+  recalcEditRowHrs(blockId, empId);
+}
+
+function recalcEditRowHrs(blockId, empId){
+  // Collect all current values for this employee's blocks
+  let totalMins = 0;
+  document.querySelectorAll('.tsv-grid tbody td.col-time').forEach(cell=>{
+    if(cell.dataset.empId !== String(empId)) return;
+    const cKey = cell.dataset.blockId+'_'+cell.dataset.field;
+    const inp = document.getElementById('eti-'+cKey);
+    if(!inp) return;
+    // Only use validated (non-invalid) values
+    if(inp.classList.contains('invalid')) return;
+    // We'll collect inVal/outVal per block then calc
+  });
+  // Simplified: just trigger a visual refresh of the hrs cell in this row
+  // by finding the hrs td for this employee
+  const hrsEl = document.querySelector(`.tsv-grid tbody td[data-hrs-emp="${empId}"]`);
+  if(!hrsEl) return;
+  // Gather in/out for primary block
+  const inKey  = blockId + '_in';
+  const outKey = blockId + '_out';
+  const inChange  = _editChanges[inKey];
+  const outChange = _editChanges[outKey];
+  const inInp  = document.getElementById('eti-'+inKey);
+  const outInp = document.getElementById('eti-'+outKey);
+  if(!inInp || !outInp) return;
+  const inISO  = inChange  ? inChange.newVal  : inInp.dataset.origIso;
+  const outISO = outChange ? outChange.newVal : outInp.dataset.origIso;
+  if(!inISO || !outISO) return;
+  const d1 = new Date(inISO), d2 = new Date(outISO);
+  if(isNaN(d1)||isNaN(d2)) return;
+  const mins = Math.max(0, Math.round((d2-d1)/60000));
+  const hrs  = (mins/60).toFixed(1)+'h';
+  const isChanged = inChange || outChange;
+  hrsEl.innerHTML = isChanged
+    ? `<span style="background:#faeeda;color:#854f0b;border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600">${hrs}</span>`
+    : `<span style="background:#e6f1fb;color:#0c447c;border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600">${hrs}</span>`;
 }
 
 function cancelEditMode(){
-  // Re-open detail without edit mode
-  const ts=_currentDetailTs;
   document.getElementById('edit-mode-bar')?.remove();
-  openDetailScreen(ts, true);
+  openDetailScreen(_currentDetailTs, true);
 }
 
 async function saveEdits(){
-  const changes=Object.values(_editChanges);
+  const changes = Object.values(_editChanges);
   if(!changes.length){ cancelEditMode(); return; }
-  const ts=_currentDetailTs; if(!ts) return;
 
-  let saved=0;
+  // Block save if any invalid cells exist
+  const invalidCells = document.querySelectorAll('.edit-time-input.invalid, .edit-date-input.invalid');
+  if(invalidCells.length){
+    alert('Please fix the highlighted errors before saving.');
+    return;
+  }
+
+  const ts = _currentDetailTs; if(!ts) return;
+  const now = new Date().toISOString();
+  const managerName = currentProfile?.full_name || '';
+  const managerRole = currentProfile?.role || 'manager';
+
+  let saved = 0;
   for(const c of changes){
-    // Update time_block
-    const updateField = c.field==='in'?'time_in':'time_out';
-    const {error}=await getSupabase().from('time_blocks').update({
-      [updateField]: c.newVal||null,
-      modified_by: currentUser.id,
-      modified_at: new Date().toISOString(),
-    }).eq('id',c.blockId);
-    if(error){ console.error('Block update error:',error); continue; }
+    const dbField = c.field === 'in' ? 'time_in' : 'time_out';
 
-    // Log change
-    await getSupabase().from('timesheet_changes').insert({
-      timesheet_id: ts.id,
-      employee_id:  c.empId||null,
-      changed_by:   currentUser.id,
-      field_name:   updateField,
-      old_value:    c.oldVal||null,
-      new_value:    c.newVal||null,
+    // Read original from block before overwriting
+    const {data:origBlock} = await getSupabase()
+      .from('time_blocks').select('time_in,time_out,original_time_in,original_time_out')
+      .eq('id', c.blockId).maybeSingle();
+
+    // Only preserve original_time_in/out on FIRST manager edit
+    const origFieldDb = c.field === 'in' ? 'original_time_in' : 'original_time_out';
+    const alreadyHasOriginal = origBlock?.[origFieldDb];
+    const updatePayload = {
+      [dbField]: c.newVal || null,
+      modified_by: currentUser.id,
+      modified_at: now,
+    };
+    if(!alreadyHasOriginal){
+      updatePayload[origFieldDb] = origBlock?.[dbField] || null;
+    }
+
+    const {error} = await getSupabase()
+      .from('time_blocks').update(updatePayload).eq('id', c.blockId);
+    if(error){ console.error('[saveEdits] block update error:', error); continue; }
+
+    // Append to timesheet_edit_log — every change preserved
+    await getSupabase().from('timesheet_edit_log').insert({
+      timesheet_id:    ts.id,
+      block_id:        c.blockId,
+      field:           dbField,
+      old_value:       c.oldVal || null,
+      new_value:       c.newVal || null,
+      changed_by:      currentUser.id,
+      changed_by_name: managerName,
+      changed_by_role: managerRole,
+      changed_at:      now,
     });
     saved++;
   }
 
-  if(saved>0){
-    alert(`✓ ${saved} change${saved>1?'s':''} saved successfully.`);
+  if(saved > 0){
     document.getElementById('edit-mode-bar')?.remove();
     openDetailScreen(ts, true);
   } else {
-    alert('No changes were saved. Please check for errors.');
+    alert('No changes were saved — check browser console for errors.');
   }
 }
 
