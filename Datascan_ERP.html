@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>DATASCAN Timesheet</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M" defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1026,16 +1026,16 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 <div class="section">
   <div class="section-title"><i class="ti ti-building-store"></i> Job Info</div>
   <div class="field-row">
-    <div class="field-group"><label>Supervisor name <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-supervisor" placeholder="Full name" oninput="checkSubmitReady()"/></div>
-    <div class="field-group"><label>Job date <span style="color:var(--danger-text)">*</span></label><input type="date" id="job-date" onchange="checkSubmitReady()"/></div>
+    <div class="field-group"><label>Supervisor name <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-supervisor" placeholder="Full name" oninput="checkSubmitReady();onFormChange()"/></div>
+    <div class="field-group"><label>Job date <span style="color:var(--danger-text)">*</span></label><input type="date" id="job-date" onchange="checkSubmitReady();onFormChange()"/></div>
   </div>
   <div class="field-row">
     <div class="field-group"><label>Customer name <span style="color:var(--danger-text)">*</span></label><div id="ac-mount"></div></div>
-    <div class="field-group"><label>Store number <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-store" placeholder="e.g. 0042" oninput="checkSubmitReady()"/></div>
+    <div class="field-group"><label>Store number <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-store" placeholder="e.g. 0042" oninput="checkSubmitReady();onFormChange()"/></div>
   </div>
   <div class="field-row">
-    <div class="field-group"><label>City <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-city" placeholder="City" oninput="checkSubmitReady()"/></div>
-    <div class="field-group"><label>State <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-state" placeholder="AL" maxlength="2" style="text-transform:uppercase" oninput="checkSubmitReady()"/></div>
+    <div class="field-group"><label>City <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-city" placeholder="City" oninput="checkSubmitReady();onFormChange()"/></div>
+    <div class="field-group"><label>State <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-state" placeholder="AL" maxlength="2" style="text-transform:uppercase" oninput="checkSubmitReady();onFormChange()"/></div>
   </div>
   <!-- Address + dev coords — visible to test users only -->
   <div id="ji-address-row" style="display:none">
@@ -1485,9 +1485,9 @@ function checkSubmitReady(){
       warnDiv.classList.remove('visible');
     }
   }
-
-  // Trigger local backup on any state change
-  onFormChange();
+  // NOTE: onFormChange() intentionally removed — checkSubmitReady is called
+  // programmatically (scroll, load, resize) and must NOT trigger autosave.
+  // Only actual user input events (oninput/onchange) should set dirty flags.
 }
 
 // ── Time block engine ─────────────────────────────────────────
@@ -1684,6 +1684,7 @@ function onBlockChange(empId,blockId,field,val){
   if(field==='in')b.inVal=val;
   if(field==='out')b.outVal=val;
   validateEmployee(empId);
+  onFormChange();
 }
 
 function onVarianceOutChange(empId,blockId,val){
@@ -1700,6 +1701,7 @@ function onVarianceOutChange(empId,blockId,val){
     if(inEl)inEl.value='';
   }
   validateEmployee(empId);
+  onFormChange();
 }
 
 function onClockOutChange(empId,blockId,val){
@@ -1713,6 +1715,7 @@ function onClockOutChange(empId,blockId,val){
   // Update variance in readonly state based on whether count in/out now has a value
   refreshVarianceInState(empId);
   validateEmployee(empId);
+  onFormChange();
 }
 
 // Also fire on count IN change
@@ -1721,6 +1724,7 @@ function onClockInChange(empId,blockId,val){
   b.inVal=val;
   refreshVarianceInState(empId);
   validateEmployee(empId);
+  onFormChange();
 }
 
 function refreshVarianceInState(empId){
@@ -1951,7 +1955,7 @@ function addEmployee(role,loginOverride){
       </div>
     </div>
     <div class="emp-name-row">
-      <div class="field-group"><label>First name</label><input type="text" id="fname-${empId}" placeholder="First" oninput="calcTotals()"/></div>
+      <div class="field-group"><label>First name</label><input type="text" id="fname-${empId}" placeholder="First" oninput="calcTotals();onFormChange()"/></div>
       <div class="field-group"><label>Last name</label><input type="text" placeholder="Last" onblur="onLastNameBlur(this,${empId})"/></div>
       <div class="field-group"><label>Login / ID</label><input type="text" value="${loginDefault}" placeholder="Login"/></div>
     </div>
@@ -2442,7 +2446,7 @@ function onFormChange(){
         _recordServerSave();
       } else {
         setAutosaveStatus('error', 'Save incomplete — please click Save draft');
-        console.warn('[inactivity save] saveTimesheet completed but no currentTimesheetId set');
+        console.warn('[inactivity save] no currentTimesheetId — currentUser:', currentUser?.id, '_savingInProgress:', _savingInProgress);
       }
     } catch(e){
       console.error('[inactivity save] failed:', e.message, e);
@@ -2843,13 +2847,15 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.31';
-const MAPS_API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const APP_VERSION = 'v1.0.40';
+const MAPS_API_KEY  = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const GEOCODE_KEY   = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI'; // unrestricted — Geocoding API only
 
 // ── Geocode an address using Google Maps API ──────────────────────────────────
 async function geocodeAddress(address){
   try{
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${MAPS_API_KEY}`;
+    const url = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+      + encodeURIComponent(address) + '&key=' + GEOCODE_KEY;
     const resp = await fetch(url);
     const data = await resp.json();
     if(data.status === 'OK' && data.results.length > 0){
@@ -4353,20 +4359,248 @@ function resetForm(){
   updateStatus('draft');
 }
 
-function startNewTimesheet(){
+// ══════════════════════════════════════════════════════════════════════════════
+// NEW TIMESHEET FLOW
+// 1. Click "New Timesheet" → INSERT skeleton record immediately → open modal
+// 2. Supervisor fills required store fields → UPDATE record on confirm
+// 3. Cancel → DELETE skeleton record → back to My Submissions
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function startNewTimesheet(){
   stopSupabaseAutoSave();
   currentTimesheetId = null;
   _formLocked = false;
-  // Show form directly without triggering saveFormBeforeLeaving
+
+  // ── Step 1: INSERT skeleton record immediately ────────────────────────────
+  // This guarantees currentTimesheetId is set before any modal or form code runs.
+  try{
+    const today = new Date();
+    const jobDate = today.getFullYear()+'-'+
+      String(today.getMonth()+1).padStart(2,'0')+'-'+
+      String(today.getDate()).padStart(2,'0');
+
+    const {data:newTs, error:newTsErr} = await getSupabase()
+      .from('timesheets')
+      .insert({
+        supervisor_id:   currentUser.id,
+        supervisor_name: currentProfile?.full_name||'',
+        job_date:        jobDate,
+        client_name:     '',
+        store_number:    '',
+        city:            '',
+        state:           '',
+        status:          'draft',
+      })
+      .select()
+      .single();
+
+    if(newTsErr) throw newTsErr;
+    currentTimesheetId = newTs.id;
+    console.log('[startNewTimesheet] skeleton created:', currentTimesheetId);
+
+  } catch(e){
+    console.error('[startNewTimesheet] INSERT failed:', e.message);
+    alert('Could not create timesheet: ' + e.message);
+    return;
+  }
+
+  // ── Step 2: Open required-fields modal ────────────────────────────────────
+  _openJobInfoModal();
+}
+
+function _openJobInfoModal(){
+  const today = new Date();
+  const todayISO = today.getFullYear()+'-'+
+    String(today.getMonth()+1).padStart(2,'0')+'-'+
+    String(today.getDate()).padStart(2,'0');
+
+  const userEmail = (currentProfile?.email||currentUser?.email||'').toLowerCase();
+  const isDevUser = ['nford@datascan.com','supervisor@datascan.com'].includes(userEmail);
+
+  openWizModal('Job Information', `
+    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
+      Enter the required store details to continue.
+    </p>
+    <div class="wiz-modal-field">
+      <label>Supervisor name <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="ntm-supervisor" value="${currentProfile?.full_name||''}" placeholder="Full name"/>
+    </div>
+    <div class="wiz-modal-field">
+      <label>Job date <span style="color:var(--danger-text)">*</span></label>
+      <input type="date" id="ntm-date" value="${todayISO}"/>
+    </div>
+    <div class="wiz-modal-field">
+      <label>Customer / Client <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="ntm-customer" placeholder="e.g. NAPA Auto Parts"/>
+    </div>
+    <div class="wiz-modal-field">
+      <label>Store number <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="ntm-store" placeholder="e.g. 1532"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="wiz-modal-field">
+        <label>City <span style="color:var(--danger-text)">*</span></label>
+        <input type="text" id="ntm-city" placeholder="City"/>
+      </div>
+      <div class="wiz-modal-field">
+        <label>State <span style="color:var(--danger-text)">*</span></label>
+        <input type="text" id="ntm-state" placeholder="AL" maxlength="2"
+          style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"/>
+      </div>
+    </div>
+    ${isDevUser ? `<div class="wiz-modal-field">
+      <label style="color:var(--amber)">Street address <span style="font-size:11px;font-weight:400;color:var(--text3)">(improves GPS accuracy)</span></label>
+      <input type="text" id="ntm-address" placeholder="e.g. 1234 Main St"/>
+    </div>` : ''}
+    <div id="ntm-err" style="color:var(--danger-text);font-size:12px;min-height:18px;margin-top:.25rem"></div>
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+      <button class="wiz-btn" onclick="_cancelNewTimesheet()" style="flex:1">
+        <i class="ti ti-x"></i> Cancel
+      </button>
+      <button class="wiz-btn primary" id="ntm-confirm-btn" onclick="_confirmJobInfo()" style="flex:2">
+        <i class="ti ti-check"></i> Continue
+      </button>
+    </div>`
+  );
+  setTimeout(()=> document.getElementById('ntm-customer')?.focus(), 150);
+}
+
+// ── Cancel: delete the skeleton record and go back ────────────────────────────
+async function _cancelNewTimesheet(){
+  closeWizModal();
+  if(currentTimesheetId){
+    try{
+      await getSupabase().from('timesheets').delete().eq('id', currentTimesheetId);
+      console.log('[cancelNewTimesheet] skeleton deleted');
+    } catch(e){ console.warn('[cancelNewTimesheet] delete failed:', e.message); }
+    currentTimesheetId = null;
+  }
+  // Return to My Submissions
+  loadSubmissions();
+}
+
+// ── Confirm: validate → UPDATE record → geocode → open form ──────────────────
+async function _confirmJobInfo(){
+  const supervisor = document.getElementById('ntm-supervisor')?.value.trim();
+  const jobDate    = document.getElementById('ntm-date')?.value;
+  const customer   = document.getElementById('ntm-customer')?.value.trim();
+  const store      = document.getElementById('ntm-store')?.value.trim();
+  const city       = document.getElementById('ntm-city')?.value.trim();
+  const state      = document.getElementById('ntm-state')?.value.trim().toUpperCase();
+  const address    = document.getElementById('ntm-address')?.value.trim()||'';
+  const errEl      = document.getElementById('ntm-err');
+  const btn        = document.getElementById('ntm-confirm-btn');
+
+  // Validate
+  const missing = [];
+  if(!supervisor) missing.push('Supervisor name');
+  if(!jobDate)    missing.push('Job date');
+  if(!customer)   missing.push('Customer');
+  if(!store)      missing.push('Store number');
+  if(!city)       missing.push('City');
+  if(!state)      missing.push('State');
+  if(missing.length){
+    if(errEl) errEl.textContent = 'Required: ' + missing.join(', ');
+    return;
+  }
+  if(errEl) errEl.textContent = '';
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Saving...'; }
+
+  // Geocode (non-blocking — continues if it fails)
+  let destLat=null, destLng=null, destAddress=null;
+  try{
+    const addrStr = address
+      ? [address,city,state].join(', ')
+      : [customer,store?'Store '+store:'',city,state].filter(Boolean).join(', ');
+    const geoUrl  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+      + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
+    const geoResp = await fetch(geoUrl);
+    const geoData = await geoResp.json();
+    if(geoData.status === 'OK' && geoData.results[0]){
+      destLat     = geoData.results[0].geometry.location.lat;
+      destLng     = geoData.results[0].geometry.location.lng;
+      destAddress = geoData.results[0].formatted_address;
+      console.log('[geocode] ✓', destLat, destLng, destAddress);
+    } else {
+      console.warn('[geocode] status:', geoData.status, 'for:', addrStr);
+    }
+  } catch(ge){ console.warn('[geocode]', ge.message); }
+
+  // UPDATE the skeleton record with real data
+  console.log('[confirmJobInfo] updating id:', currentTimesheetId, {supervisor,jobDate,customer,store,city,state});
+  try{
+    const {data:upData, error:upErr} = await getSupabase()
+      .from('timesheets')
+      .update({
+        supervisor_name: supervisor,
+        job_date:        jobDate,
+        client_name:     customer,
+        store_number:    store,
+        city:            city,
+        state:           state,
+        dest_lat:        destLat,
+        dest_lng:        destLng,
+        dest_address:    destAddress,
+      })
+      .eq('id', currentTimesheetId)
+      .select()
+      .single();
+
+    if(upErr) throw upErr;
+    console.log('[confirmJobInfo] ✓ record updated:', upData?.id, 'client:', upData?.client_name);
+
+    // Sync the form fields with the updated data
+    const sv=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
+    sv('ji-supervisor', supervisor);
+    sv('job-date',      jobDate);
+    sv('ji-customer',   customer);
+    sv('ji-store',      store);
+    sv('ji-city',       city);
+    sv('ji-state',      state);
+
+  } catch(e){
+    console.error('[confirmJobInfo] UPDATE failed:', e.message, e);
+    if(errEl) errEl.textContent = 'Error saving: ' + e.message;
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-check"></i> Continue'; }
+    return;
+  }
+
+  // Close modal and open form pre-populated
+  closeWizModal();
+  _openFormScreen({supervisor,jobDate,customer,store,city,state,address,destLat,destLng,destAddress});
+}
+
+function _openFormScreen(d){
+  _formLocked = false;
   document.getElementById('main-wrap').style.display = '';
   document.getElementById('status-screen').classList.remove('active');
   document.getElementById('mgr-screen').classList.remove('active');
   document.getElementById('tab-form')?.classList.add('active');
   document.getElementById('tab-status')?.classList.remove('active');
   document.getElementById('tab-mgr')?.classList.remove('active');
-  // Now clear and populate — container is visible
+  // Preserve the ID across clearForm() which resets it to null
+  const _savedId = currentTimesheetId;
   clearForm();
+  currentTimesheetId = _savedId; // restore after clearForm
+  console.log('[_openFormScreen] currentTimesheetId restored to:', currentTimesheetId);
   initDefaultEmployees();
+
+  // Pre-populate all job info fields
+  const sv=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
+  sv('ji-supervisor',d.supervisor);
+  sv('job-date',     d.jobDate);
+  sv('ji-customer',  d.customer);
+  sv('ji-store',     d.store);
+  sv('ji-city',      d.city);
+  sv('ji-state',     d.state);
+  sv('ji-address',   d.address||'');
+  if(d.destLat)     sv('ji-dest-lat',  d.destLat);
+  if(d.destLng)     sv('ji-dest-lng',  d.destLng);
+  if(d.destAddress) sv('ji-dest-addr', d.destAddress);
+
+  setAutosaveStatus('saved','Job info saved — add employee times below');
+  setTimeout(()=>setAutosaveStatus('idle',''),4000);
+  startSupabaseAutoSave();
 }
 
 async function loadDraftTimesheet(tsId){
@@ -6365,48 +6599,36 @@ async function saveTimesheet(statusVal, silent=false){
           ? [streetAddr, _city, _state].filter(Boolean).join(', ')
           : [_client, _store?'Store '+_store:'', _city, _state].filter(Boolean).join(', ');
 
-        if(window.google && window.google.maps){
-          const geocoder = new google.maps.Geocoder();
-          await new Promise((resolve)=>{
-            geocoder.geocode({address: addrStr}, (results, status)=>{
-              if(status === 'OK' && results[0]){
-                const loc = results[0].geometry.location;
-                tsRecord.dest_lat     = loc.lat();
-                tsRecord.dest_lng     = loc.lng();
-                tsRecord.dest_address = results[0].formatted_address;
-                console.log('[geocode] ✓', loc.lat(), loc.lng(), results[0].formatted_address);
-                // Populate dev coord fields if visible
-                const latEl  = document.getElementById('ji-dest-lat');
-                const lngEl  = document.getElementById('ji-dest-lng');
-                const addrEl = document.getElementById('ji-dest-addr');
-                if(latEl  && !latEl.value)  latEl.value  = loc.lat();
-                if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng();
-                if(addrEl) addrEl.value = results[0].formatted_address;
-              } else {
-                console.warn('[geocode] no results:', status, 'for:', addrStr);
-              }
-              resolve();
-            });
-          });
+        const geoUrl2  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+          + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
+        const geoResp2 = await fetch(geoUrl2);
+        const geoData2 = await geoResp2.json();
+        if(geoData2.status === 'OK' && geoData2.results[0]){
+          const loc = geoData2.results[0].geometry.location;
+          tsRecord.dest_lat     = loc.lat;
+          tsRecord.dest_lng     = loc.lng;
+          tsRecord.dest_address = geoData2.results[0].formatted_address;
+          console.log('[geocode] ✓', loc.lat, loc.lng, geoData2.results[0].formatted_address);
+          // Populate dev coord fields if visible
+          const latEl  = document.getElementById('ji-dest-lat');
+          const lngEl  = document.getElementById('ji-dest-lng');
+          const addrEl = document.getElementById('ji-dest-addr');
+          if(latEl  && !latEl.value)  latEl.value  = loc.lat;
+          if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng;
+          if(addrEl) addrEl.value = geoData2.results[0].formatted_address;
         } else {
-          console.warn('[geocode] Maps JS API not loaded yet — skipping');
+          console.warn('[geocode] no results:', geoData2.status, 'for:', addrStr);
         }
       } catch(geoErr){ console.warn('[geocode] failed:', geoErr.message); }
     }
 
-    // Safety guard: only skip silent saves when there's genuinely no data entered.
-    // A silent autosave on a new timesheet (no currentTimesheetId) should still INSERT
-    // if the user has entered real job info — otherwise the first save is always lost.
+    // Safety guard: silent autosave with no ID means mid-navigation — skip.
+    // currentTimesheetId is now always set at startNewTimesheet() time so this
+    // guard should rarely fire in normal use.
     if(silent && !currentTimesheetId){
-      const _hasSup   = !!document.getElementById('ji-supervisor')?.value.trim();
-      const _hasJob   = !!document.getElementById('ji-customer')?.value.trim();
-      const _hasStore = !!document.getElementById('ji-store')?.value.trim();
-      if(!_hasSup && !_hasJob && !_hasStore){
-        console.warn('[saveTimesheet] silent save skipped — no real data yet');
-        _savingInProgress = false;
-        return;
-      }
-      console.log('[saveTimesheet] silent save with new timesheet — proceeding with INSERT');
+      console.warn('[saveTimesheet] silent save skipped — no currentTimesheetId');
+      _savingInProgress = false;
+      return;
     }
 
     let timesheetId;
