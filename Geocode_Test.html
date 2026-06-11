@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Datascan · Geocode Tester</title>
+<title>Datascan · Geocode Tester v1.0.1</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f4f8;min-height:100vh;padding:1.5rem}
@@ -74,7 +74,7 @@ body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f
 <div class="header">
   <div>
     <div class="header-logo">DATASCAN <span>GEOCODE</span> TESTER</div>
-    <div class="header-sub">Google Maps Geocoding API · Debug Tool</div>
+    <div class="header-sub">Google Maps Geocoding API · Debug Tool · v1.0.1</div>
   </div>
 </div>
 
@@ -183,7 +183,8 @@ body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f
 </div>
 
 <script>
-const API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const MAPS_KEY    = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const GEOCODE_KEY = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
 let _map = null;
 let _marker = null;
 let _lastJson = null;
@@ -259,50 +260,19 @@ async function runTest(){
     return;
   }
 
-  // Use the modern Promise-based geocode() with a hard 8-second timeout
-  const geocoder = new google.maps.Geocoder();
+  // Use REST Geocoding API with unrestricted key (no referer restriction)
   try{
-    const geoPromise = geocoder.geocode({address: queryStr});
-    const timeoutPromise = new Promise((_,reject)=>
-      setTimeout(()=>reject(new Error('Geocoder timed out after 8 seconds')), 8000)
-    );
-    const response = await Promise.race([geoPromise, timeoutPromise]);
-    const results = response.results || [];
-    rawData = {
-      status: results.length > 0 ? 'OK' : 'ZERO_RESULTS',
-      results: results.map(r=>({
-        formatted_address: r.formatted_address,
-        place_id:          r.place_id,
-        types:             r.types,
-        geometry:{
-          location:{
-            lat: r.geometry.location.lat(),
-            lng: r.geometry.location.lng(),
-          },
-          location_type: r.geometry.location_type,
-          viewport:{
-            northeast:{
-              lat: r.geometry.viewport.getNorthEast().lat(),
-              lng: r.geometry.viewport.getNorthEast().lng(),
-            },
-            southwest:{
-              lat: r.geometry.viewport.getSouthWest().lat(),
-              lng: r.geometry.viewport.getSouthWest().lng(),
-            }
-          }
-        },
-        address_components: r.address_components,
-      })),
-      _note: 'Response via Maps JS API Geocoder (browser-authorized — not REST API)'
-    };
-  } catch(geoErr){
+    const url = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+      + encodeURIComponent(queryStr) + '&key=AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
+    const resp = await fetch(url);
+    rawData = await resp.json();
+    rawData._note = 'Response via REST Geocoding API with unrestricted key';
+  } catch(fetchErr){
     rawData = {
       status: 'ERROR',
-      error_message: geoErr.message,
+      error_message: fetchErr.message,
       results: [],
-      _note: geoErr.message.includes('timed out')
-        ? 'Geocoder did not respond — Maps JS API may not be fully loaded or key may be invalid'
-        : 'Geocoder threw an error — check API key and enabled APIs in Google Cloud Console'
+      _note: 'fetch() failed — check network connection'
     };
   }
 
