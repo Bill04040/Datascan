@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>DATASCAN Timesheet</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1122,6 +1123,23 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   <div class="submission-status not-submitted" id="submission-status">
     <i class="ti ti-clock-pause"></i>
     <span id="submission-status-text">Not submitted</span>
+  </div>
+
+  <!-- DEV DEBUG PANEL — supervisor@datascan.com only -->
+  <div id="dev-debug-panel" style="display:none;margin-top:1rem;border:1px solid rgba(244,169,58,.35);
+    border-radius:8px;background:rgba(244,169,58,.05);padding:.875rem;font-size:11px;font-family:monospace">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
+      <span style="font-size:11px;font-weight:700;color:#F4A93A;letter-spacing:.08em;text-transform:uppercase">
+        <i class="ti ti-bug" style="margin-right:4px"></i>Dev Debug
+      </span>
+      <button onclick="refreshDebugPanel()" style="background:rgba(244,169,58,.15);border:1px solid rgba(244,169,58,.3);
+        color:#F4A93A;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:inherit">
+        <i class="ti ti-refresh"></i> Refresh
+      </button>
+    </div>
+    <div id="dev-debug-body" style="color:rgba(255,255,255,.7);line-height:1.8">
+      <span style="color:rgba(255,255,255,.3)">Not yet saved — debug info will appear after first save</span>
+    </div>
   </div>
 </div>
 
@@ -2282,6 +2300,9 @@ function setAutosaveStatus(type, msg){
 function _recordServerSave(){
   _lastServerSave = new Date().toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
   setAutosaveStatus('idle','');
+  // Auto-refresh dev debug panel after every confirmed server save
+  const panel = document.getElementById('dev-debug-panel');
+  if(panel && panel.style.display !== 'none') refreshDebugPanel();
 }
 
 function clearLocalDraft(){
@@ -2810,7 +2831,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.28';
+const APP_VERSION = 'v1.0.29';
 const MAPS_API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 
 // ── Geocode an address using Google Maps API ──────────────────────────────────
@@ -2907,13 +2928,17 @@ async function onSignedIn(user){
   initSidebar(); // wraps DOM into sidebar shell — must run before role routing
 
   // Show address + dev coord fields for test users only
-  const _testEmails = ['nford@datascan.com','supervisor@datascan.com'];
-  const _userEmail  = currentProfile?.email || currentUser?.email || '';
-  const _isTestUser = _testEmails.some(e => _userEmail.toLowerCase() === e.toLowerCase());
-  const addrRow   = document.getElementById('ji-address-row');
-  const coordsRow = document.getElementById('ji-coords-row');
-  if(addrRow)   addrRow.style.display   = _isTestUser ? '' : 'none';
-  if(coordsRow) coordsRow.style.display = _isTestUser ? '' : 'none';
+  const _testEmails    = ['nford@datascan.com','supervisor@datascan.com'];
+  const _debugEmails   = ['supervisor@datascan.com'];
+  const _userEmail     = currentProfile?.email || currentUser?.email || '';
+  const _isTestUser    = _testEmails.some(e => _userEmail.toLowerCase() === e.toLowerCase());
+  const _isDebugUser   = _debugEmails.some(e => _userEmail.toLowerCase() === e.toLowerCase());
+  const addrRow    = document.getElementById('ji-address-row');
+  const coordsRow  = document.getElementById('ji-coords-row');
+  const debugPanel = document.getElementById('dev-debug-panel');
+  if(addrRow)    addrRow.style.display    = _isTestUser  ? '' : 'none';
+  if(coordsRow)  coordsRow.style.display  = _isTestUser  ? '' : 'none';
+  if(debugPanel) debugPanel.style.display = _isDebugUser ? '' : 'none';
   document.getElementById('nav-tabs').style.display  = 'block';
 
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
@@ -4164,7 +4189,7 @@ async function loadSubmissions(){
 
   const {data, error} = await getSupabase()
     .from('timesheets')
-    .select('id, job_date, client_name, client_code, store_number, city, state, status, created_at, updated_at, manager_comments, manager_name, manager_signed_at, supervisor_name')
+    .select('id, job_date, client_name, client_code, store_number, city, state, status, created_at, updated_at, manager_comments, manager_name, manager_signed_at, supervisor_name, supervisor_id')
     .eq('supervisor_id', currentUser.id)
     .order('created_at', {ascending:false});
 
@@ -4178,6 +4203,13 @@ async function loadSubmissions(){
   const badge = document.getElementById('pending-count');
   if(pending>0){ badge.textContent=pending; badge.style.display='inline'; }
   else { badge.style.display='none'; }
+
+  // Debug flag — show timestamps + supervisor_id match on cards for test user
+  const _isDebugUser = (currentProfile?.email||currentUser?.email||'').toLowerCase() === 'supervisor@datascan.com';
+
+  // Log what we found for debugging
+  console.log('[loadSubmissions] found', data.length, 'timesheets for', currentUser.id);
+  data.forEach(ts=> console.log('  ts:', ts.id, 'supervisor_id:', ts.supervisor_id, 'status:', ts.status, 'match:', ts.supervisor_id===currentUser.id));
 
   data.forEach(ts=>{
     const card = document.createElement('div');
@@ -4225,7 +4257,14 @@ async function loadSubmissions(){
       <div class="ts-card-footer">
         <span class="ts-footer-date">${ts.status==='draft'?'Last saved':'Submitted'} ${submitted}</span>
         <span class="card-footer-actions"></span>
-      </div>`;
+      </div>
+      ${_isDebugUser ? `<div style="margin-top:6px;padding:6px 8px;background:rgba(244,169,58,.08);border:0.5px solid rgba(244,169,58,.3);border-radius:6px;font-size:11px;font-family:monospace;color:rgba(244,169,58,.9);line-height:1.7">
+        <div><b>id:</b> ${ts.id}</div>
+        <div><b>supervisor_id:</b> ${ts.supervisor_id||'null'} ${ts.supervisor_id===currentUser.id?'✓ match':'✗ MISMATCH'}</div>
+        <div><b>created_at:</b> ${ts.created_at ? new Date(ts.created_at).toLocaleString() : '—'}</div>
+        <div><b>updated_at:</b> ${ts.updated_at ? new Date(ts.updated_at).toLocaleString() : '—'}</div>
+      </div>` : ''}
+      `;
     container.appendChild(card);
     // Draft cards: inject Open + Delete buttons
     if(ts.status==='draft'){
@@ -6306,31 +6345,39 @@ async function saveTimesheet(statusVal, silent=false){
       console.log('[geocode] using manual coords:', _manualLat, _manualLng);
     }
 
-    // Geocode job address on first INSERT if no manual coords set
+    // Geocode using Maps JS API Geocoder (browser-authorized, no CORS issues)
     if(_city && _state && !currentTimesheetId && !tsRecord.dest_lat){
       try{
         const streetAddr = document.getElementById('ji-address')?.value.trim()||'';
         const addrStr = streetAddr
           ? [streetAddr, _city, _state].filter(Boolean).join(', ')
           : [_client, _store?'Store '+_store:'', _city, _state].filter(Boolean).join(', ');
-        const geoUrl  = 'https://maps.googleapis.com/maps/api/geocode/json?address='+encodeURIComponent(addrStr)+'&key='+MAPS_KEY;
-        const geoResp = await fetch(geoUrl);
-        const geoData = await geoResp.json();
-        if(geoData.status === 'OK' && geoData.results[0]){
-          const loc = geoData.results[0].geometry.location;
-          tsRecord.dest_lat     = loc.lat;
-          tsRecord.dest_lng     = loc.lng;
-          tsRecord.dest_address = geoData.results[0].formatted_address;
-          console.log('[geocode] ✓', loc.lat, loc.lng, geoData.results[0].formatted_address);
-          // Populate dev coord fields if visible
-          const latEl  = document.getElementById('ji-dest-lat');
-          const lngEl  = document.getElementById('ji-dest-lng');
-          const addrEl = document.getElementById('ji-dest-addr');
-          if(latEl  && !latEl.value)  latEl.value  = loc.lat;
-          if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng;
-          if(addrEl) addrEl.value = geoData.results[0].formatted_address;
+
+        if(window.google && window.google.maps){
+          const geocoder = new google.maps.Geocoder();
+          await new Promise((resolve)=>{
+            geocoder.geocode({address: addrStr}, (results, status)=>{
+              if(status === 'OK' && results[0]){
+                const loc = results[0].geometry.location;
+                tsRecord.dest_lat     = loc.lat();
+                tsRecord.dest_lng     = loc.lng();
+                tsRecord.dest_address = results[0].formatted_address;
+                console.log('[geocode] ✓', loc.lat(), loc.lng(), results[0].formatted_address);
+                // Populate dev coord fields if visible
+                const latEl  = document.getElementById('ji-dest-lat');
+                const lngEl  = document.getElementById('ji-dest-lng');
+                const addrEl = document.getElementById('ji-dest-addr');
+                if(latEl  && !latEl.value)  latEl.value  = loc.lat();
+                if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng();
+                if(addrEl) addrEl.value = results[0].formatted_address;
+              } else {
+                console.warn('[geocode] no results:', status, 'for:', addrStr);
+              }
+              resolve();
+            });
+          });
         } else {
-          console.warn('[geocode] no results:', geoData.status, 'for:', addrStr);
+          console.warn('[geocode] Maps JS API not loaded yet — skipping');
         }
       } catch(geoErr){ console.warn('[geocode] failed:', geoErr.message); }
     }
@@ -6582,6 +6629,13 @@ async function loadMgrTimesheets(){
     approved:  {cls:'ts-pill-approved',  label:'Approved',       icon:'ti-circle-check'},
     rejected:  {cls:'ts-pill-rejected',  label:'Rejected',       icon:'ti-circle-x'},
   };
+
+  // Debug flag — show timestamps + supervisor_id match on cards for test user
+  const _isDebugUser = (currentProfile?.email||currentUser?.email||'').toLowerCase() === 'supervisor@datascan.com';
+
+  // Log what we found for debugging
+  console.log('[loadSubmissions] found', data.length, 'timesheets for', currentUser.id);
+  data.forEach(ts=> console.log('  ts:', ts.id, 'supervisor_id:', ts.supervisor_id, 'status:', ts.status, 'match:', ts.supervisor_id===currentUser.id));
 
   data.forEach(ts=>{
     const s=statusMap[ts.status]||{cls:'ts-pill-draft',label:ts.status,icon:'ti-clock'};
@@ -7106,6 +7160,71 @@ function openRejectModal(){
       <button class="mgr-modal-btn cancel" onclick="closeMgrModal()">Cancel</button>
       <button class="mgr-modal-btn confirm-reject" onclick="submitApproval('rejected')"><i class="ti ti-circle-x"></i> Confirm Reject</button>
     </div>`);
+}
+
+// ── Dev debug panel — supervisor@datascan.com only ──────────────────────────
+async function refreshDebugPanel(){
+  const panel = document.getElementById('dev-debug-panel');
+  const body  = document.getElementById('dev-debug-body');
+  if(!panel || panel.style.display === 'none') return;
+
+  if(!currentTimesheetId){
+    body.innerHTML = '<span style="color:rgba(255,255,255,.3)">No timesheet ID yet — save the form first</span>';
+    return;
+  }
+
+  body.innerHTML = '<span style="color:rgba(255,255,255,.4)">Fetching from Supabase...</span>';
+
+  try{
+    // Fetch the raw timesheet record
+    const {data:ts, error:tsErr} = await getSupabase()
+      .from('timesheets')
+      .select('id, supervisor_id, supervisor_name, client_name, store_number, city, state, status, dest_lat, dest_lng, dest_address, created_at, updated_at')
+      .eq('id', currentTimesheetId)
+      .single();
+
+    if(tsErr || !ts){
+      body.innerHTML = `<span style="color:#f47c7c">Error: ${tsErr?.message || 'record not found'}</span>`;
+      return;
+    }
+
+    // Fetch employee count and block count
+    const {data:emps}   = await getSupabase().from('employees').select('id').eq('timesheet_id', currentTimesheetId);
+    const empIds        = (emps||[]).map(e=>e.id);
+    const {data:blocks} = empIds.length
+      ? await getSupabase().from('time_blocks').select('id').in('employee_id', empIds)
+      : {data:[]};
+
+    const row = (label, val, color) =>
+      `<div style="display:flex;gap:8px">
+        <span style="color:rgba(255,255,255,.4);width:120px;flex-shrink:0">${label}</span>
+        <span style="color:${color||'rgba(255,255,255,.85)'};word-break:break-all">${val ?? '<span style="color:rgba(255,255,255,.3)">null</span>'}</span>
+      </div>`;
+
+    const statusColor = ts.status==='draft'?'#7ec8f4':ts.status==='submitted'?'#F4A93A':ts.status==='approved'?'#6abf3a':'#f47c7c';
+
+    body.innerHTML = [
+      row('Timesheet ID',   ts.id,            '#7ec8f4'),
+      row('Supervisor ID',  ts.supervisor_id, currentUser.id===ts.supervisor_id?'#6abf3a':'#f47c7c'),
+      row('Supervisor',     ts.supervisor_name),
+      row('Client',         ts.client_name),
+      row('Store',          ts.store_number),
+      row('City / State',   [ts.city,ts.state].filter(Boolean).join(', ')),
+      row('Status',         ts.status,         statusColor),
+      row('dest_lat',       ts.dest_lat,        ts.dest_lat?'#6abf3a':'#f47c7c'),
+      row('dest_lng',       ts.dest_lng,        ts.dest_lng?'#6abf3a':'#f47c7c'),
+      row('dest_address',   ts.dest_address,    ts.dest_address?'#6abf3a':'rgba(255,255,255,.3)'),
+      row('Employees',      (emps||[]).length + ' row(s) in DB'),
+      row('Time blocks',    (blocks||[]).length + ' row(s) in DB'),
+      row('Created at',     ts.created_at ? new Date(ts.created_at).toLocaleString() : null),
+      row('Updated at',     ts.updated_at ? new Date(ts.updated_at).toLocaleString() : null),
+      row('Match current user', ts.supervisor_id===currentUser?.id ? '✓ YES' : '✗ NO — ID mismatch!',
+          ts.supervisor_id===currentUser?.id ? '#6abf3a' : '#f47c7c'),
+    ].join('');
+
+  } catch(e){
+    body.innerHTML = `<span style="color:#f47c7c">Unexpected error: ${e.message}</span>`;
+  }
 }
 
 async function submitApproval(action){
