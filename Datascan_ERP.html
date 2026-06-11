@@ -2437,8 +2437,13 @@ function onFormChange(){
     try{
       setAutosaveStatus('saving', 'Saving to server...');
       await saveTimesheet('draft', true);
-      _supabaseDirty = false;
-      _recordServerSave();
+      if(currentTimesheetId){
+        _supabaseDirty = false;
+        _recordServerSave();
+      } else {
+        setAutosaveStatus('error', 'Save incomplete — please click Save draft');
+        console.warn('[inactivity save] saveTimesheet completed but no currentTimesheetId set');
+      }
     } catch(e){
       console.error('[inactivity save] failed:', e.message, e);
       setAutosaveStatus('error', 'Save failed — check connection');
@@ -2461,12 +2466,15 @@ function startSupabaseAutoSave(){
     try{
       setAutosaveStatus('saving', 'Auto-saving draft...');
       await saveTimesheet('draft', true);
-      _supabaseDirty = false;
-      // Reset the inactivity debounce — no need to fire again right after this save
-      clearTimeout(_supabaseSaveDebounce);
-      _supabaseSaveDebounce = null;
-      setAutosaveStatus('saved', 'Auto-saved ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}));
-      setTimeout(()=>setAutosaveStatus('idle',''), 4000);
+      if(currentTimesheetId){
+        _supabaseDirty = false;
+        clearTimeout(_supabaseSaveDebounce);
+        _supabaseSaveDebounce = null;
+        setAutosaveStatus('saved', 'Auto-saved ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}));
+        setTimeout(()=>setAutosaveStatus('idle',''), 4000);
+      } else {
+        console.warn('[30s autosave] no currentTimesheetId after save — will retry next interval');
+      }
     } catch(e){
       console.error('[30s autosave] failed:', e.message);
       setAutosaveStatus('error', 'Auto-save failed — will retry');
@@ -2484,11 +2492,15 @@ function startSupabaseAutoSave(){
     if(!hasData) return;
     try{
       await saveTimesheet('draft', true);
-      _supabaseDirty = false;
-      clearTimeout(_supabaseSaveDebounce);
-      _supabaseSaveDebounce = null;
-      _recordServerSave();
-      console.log('[60s safety net] saved dirty data to server');
+      if(currentTimesheetId){
+        _supabaseDirty = false;
+        clearTimeout(_supabaseSaveDebounce);
+        _supabaseSaveDebounce = null;
+        _recordServerSave();
+        console.log('[60s safety net] saved dirty data to server');
+      } else {
+        console.warn('[60s safety net] no currentTimesheetId after save');
+      }
     } catch(e){
       console.error('[60s safety net] failed:', e.message);
     }
@@ -2831,7 +2843,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.30';
+const APP_VERSION = 'v1.0.31';
 const MAPS_API_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 
 // ── Geocode an address using Google Maps API ──────────────────────────────────
