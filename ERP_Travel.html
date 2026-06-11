@@ -451,7 +451,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.9';
+const APP_VERSION  = 'v1.0.10';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -551,7 +551,10 @@ async function doLogin(){
 }
 
 // ── Post-login ────────────────────────────────────────────────────────────────
+let _signingIn = false; // prevent double-call from onAuthStateChange + direct call
 async function onSignedIn(user){
+  if(_signingIn) return;
+  _signingIn = true;
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-err');
 
@@ -605,10 +608,10 @@ async function onSignedIn(user){
     await loadTodaysJobs();
 
   } catch(e) {
+    _signingIn = false;
     console.error('[onSignedIn] unexpected error:', e);
     if(err) err.textContent = 'Login error: ' + (e.message || 'unexpected error — check console');
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
-    // Show login screen again so user can retry
     document.getElementById('login-screen').classList.remove('hidden');
   }
 }
@@ -1397,6 +1400,7 @@ document.addEventListener('click', e=>{
 
 // ── Logout ────────────────────────────────────────────────────────────────────
 async function doLogout(){
+  _signingIn = false;
   await getSupabase().auth.signOut();
   currentUser = null; currentProfile = null; driverApproval = null;
   _activeJob = null; _activeTrip = null;
