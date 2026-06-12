@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>Datascan · GPS Tester v1.0.1</title>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f4f8;
+  min-height:100vh;padding:1rem}
+.header{margin-bottom:1rem}
+.header-logo{font-size:18px;font-weight:900;color:#fff;letter-spacing:.06em}
+.header-logo span{color:#6AB34F}
+.header-sub{font-size:12px;color:rgba(255,255,255,.45);margin-top:2px}
+.card{background:#162840;border:1px solid rgba(255,255,255,.1);border-radius:12px;
+  padding:1rem;margin-bottom:.875rem}
+.card-title{font-size:11px;font-weight:700;color:rgba(255,255,255,.45);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:13px;border:none;border-radius:8px;
+  color:#fff;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+.btn-primary{background:#1E5FAE}
+.btn-success{background:#6AB34F}
+.btn-danger{background:#a32d2d}
+.btn-ghost{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:.625rem;margin-bottom:.875rem}
+.stat{display:flex;align-items:flex-start;gap:10px;padding:.5rem 0;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+.stat:last-child{border-bottom:none}
+.stat-label{font-size:12px;color:rgba(255,255,255,.4);width:110px;flex-shrink:0;
+  font-weight:500;padding-top:1px}
+.stat-value{font-size:13px;color:#f0f4f8;font-family:monospace;flex:1;word-break:break-all}
+.stat-value.good{color:#6AB34F;font-weight:700}
+.stat-value.warn{color:#F4A93A;font-weight:700}
+.stat-value.bad{color:#f87171;font-weight:700}
+.stat-value.dim{color:rgba(255,255,255,.35)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.badge-ok{background:rgba(106,179,79,.2);color:#6AB34F}
+.badge-warn{background:rgba(244,169,58,.15);color:#F4A93A}
+.badge-err{background:rgba(163,45,45,.2);color:#f87171}
+.badge-idle{background:rgba(255,255,255,.08);color:rgba(255,255,255,.5)}
+.ping-dot{width:8px;height:8px;border-radius:50%;background:#6AB34F;
+  display:inline-block;animation:pulse 1.5s infinite;margin-right:4px}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+#map{width:100%;height:260px;border-radius:10px;background:#0d1e30;
+  border:1px solid rgba(255,255,255,.1);margin-top:.75rem}
+.log-panel{background:#0d1e30;border:1px solid rgba(255,255,255,.1);border-radius:8px;
+  padding:.75rem;max-height:200px;overflow-y:auto;font-family:monospace;
+  font-size:11px;line-height:1.7;color:#a0b4c8}
+.log-ok{color:#6AB34F}
+.log-warn{color:#F4A93A}
+.log-err{color:#f87171}
+.log-info{color:#90b8f0}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.section-divider{font-size:11px;font-weight:700;color:rgba(255,255,255,.3);
+  text-transform:uppercase;letter-spacing:.1em;margin:.75rem 0 .5rem;
+  display:flex;align-items:center;gap:8px}
+.section-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.08)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">DATASCAN <span>GPS</span> TESTER</div>
+  <div class="header-sub">v1.0.1 · Device location + Maps API diagnostic</div>
+</div>
+
+<!-- Status summary -->
+<div class="card">
+  <div class="card-title">System Status</div>
+  <div class="stat">
+    <div class="stat-label">GPS API</div>
+    <div class="stat-value" id="s-geoapi">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Maps JS API</div>
+    <div class="stat-value" id="s-mapsapi">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Permission</div>
+    <div class="stat-value" id="s-permission">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Watch status</div>
+    <div class="stat-value" id="s-watch">
+      <span class="badge badge-idle">Idle</span>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Fix count</div>
+    <div class="stat-value" id="s-fixcount">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Last fix</div>
+    <div class="stat-value dim" id="s-lastfix">—</div>
+  </div>
+</div>
+
+<!-- Current position -->
+<div class="card">
+  <div class="card-title">Current Position</div>
+  <div class="stat">
+    <div class="stat-label">Latitude</div>
+    <div class="stat-value" id="p-lat">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Longitude</div>
+    <div class="stat-value" id="p-lng">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Accuracy</div>
+    <div class="stat-value" id="p-acc">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Altitude</div>
+    <div class="stat-value" id="p-alt">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Speed</div>
+    <div class="stat-value" id="p-spd">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Heading</div>
+    <div class="stat-value" id="p-hdg">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Timestamp</div>
+    <div class="stat-value dim" id="p-ts">—</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="btn-row">
+  <button class="btn btn-success" id="btn-watch" onclick="startWatch()">
+    ▶ Start Watch
+  </button>
+  <button class="btn btn-danger" id="btn-stop" onclick="stopWatch()" disabled>
+    ■ Stop Watch
+  </button>
+</div>
+<div class="btn-row">
+  <button class="btn btn-primary" onclick="getSingleFix()">
+    Single fix
+  </button>
+  <button class="btn btn-ghost" onclick="testHighAccuracy()">
+    High accuracy test
+  </button>
+</div>
+<button class="btn btn-ghost" style="margin-bottom:.875rem" onclick="checkPermission()">
+  Check location permission
+</button>
+
+<!-- Map -->
+<div class="section-divider">Live Map</div>
+<div class="card" style="padding:.75rem">
+  <div class="stat" style="margin-bottom:.5rem">
+    <div class="stat-label">Maps API</div>
+    <div class="stat-value" id="m-status">—</div>
+  </div>
+  <button class="btn btn-primary btn-sm" style="padding:8px;font-size:13px;margin-bottom:.5rem"
+    onclick="initMap()">Load map</button>
+  <div id="map"></div>
+</div>
+
+<!-- Ping simulator -->
+<div class="section-divider">Supabase Ping Test</div>
+<div class="card">
+  <div class="card-title">Simulates what the travel log sends every 30s</div>
+  <div class="stat">
+    <div class="stat-label">Last ping</div>
+    <div class="stat-value dim" id="ping-last">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Ping count</div>
+    <div class="stat-value" id="ping-count">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Last result</div>
+    <div class="stat-value" id="ping-result">—</div>
+  </div>
+  <button class="btn btn-primary" style="margin-top:.75rem" onclick="sendTestPing()">
+    Send test ping (no Supabase needed)
+  </button>
+</div>
+
+<!-- Event log -->
+<div class="section-divider">Event Log</div>
+<div class="log-panel" id="log-panel">Waiting for events...\n</div>
+<button class="btn btn-ghost" style="margin-top:.5rem;padding:8px;font-size:12px"
+  onclick="clearLog()">Clear log</button>
+
+<script>
+const APP_VERSION = 'v1.0.1';
+let _watchId    = null;
+let _map        = null;
+let _marker     = null;
+let _fixCount   = 0;
+let _pingCount  = 0;
+let _currentPos = null;
+
+// ── Boot checks ───────────────────────────────────────────────────────────────
+function boot(){
+  // Geolocation API
+  const hasGeo = !!navigator.geolocation;
+  set('s-geoapi', hasGeo
+    ? '<span class="badge badge-ok">Available</span>'
+    : '<span class="badge badge-err">Not available</span>');
+
+  // Maps JS API
+  checkMapsApi();
+
+  // Permission API (where supported)
+  checkPermission();
+
+  log('info', 'Boot complete — GPS API: '+(hasGeo?'YES':'NO'));
+  log('info', 'User agent: '+navigator.userAgent.substring(0,80));
+  log('info', 'Protocol: '+location.protocol);
+}
+
+function checkMapsApi(){
+  if(window.google && window.google.maps && window.google.maps.Map){
+    set('s-mapsapi', '<span class="badge badge-ok">Loaded</span>');
+    set('m-status', '<span class="badge badge-ok">Ready</span>');
+    log('ok', 'Maps JS API loaded successfully');
+  } else {
+    set('s-mapsapi', '<span class="badge badge-err">Not loaded</span>');
+    set('m-status', '<span class="badge badge-err">Not loaded — check key/network</span>');
+    log('err', 'Maps JS API NOT loaded — check network and API key');
+    // Retry for 10 seconds
+    let attempts = 0;
+    const t = setInterval(()=>{
+      attempts++;
+      if(window.google?.maps?.Map){
+        clearInterval(t);
+        set('s-mapsapi', '<span class="badge badge-ok">Loaded (after delay)</span>');
+        set('m-status', '<span class="badge badge-ok">Ready</span>');
+        log('ok', 'Maps JS API loaded after '+(attempts*500)+'ms');
+      }
+      if(attempts >= 20) clearInterval(t);
+    }, 500);
+  }
+}
+
+async function checkPermission(){
+  if(!navigator.permissions){
+    set('s-permission', '<span class="badge badge-warn">Permissions API not supported</span>');
+    log('warn', 'Permissions API not available on this browser');
+    return;
+  }
+  try{
+    const result = await navigator.permissions.query({name:'geolocation'});
+    const stateMap = {
+      granted:  '<span class="badge badge-ok">Granted</span>',
+      prompt:   '<span class="badge badge-warn">Will prompt</span>',
+      denied:   '<span class="badge badge-err">Denied — enable in browser settings</span>',
+    };
+    set('s-permission', stateMap[result.state] || result.state);
+    log('info', 'Location permission: '+result.state);
+    result.onchange = ()=>{
+      set('s-permission', stateMap[result.state] || result.state);
+      log('info', 'Permission changed to: '+result.state);
+    };
+  } catch(e){
+    set('s-permission', '<span class="badge badge-warn">Cannot check — '+e.message+'</span>');
+  }
+}
+
+// ── GPS functions ─────────────────────────────────────────────────────────────
+function startWatch(){
+  if(_watchId !== null){ log('warn','Watch already running'); return; }
+  log('info', 'Starting GPS watch (high accuracy)...');
+  set('s-watch', '<span class="badge badge-warn"><span class="ping-dot"></span>Starting...</span>');
+  document.getElementById('btn-watch').disabled = true;
+  document.getElementById('btn-stop').disabled  = false;
+
+  _watchId = navigator.geolocation.watchPosition(
+    onPosition,
+    onError,
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+  log('ok', 'Watch started, ID: '+_watchId);
+  set('s-watch', '<span class="badge badge-ok"><span class="ping-dot"></span>Watching</span>');
+}
+
+function stopWatch(){
+  if(_watchId === null){ return; }
+  navigator.geolocation.clearWatch(_watchId);
+  log('info', 'Watch stopped (ID was '+_watchId+')');
+  _watchId = null;
+  document.getElementById('btn-watch').disabled = false;
+  document.getElementById('btn-stop').disabled  = true;
+  set('s-watch', '<span class="badge badge-idle">Stopped</span>');
+}
+
+function getSingleFix(){
+  log('info', 'Requesting single position fix...');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ onPosition(pos); log('ok','Single fix received'); },
+    err=>{ onError(err); },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+}
+
+function testHighAccuracy(){
+  log('info', 'Testing high accuracy OFF (cell/WiFi positioning)...');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      log('ok', 'Low accuracy fix: '+pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6)+' ±'+Math.round(pos.coords.accuracy)+'m');
+    },
+    err=>{ log('err', 'Low accuracy failed: '+err.message); },
+    {enableHighAccuracy:false, timeout:10000, maximumAge:30000}
+  );
+}
+
+function onPosition(pos){
+  _fixCount++;
+  _currentPos = pos;
+  const c  = pos.coords;
+  const ts = new Date(pos.timestamp).toLocaleTimeString();
+
+  set('p-lat', c.latitude.toFixed(8));
+  set('p-lng', c.longitude.toFixed(8));
+  set('p-acc', c.accuracy ? Math.round(c.accuracy)+'m '+(c.accuracy<20?'(excellent)':c.accuracy<50?'(good)':c.accuracy<100?'(ok)':'(poor)') : '—',
+    c.accuracy < 50 ? 'good' : c.accuracy < 100 ? 'warn' : 'bad');
+  set('p-alt', c.altitude != null ? Math.round(c.altitude)+'m' : 'Not available', 'dim');
+  set('p-spd', c.speed != null ? (c.speed * 3.6).toFixed(1)+' km/h ('+(c.speed * 2.237).toFixed(1)+' mph)' : 'Not available', 'dim');
+  set('p-hdg', c.heading != null ? Math.round(c.heading)+'°' : 'Not available', 'dim');
+  set('p-ts',  ts);
+  set('s-fixcount', _fixCount);
+  set('s-lastfix',  ts);
+  set('s-watch', '<span class="badge badge-ok"><span class="ping-dot"></span>Live — fix #'+_fixCount+'</span>');
+
+  log('ok', '#'+_fixCount+' '+c.latitude.toFixed(6)+', '+c.longitude.toFixed(6)+' ±'+Math.round(c.accuracy)+'m');
+
+  // Update map if loaded
+  updateMap(c.latitude, c.longitude);
+}
+
+function onError(err){
+  const msgs = {1:'Permission denied',2:'Position unavailable',3:'Timeout'};
+  const msg  = msgs[err.code] || ('Error '+err.code);
+  set('s-watch', '<span class="badge badge-err">'+msg+'</span>');
+  log('err', 'GPS error ['+err.code+']: '+msg+' — '+err.message);
+
+  if(err.code === 1){
+    set('s-permission', '<span class="badge badge-err">Denied</span>');
+    log('err', 'FIX: Go to browser settings and allow location for this site');
+  }
+  if(err.code === 3){
+    log('warn', 'Timeout — trying low accuracy fallback...');
+    navigator.geolocation.getCurrentPosition(
+      pos=>{ log('ok','Fallback fix received'); onPosition(pos); },
+      err2=>{ log('err','Fallback also failed: '+err2.message); },
+      {enableHighAccuracy:false, timeout:20000, maximumAge:60000}
+    );
+  }
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+function initMap(){
+  if(!window.google?.maps?.Map){
+    log('err', 'Maps JS API not ready — cannot init map');
+    set('m-status', '<span class="badge badge-err">API not loaded</span>');
+    return;
+  }
+  const center = _currentPos
+    ? {lat:_currentPos.coords.latitude, lng:_currentPos.coords.longitude}
+    : {lat:30.5, lng:-88.1};
+
+  _map = new google.maps.Map(document.getElementById('map'),{
+    zoom: 15,
+    center,
+    mapTypeId: 'roadmap',
+    disableDefaultUI: true,
+    zoomControl: true,
+    styles:[
+      {featureType:'all',elementType:'geometry',stylers:[{color:'#1a2e4a'}]},
+      {featureType:'water',elementType:'geometry',stylers:[{color:'#0d1e30'}]},
+      {featureType:'road',elementType:'geometry',stylers:[{color:'#2d4a6a'}]},
+      {featureType:'road',elementType:'labels.text.fill',stylers:[{color:'#8a9bb0'}]},
+      {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
+    ]
+  });
+  _marker = new google.maps.Marker({
+    map: _map,
+    title: 'Your location',
+    icon:{path:google.maps.SymbolPath.CIRCLE,scale:9,
+      fillColor:'#1E5FAE',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}
+  });
+  set('m-status', '<span class="badge badge-ok">Loaded</span>');
+  log('ok', 'Map initialized');
+  if(_currentPos) updateMap(_currentPos.coords.latitude, _currentPos.coords.longitude);
+}
+
+function updateMap(lat, lng){
+  if(!_map || !_marker) return;
+  const pos = {lat, lng};
+  _marker.setPosition(pos);
+  _map.panTo(pos);
+}
+
+// ── Ping test ─────────────────────────────────────────────────────────────────
+function sendTestPing(){
+  if(!_currentPos){ log('warn','No position yet — start watch first'); return; }
+  _pingCount++;
+  const now = new Date().toISOString();
+  const ping = {
+    lat:      _currentPos.coords.latitude,
+    lng:      _currentPos.coords.longitude,
+    accuracy: _currentPos.coords.accuracy,
+    speed:    _currentPos.coords.speed,
+    heading:  _currentPos.coords.heading,
+    recorded_at: now,
+  };
+  // Simulate — just log the payload (no actual Supabase call)
+  set('ping-last', new Date().toLocaleTimeString());
+  set('ping-count', _pingCount);
+  set('ping-result', '<span class="badge badge-ok">OK (simulated)</span>');
+  log('ok', 'Ping #'+_pingCount+': '+JSON.stringify(ping).substring(0,120));
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function set(id, html, cls){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(cls){
+    el.className = 'stat-value ' + cls;
+    el.textContent = html;
+  } else {
+    el.innerHTML = html;
+  }
+}
+
+function log(type, msg){
+  const panel = document.getElementById('log-panel');
+  if(!panel) return;
+  const time = new Date().toLocaleTimeString();
+  const cls  = {ok:'log-ok', warn:'log-warn', err:'log-err', info:'log-info'}[type]||'';
+  const prefix = {ok:'✓', warn:'⚠', err:'✗', info:'·'}[type]||'·';
+  panel.innerHTML += '<span class="'+cls+'">'+time+' '+prefix+' '+escHtml(msg)+'</span>\n';
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLog(){
+  document.getElementById('log-panel').innerHTML = 'Log cleared.\n';
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Run boot checks on load
+window.addEventListener('load', boot);
+</script>
+</body>
+</html>
