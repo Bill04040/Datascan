@@ -267,6 +267,14 @@ body{background:#0f1e30;color:#f0f4f8}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.success{border-color:var(--green);background:rgba(11,29,52,.95)}
 #toast.error{border-color:var(--red);background:rgba(11,29,52,.95)}
+/* ── Leaflet trip replay ─────────────────────────────────────────────────────*/
+#trip-replay-map{width:100%;height:280px;border-radius:var(--radius);
+  overflow:hidden;background:var(--bg2);margin-top:.75rem}
+.leaflet-container{background:#1a2e4a}
+.ping-popup{font-size:12px;line-height:1.6;font-family:Arial,sans-serif}
+.ping-popup b{color:#1E5FAE}
+.replay-loading{display:flex;align-items:center;justify-content:center;
+  height:280px;color:var(--text3);font-size:13px;gap:8px}
 /* ── Passenger card ────────────────────────────────────────────────────────── */
 .pax-card{display:flex;align-items:center;gap:12px;padding:.875rem;
   background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
@@ -315,6 +323,8 @@ body{background:#0f1e30;color:#f0f4f8}
 .qr-sim{background:var(--bg2);border:2px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;margin-bottom:1rem}
 .qr-sim-icon{font-size:48px;color:var(--text3);margin-bottom:.75rem}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -462,7 +472,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.24';
+const APP_VERSION  = 'v1.0.25';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -816,13 +826,13 @@ const resetSummaryBtn =
   '<i class="ti ti-trash"></i> Delete trip record &amp; start over' +
   '</button></div>';
 
-function showTripSummary(log){
-  _activeTrip = log; // store so resetCompletedTrip can reference it
+async function showTripSummary(log){
+  _activeTrip = log;
   setStepBar(4);
   const content = document.getElementById('trip-content');
   const started   = log.started_at   ? new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
   const completed = log.completed_at ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
-  const miles     = log.miles_end && log.miles_start ? (log.miles_end - log.miles_start).toLocaleString() + ' mi' : '—';
+  const milesVal  = log.miles_end && log.miles_start ? (log.miles_end - log.miles_start).toLocaleString() + ' mi' : '—';
 
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
@@ -833,7 +843,8 @@ function showTripSummary(log){
         <div style="font-size:12px;color:var(--text2)">This trip has been logged and submitted</div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">Trip Summary</div>
+        <div class="card-header">
+          <div class="card-title">Trip Summary</div>
           <span style="font-size:11px;color:var(--text3)">Read only</span>
         </div>
         <div class="info-row"><div class="info-label">Vehicle</div>
@@ -843,12 +854,26 @@ function showTripSummary(log){
         <div class="info-row"><div class="info-label">Arrived</div>
           <div class="info-value">${completed}</div></div>
         <div class="info-row"><div class="info-label">Miles driven</div>
-          <div class="info-value">${miles}</div></div>
+          <div class="info-value">${milesVal}</div></div>
         <div class="info-row"><div class="info-label">Start odometer</div>
           <div class="info-value">${log.miles_start?.toLocaleString()||'—'}</div></div>
         <div class="info-row"><div class="info-label">End odometer</div>
           <div class="info-value">${log.miles_end?.toLocaleString()||'—'}</div></div>
       </div>
+
+      <!-- Trip route replay map -->
+      <div class="card" style="padding:.875rem">
+        <div class="card-header" style="margin-bottom:.5rem">
+          <div class="card-title">Route Replay</div>
+          <span id="ping-summary-label" style="font-size:11px;color:var(--text3)">Loading...</span>
+        </div>
+        <div id="trip-replay-map">
+          <div class="replay-loading">
+            <div class="spinner"></div> Loading route data...
+          </div>
+        </div>
+      </div>
+
       <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);
         border-radius:var(--radius);padding:.875rem;margin-top:.5rem;
         font-size:13px;color:var(--text2);line-height:1.6">
@@ -861,6 +886,112 @@ function showTripSummary(log){
       </button>
       ${_isDevUser() ? resetSummaryBtn : ''}
     </div>`;
+
+  // Load and render route after DOM is ready
+  await loadTripReplay(log.id);
+}
+
+// ── Leaflet trip replay ───────────────────────────────────────────────────────
+async function loadTripReplay(logId){
+  const mapEl   = document.getElementById('trip-replay-map');
+  const labelEl = document.getElementById('ping-summary-label');
+
+  // Fetch all pings for this trip ordered by time
+  const {data:pings, error} = await getSupabase()
+    .from('gps_pings')
+    .select('lat, lng, speed, heading, accuracy, recorded_at')
+    .eq('travel_log_id', logId)
+    .order('recorded_at', {ascending: true});
+
+  if(error || !pings?.length){
+    mapEl.innerHTML = '<div class="replay-loading" style="flex-direction:column;gap:.5rem">' +
+      '<i class="ti ti-map-off" style="font-size:32px;color:var(--text3)"></i>' +
+      '<div>' + (error ? 'Error loading pings' : 'No GPS pings recorded for this trip') + '</div>' +
+      '<div style="font-size:11px;color:var(--text3)">GPS pings are captured every 30s while the trip is active on mobile</div>' +
+      '</div>';
+    if(labelEl) labelEl.textContent = '0 pings';
+    return;
+  }
+
+  if(labelEl) labelEl.textContent = pings.length + ' ping' + (pings.length!==1?'s':'') + ' · ' +
+    new Date(pings[0].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' → ' +
+    new Date(pings[pings.length-1].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+  // Clear loading state and init Leaflet
+  mapEl.innerHTML = '';
+  mapEl.style.height = '280px';
+
+  // Wait a tick for DOM to settle
+  await new Promise(r=>setTimeout(r,100));
+
+  const coords  = pings.map(p=>[p.lat, p.lng]);
+  const midIdx  = Math.floor(coords.length/2);
+  const center  = coords[midIdx] || coords[0];
+
+  // Init Leaflet map with OpenStreetMap tiles (no API key needed)
+  const lmap = L.map(mapEl, {zoomControl:true, attributionControl:false}).setView(center, 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(lmap);
+
+  // Draw route line
+  const routeLine = L.polyline(coords, {
+    color:   '#6AB34F',
+    weight:  4,
+    opacity: .85,
+  }).addTo(lmap);
+  lmap.fitBounds(routeLine.getBounds(), {padding:[20,20]});
+
+  // Start marker (blue)
+  const startIcon = L.divIcon({
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:#1E5FAE;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+    className:'', iconAnchor:[7,7]
+  });
+  // End marker (green)
+  const endIcon = L.divIcon({
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:#6AB34F;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+    className:'', iconAnchor:[7,7]
+  });
+  // Ping dot (small)
+  const pingIcon = L.divIcon({
+    html: '<div style="width:8px;height:8px;border-radius:50%;background:#F4A93A;border:1px solid #fff;opacity:.8"></div>',
+    className:'', iconAnchor:[4,4]
+  });
+
+  L.marker(coords[0], {icon:startIcon}).addTo(lmap)
+    .bindPopup('<div class="ping-popup"><b>Departed</b><br>' +
+      new Date(pings[0].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</div>');
+
+  L.marker(coords[coords.length-1], {icon:endIcon}).addTo(lmap)
+    .bindPopup('<div class="ping-popup"><b>Arrived</b><br>' +
+      new Date(pings[pings.length-1].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</div>');
+
+  // Add ping dots with popups (skip first and last — already have markers)
+  pings.slice(1,-1).forEach((p, i)=>{
+    const time    = new Date(p.recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const speedMph = p.speed != null ? (p.speed * 2.23694).toFixed(1)+' mph' : '—';
+    const heading  = p.heading != null ? headingToCompass(p.heading) : '—';
+    const acc      = p.accuracy != null ? Math.round(p.accuracy)+'m accuracy' : '';
+    L.marker([p.lat, p.lng], {icon:pingIcon}).addTo(lmap)
+      .bindPopup('<div class="ping-popup">' +
+        '<b>Ping #'+(i+2)+'</b><br>' +
+        time+'<br>' +
+        'Speed: '+speedMph+'<br>' +
+        'Heading: '+heading+'<br>' +
+        (acc ? acc : '') +
+        '</div>');
+  });
+
+  // Attribution
+  L.control.attribution({position:'bottomright'}).addTo(lmap);
+}
+
+// Convert heading degrees to compass direction
+function headingToCompass(deg){
+  const dirs=['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(deg/45)%8];
 }
 
 // ── Step bar renderer ─────────────────────────────────────────────────────────
@@ -1517,6 +1648,7 @@ async function confirmPassengers(){
 // ── GPS state ─────────────────────────────────────────────────────────────────
 let _gpsWatchId       = null;
 let _lastPingTime     = 0;
+let _pingCount        = 0;
 let _currentPos       = null;
 let _tripMap          = null;
 let _driverMarker     = null;
@@ -1580,9 +1712,7 @@ async function _onVisibilityChange(){
       if(destLat && destLng){
         const distM = haversineMeters(lat, lng, destLat, destLng);
         const distEl = document.getElementById('stat-distance');
-        if(distEl) distEl.textContent = distM < 1609
-          ? Math.round(distM)+'m'
-          : (distM/1609.34).toFixed(1)+' mi';
+        if(distEl) distEl.textContent = formatDist(distM);
 
         // Check geofence
         if(!_arrivedFired && distM <= GEOFENCE_M){
@@ -1594,14 +1724,22 @@ async function _onVisibilityChange(){
         }
         // Not close enough yet — show distance
         const statusEl = document.getElementById('trip-status-text');
-        if(statusEl) statusEl.textContent = distM < 1609
-          ? Math.round(distM)+'m from destination'
-          : (distM/1609.34).toFixed(1)+' mi from destination';
+        if(statusEl) statusEl.textContent = formatDist(distM)+' from destination';
       }
     },
     err=>{ console.warn('[returnWatch] GPS fix failed:', err.message); },
     {enableHighAccuracy:true, timeout:10000, maximumAge:30000}
   );
+}
+
+// Format distance in miles, switching to feet under 1/4 mile
+function formatDist(meters){
+  const miles = meters / 1609.34;
+  if(miles < 0.25){
+    const feet = Math.round(meters * 3.28084);
+    return feet + ' ft';
+  }
+  return miles.toFixed(1) + ' mi';
 }
 
 function haversineMeters(lat1,lng1,lat2,lng2){
@@ -1686,6 +1824,8 @@ function showTripActive(log){
         <div class="info-row"><div class="info-label">Vehicle</div><div class="info-value">${vehStr}</div></div>
         <div class="info-row"><div class="info-label">Passengers</div><div class="info-value">${paxNames}</div></div>
         <div class="info-row"><div class="info-label">GPS</div><div class="info-value" id="gps-status-text" style="color:var(--text3)">Acquiring signal...</div></div>
+        <div class="info-row"><div class="info-label">Last ping</div><div class="info-value dim" id="last-ping-text">No ping yet</div></div>
+        <div class="info-row"><div class="info-label">Ping count</div><div class="info-value dim" id="ping-count-text">0</div></div>
       </div>
       <button class="btn btn-ghost" style="margin-top:.5rem" onclick="showArrivalBanner(true)">
         <i class="ti ti-map-pin"></i> I have arrived (manual)
@@ -1796,7 +1936,7 @@ async function onGPSUpdate(pos,log){
   if(destLat&&destLng&&window.google){
     const distM=haversineMeters(lat,lng,destLat,destLng);
     const distEl=document.getElementById('stat-distance');
-    if(distEl) distEl.textContent=distM<1609?Math.round(distM)+'m':(distM/1609.34).toFixed(1)+' mi';
+    if(distEl) distEl.textContent=formatDist(distM);
     const dirSvc=new google.maps.DirectionsService();
     dirSvc.route({origin:{lat,lng},destination:{lat:destLat,lng:destLng},travelMode:google.maps.TravelMode.DRIVING},(result,status)=>{
       if(status==='OK'){
@@ -1812,9 +1952,21 @@ async function onGPSUpdate(pos,log){
   const now=Date.now();
   if(now-_lastPingTime>=PING_INTERVAL){
     _lastPingTime=now;
+    _pingCount++;
     const ping={travel_log_id:log.id,lat,lng,accuracy:acc||null,speed:spd||null,heading:hdg||null};
-    try{ await getSupabase().from('gps_pings').insert(ping); }
-    catch(e){ _gpsOfflineBuffer.push(ping); }
+    try{
+      await getSupabase().from('gps_pings').insert(ping);
+      // Update QA ping display
+      const lastPingEl = document.getElementById('last-ping-text');
+      const pingCountEl = document.getElementById('ping-count-text');
+      if(lastPingEl) lastPingEl.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      if(pingCountEl) pingCountEl.textContent = _pingCount + ' ping' + (_pingCount!==1?'s':'') + ' sent';
+    }
+    catch(e){
+      _gpsOfflineBuffer.push(ping);
+      const lastPingEl = document.getElementById('last-ping-text');
+      if(lastPingEl) lastPingEl.textContent = 'Buffered (offline) — ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    }
     if(_gpsOfflineBuffer.length>0){
       try{ await getSupabase().from('gps_pings').insert(_gpsOfflineBuffer); _gpsOfflineBuffer=[]; }catch(e2){}
     }
