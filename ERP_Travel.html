@@ -395,9 +395,17 @@ body{background:#0f1e30;color:#f0f4f8}
 
     <!-- ── HOME / JOB SELECTION ── -->
     <div class="screen active" id="screen-home">
-      <div style="padding:1rem 1rem 0">
-        <div class="screen-title">Today's Jobs</div>
-        <div class="screen-sub" id="home-date-sub">Loading...</div>
+      <div style="padding:1rem 1rem 0;display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <div class="screen-title">Today's Jobs</div>
+          <div class="screen-sub" id="home-date-sub">Loading...</div>
+        </div>
+        <button onclick="doLogout()" style="background:transparent;border:1px solid var(--border);
+          border-radius:var(--radius-sm);padding:7px 12px;color:var(--text2);
+          font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;
+          display:flex;align-items:center;gap:5px;flex-shrink:0;margin-top:2px">
+          <i class="ti ti-logout" style="font-size:14px"></i> Sign out
+        </button>
       </div>
       <div id="jobs-loading" style="display:none;padding:1rem">
         <div class="spinner"></div>
@@ -454,7 +462,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.23';
+const APP_VERSION  = 'v1.0.24';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1520,6 +1528,82 @@ const PING_INTERVAL   = 30000;
 const GEOFENCE_M      = 75;
 const MAPS_KEY        = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 
+// ── Native maps integration ──────────────────────────────────────────────────
+function openNativeMap(){
+  const destLat = _activeJob?.dest_lat;
+  const destLng = _activeJob?.dest_lng;
+  if(!destLat || !destLng){
+    showToast('No destination coordinates — create timesheet with address first','error');
+    return;
+  }
+  const destName = encodeURIComponent(_activeJob.client_name||'Destination');
+  // Universal URL — opens Google Maps on Android, Apple Maps on iOS
+  const url = _currentPos
+    ? `https://maps.google.com/maps?saddr=${_currentPos.lat},${_currentPos.lng}&daddr=${destLat},${destLng}&travelmode=driving`
+    : `https://maps.google.com/maps?q=${destLat},${destLng}&query_place_id=${destName}`;
+  window.open(url, '_blank');
+  // Start watching for return to tab (Option C arrival detection)
+  _startReturnWatch();
+}
+
+// ── Option C: detect when user returns from maps app ─────────────────────────
+let _returnWatchActive = false;
+function _startReturnWatch(){
+  if(_returnWatchActive) return;
+  _returnWatchActive = true;
+  document.addEventListener('visibilitychange', _onVisibilityChange);
+  console.log('[returnWatch] watching for tab return');
+}
+
+function _stopReturnWatch(){
+  _returnWatchActive = false;
+  document.removeEventListener('visibilitychange', _onVisibilityChange);
+}
+
+async function _onVisibilityChange(){
+  if(document.visibilityState !== 'visible') return;
+  if(!_activeTrip) return;
+  console.log('[returnWatch] tab became visible — checking geofence');
+
+  // Request fresh GPS fix
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      _currentPos = {lat, lng};
+      console.log('[returnWatch] fresh fix:', lat, lng);
+
+      // Update distance stat
+      const destLat = _activeJob?.dest_lat;
+      const destLng = _activeJob?.dest_lng;
+      if(destLat && destLng){
+        const distM = haversineMeters(lat, lng, destLat, destLng);
+        const distEl = document.getElementById('stat-distance');
+        if(distEl) distEl.textContent = distM < 1609
+          ? Math.round(distM)+'m'
+          : (distM/1609.34).toFixed(1)+' mi';
+
+        // Check geofence
+        if(!_arrivedFired && distM <= GEOFENCE_M){
+          _arrivedFired = true;
+          _stopReturnWatch();
+          showArrivalBanner(false);
+          showToast('You have arrived!','success');
+          return;
+        }
+        // Not close enough yet — show distance
+        const statusEl = document.getElementById('trip-status-text');
+        if(statusEl) statusEl.textContent = distM < 1609
+          ? Math.round(distM)+'m from destination'
+          : (distM/1609.34).toFixed(1)+' mi from destination';
+      }
+    },
+    err=>{ console.warn('[returnWatch] GPS fix failed:', err.message); },
+    {enableHighAccuracy:true, timeout:10000, maximumAge:30000}
+  );
+}
+
 function haversineMeters(lat1,lng1,lat2,lng2){
   const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
   const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
@@ -1557,7 +1641,17 @@ function showTripActive(log){
           <div style="font-size:12px;color:var(--text2)">Departed ${started} · ${paxCount} passenger${paxCount!==1?'s':''} aboard</div>
         </div>
       </div>
-      <div id="trip-map"></div>
+      <!-- Native maps navigation button -->
+      <div style="margin-bottom:.875rem">
+        <button class="btn btn-primary" onclick="openNativeMap()"
+          style="background:linear-gradient(135deg,#1E5FAE,#185090)">
+          <i class="ti ti-navigation" style="font-size:18px"></i>
+          Navigate to ${_activeJob.client_name||'destination'}
+        </button>
+        <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:5px">
+          Opens in Maps app — return here when you arrive
+        </div>
+      </div>
       <div class="trip-stat-row">
         <div class="trip-stat"><div class="trip-stat-val" id="stat-distance">—</div><div class="trip-stat-lbl">Distance</div></div>
         <div class="trip-stat"><div class="trip-stat-val" id="stat-eta">—</div><div class="trip-stat-lbl">ETA</div></div>
@@ -1598,8 +1692,9 @@ function showTripActive(log){
       </button>
       ${devResetBtn}
     </div>`;
-  setTimeout(()=>initTripMap(log),200);
   startGPS(log);
+  // Start return watch in case user navigates away immediately
+  // (will activate properly when openNativeMap is tapped)
 }
 
 function initTripMap(log, attempt){
@@ -1780,6 +1875,7 @@ async function submitArrival(){
 
     await pushTravelBlocksToTimesheet();
     stopGPS();
+    _stopReturnWatch();
     clearTripState();
 
     showToast('Arrival confirmed — trip complete!','success');
