@@ -4,7 +4,25 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<title>Datascan · GPS Tester v1.0.1</title>
+<title>Datascan · GPS Tester v1.0.2</title>
+<script>
+// Capture Google Maps auth errors before the API loads
+window.gm_authFailure = function(){
+  const msg = 'Google Maps auth failure — key invalid, billing not enabled, or Maps JS API not enabled in Google Cloud Console';
+  document.getElementById('m-status') && (document.getElementById('m-status').innerHTML =
+    '<span class="badge badge-err">AUTH FAILURE</span>');
+  // Log to our panel once it exists
+  window._mapsAuthError = msg;
+  console.error('[Maps]', msg);
+};
+// Capture any Maps JS errors
+window.addEventListener('error', function(e){
+  if(e.filename && e.filename.includes('maps.googleapis')){
+    window._mapsLoadError = e.message;
+    console.error('[Maps load error]', e.message);
+  }
+});
+</script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -68,7 +86,7 @@ body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f
 
 <div class="header">
   <div class="header-logo">DATASCAN <span>GPS</span> TESTER</div>
-  <div class="header-sub">v1.0.1 · Device location + Maps API diagnostic</div>
+  <div class="header-sub">v1.0.2 · Device location + Maps API diagnostic</div>
 </div>
 
 <!-- Status summary -->
@@ -196,7 +214,7 @@ body{font-family:Arial,'Helvetica Neue',sans-serif;background:#0f1e30;color:#f0f
   onclick="clearLog()">Clear log</button>
 
 <script>
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.0.2';
 let _watchId    = null;
 let _map        = null;
 let _marker     = null;
@@ -221,6 +239,17 @@ function boot(){
   log('info', 'Boot complete — GPS API: '+(hasGeo?'YES':'NO'));
   log('info', 'User agent: '+navigator.userAgent.substring(0,80));
   log('info', 'Protocol: '+location.protocol);
+
+  // Report any Maps auth error that fired before boot
+  setTimeout(()=>{
+    if(window._mapsAuthError){
+      log('err', 'Maps auth: '+window._mapsAuthError);
+      log('err', 'Fix: Enable Maps JavaScript API in Google Cloud Console + ensure billing is active');
+    }
+    if(window._mapsLoadError){
+      log('err', 'Maps load error: '+window._mapsLoadError);
+    }
+  }, 2000);
 }
 
 function checkMapsApi(){
@@ -365,14 +394,16 @@ function onError(err){
 // ── Map ───────────────────────────────────────────────────────────────────────
 function initMap(){
   if(!window.google?.maps?.Map){
-    log('err', 'Maps JS API not ready — cannot init map');
-    set('m-status', '<span class="badge badge-err">API not loaded</span>');
+    const errMsg = window._mapsAuthError ? 'AUTH FAILURE — see event log' : 'API not loaded';
+    log('err', 'Maps JS API not ready: '+errMsg);
+    set('m-status', '<span class="badge badge-err">'+errMsg+'</span>');
     return;
   }
   const center = _currentPos
     ? {lat:_currentPos.coords.latitude, lng:_currentPos.coords.longitude}
     : {lat:30.5, lng:-88.1};
 
+  try{
   _map = new google.maps.Map(document.getElementById('map'),{
     zoom: 15,
     center,
@@ -394,8 +425,15 @@ function initMap(){
       fillColor:'#1E5FAE',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}
   });
   set('m-status', '<span class="badge badge-ok">Loaded</span>');
-  log('ok', 'Map initialized');
+  log('ok', 'Map initialized successfully');
   if(_currentPos) updateMap(_currentPos.coords.latitude, _currentPos.coords.longitude);
+  } catch(mapErr){
+    set('m-status', '<span class="badge badge-err">Init failed: '+mapErr.message+'</span>');
+    log('err', 'Map init error: '+mapErr.message);
+    log('err', 'Check: Maps JavaScript API enabled in Google Cloud Console?');
+    log('err', 'Check: Billing enabled on Google Cloud project?');
+    log('err', 'Check: Key restrictions allow this domain?');
+  }
 }
 
 function updateMap(lat, lng){
