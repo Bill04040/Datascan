@@ -472,7 +472,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.25';
+const APP_VERSION  = 'v1.0.26';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1822,7 +1822,14 @@ function showTripActive(log){
         <div class="card-header"><div class="card-title">Trip Details</div></div>
         <div class="info-row"><div class="info-label">Destination</div><div class="info-value">${destStr}</div></div>
         <div class="info-row"><div class="info-label">Vehicle</div><div class="info-value">${vehStr}</div></div>
-        <div class="info-row"><div class="info-label">Passengers</div><div class="info-value">${paxNames}</div></div>
+        <div class="info-row">
+          <div class="info-label">Aboard</div>
+          <div class="info-value">
+            <div style="font-weight:700;color:#fff;margin-bottom:4px">${paxCount+1} of ${paxCount+1} present</div>
+            <div style="font-size:12px;color:var(--green);margin-bottom:2px">✓ ${currentProfile?.full_name||'Driver'} (driver)</div>
+            ${_passengers.map(p=>'<div style="font-size:12px;color:var(--green)">✓ '+p.full_name+'</div>').join('')}
+          </div>
+        </div>
         <div class="info-row"><div class="info-label">GPS</div><div class="info-value" id="gps-status-text" style="color:var(--text3)">Acquiring signal...</div></div>
         <div class="info-row"><div class="info-label">Last ping</div><div class="info-value dim" id="last-ping-text">No ping yet</div></div>
         <div class="info-row"><div class="info-label">Ping count</div><div class="info-value dim" id="ping-count-text">0</div></div>
@@ -1933,20 +1940,26 @@ async function onGPSUpdate(pos,log){
   const statusEl=document.getElementById('gps-status-text');
   if(statusEl) statusEl.textContent='±'+Math.round(acc)+'m accuracy';
   const destLat=_activeJob.dest_lat, destLng=_activeJob.dest_lng;
-  if(destLat&&destLng&&window.google){
+  if(destLat&&destLng){
     const distM=haversineMeters(lat,lng,destLat,destLng);
+
+    // Update distance stat
     const distEl=document.getElementById('stat-distance');
     if(distEl) distEl.textContent=formatDist(distM);
-    const dirSvc=new google.maps.DirectionsService();
-    dirSvc.route({origin:{lat,lng},destination:{lat:destLat,lng:destLng},travelMode:google.maps.TravelMode.DRIVING},(result,status)=>{
-      if(status==='OK'){
-        _directionsRenderer?.setDirections(result);
-        const leg=result.routes[0]?.legs[0];
-        const etaEl=document.getElementById('stat-eta');
-        if(etaEl&&leg) etaEl.textContent=leg.duration.text;
-        document.getElementById('trip-status-text').textContent=leg?leg.distance.text+' away':'En Route';
-      }
-    });
+
+    // Update status text directly from GPS — no Maps API needed
+    const statusEl2=document.getElementById('trip-status-text');
+    if(statusEl2) statusEl2.textContent=formatDist(distM)+' away';
+
+    // Rough ETA based on speed (if available) or assume 45mph average
+    const etaEl=document.getElementById('stat-eta');
+    if(etaEl){
+      const speedMs = spd && spd > 0 ? spd : 20.1; // 45mph in m/s fallback
+      const etaMins = Math.round(distM / speedMs / 60);
+      etaEl.textContent = etaMins <= 1 ? 'Arriving' : etaMins+' min';
+    }
+
+    // Geofence check
     if(!_arrivedFired&&distM<=GEOFENCE_M){ _arrivedFired=true; showArrivalBanner(false); }
   }
   const now=Date.now();
@@ -2043,17 +2056,50 @@ async function submitArrival(){
   }
 }
 
+// Convert ISO string to datetime-local format (YYYY-MM-DDTHH:MM)
+function isoToDatetimeLocal(iso){
+  if(!iso) return null;
+  // Strip seconds and timezone — datetime-local wants YYYY-MM-DDTHH:MM
+  return iso.substring(0,16);
+}
+
 async function pushTravelBlocksToTimesheet(){
   if(!_activeTrip?.timesheet_id) return;
-  const {data:emps}=await getSupabase().from('employees').select('id').eq('timesheet_id',_activeTrip.timesheet_id).limit(1);
-  const empId=emps?.[0]?.id;
-  if(!empId) return;
-  await getSupabase().from('time_blocks').insert({
-    employee_id:empId,timesheet_id:_activeTrip.timesheet_id,
-    block_type:'travel',time_in:_activeTrip.started_at,time_out:new Date().toISOString(),
-    is_primary:false,is_default:false,display_order:99,
-  });
-  console.log('[travel block] pushed to timesheet');
+
+  // Get ALL employees on this timesheet (insert a travel block for each)
+  const {data:emps, error:empErr} = await getSupabase()
+    .from('employees')
+    .select('id, role_type')
+    .eq('timesheet_id', _activeTrip.timesheet_id);
+
+  if(empErr || !emps?.length){
+    console.warn('[pushTravel] no employees found:', empErr?.message);
+    return;
+  }
+
+  const timeIn  = isoToDatetimeLocal(_activeTrip.started_at);
+  const timeOut = isoToDatetimeLocal(new Date().toISOString());
+
+  console.log('[pushTravel] inserting travel blocks — time_in:', timeIn, 'time_out:', timeOut);
+
+  // Insert travel block for each employee
+  const blocks = emps.map(emp=>({
+    employee_id:   emp.id,
+    timesheet_id:  _activeTrip.timesheet_id,
+    block_type:    'travel',
+    time_in:       timeIn,
+    time_out:      timeOut,
+    is_primary:    false,
+    is_default:    false,
+    display_order: 99,
+  }));
+
+  const {error:blockErr} = await getSupabase().from('time_blocks').insert(blocks);
+  if(blockErr){
+    console.error('[pushTravel] insert failed:', blockErr.message);
+  } else {
+    console.log('[pushTravel] ✓ inserted', blocks.length, 'travel blocks');
+  }
 }
 
 // ── Dev user check ────────────────────────────────────────────────────────────
