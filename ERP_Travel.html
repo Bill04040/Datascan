@@ -454,7 +454,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.22';
+const APP_VERSION  = 'v1.0.23';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -646,7 +646,7 @@ async function loadTodaysJobs(){
   const tsIds = data.map(t=>t.id);
   const {data:existingLogs} = await getSupabase()
     .from('travel_logs')
-    .select('id, timesheet_id, status, vehicle_plate, vehicle_make, vehicle_model, miles_start, started_at')
+    .select('id, timesheet_id, status, vehicle_plate, vehicle_make, vehicle_model, vehicle_year, vehicle_color, vehicle_capacity, vehicle_type, miles_start, miles_end, started_at, completed_at, origin_lat, origin_lng')
     .in('timesheet_id', tsIds)
     .order('created_at', {ascending: false});
   const logMap = {};
@@ -1602,9 +1602,19 @@ function showTripActive(log){
   startGPS(log);
 }
 
-function initTripMap(log){
+function initTripMap(log, attempt){
+  attempt = attempt||1;
   const mapEl=document.getElementById('trip-map');
-  if(!mapEl||!window.google||!window.google.maps) return;
+  if(!mapEl) return;
+  // Retry up to 20 times (10 seconds) waiting for Maps API to be ready
+  if(!window.google||!window.google.maps||!window.google.maps.Map){
+    if(attempt < 20){
+      setTimeout(()=>initTripMap(log, attempt+1), 500);
+    } else {
+      if(mapEl) mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,.4);font-size:13px">Map unavailable — check connection</div>';
+    }
+    return;
+  }
   _tripMap=new google.maps.Map(mapEl,{
     zoom:13,center:{lat:30.5,lng:-88.1},mapTypeId:'roadmap',
     disableDefaultUI:true,zoomControl:true,
@@ -1630,20 +1640,50 @@ function initTripMap(log){
 }
 
 function startGPS(log){
+  const statusEl = ()=>document.getElementById('gps-status-text');
   if(!navigator.geolocation){
-    const el=document.getElementById('gps-status-text');
+    const el=statusEl();
     if(el) el.textContent='GPS not available on this device';
     return;
   }
-  _gpsWatchId=navigator.geolocation.watchPosition(
-    pos=>onGPSUpdate(pos,log),
-    err=>{
-      const msgs=['','Permission denied','Position unavailable','Timeout'];
-      const el=document.getElementById('gps-status-text');
-      if(el) el.textContent=msgs[err.code]||'GPS error';
+
+  // Stage 1: try high accuracy — best for outdoors/driving
+  let _gotFirstFix = false;
+  _gpsWatchId = navigator.geolocation.watchPosition(
+    pos=>{
+      _gotFirstFix = true;
+      onGPSUpdate(pos, log);
     },
-    {enableHighAccuracy:true,timeout:15000,maximumAge:5000}
+    err=>{
+      const el = statusEl();
+      if(err.code === 1){ // PERMISSION_DENIED
+        if(el) el.textContent = 'Location permission denied — please enable in browser settings';
+        return;
+      }
+      // Stage 2 fallback: try low accuracy if high accuracy failed
+      console.warn('[GPS] high accuracy failed, trying low accuracy:', err.message);
+      if(el) el.textContent = 'Acquiring signal (low accuracy)...';
+      if(_gpsWatchId !== null){ navigator.geolocation.clearWatch(_gpsWatchId); _gpsWatchId=null; }
+      _gpsWatchId = navigator.geolocation.watchPosition(
+        pos=>{ _gotFirstFix=true; onGPSUpdate(pos,log); },
+        err2=>{
+          const msgs=['','Permission denied','Position unavailable','Timeout'];
+          if(statusEl()) statusEl().textContent = msgs[err2.code]||'GPS unavailable';
+        },
+        {enableHighAccuracy:false, timeout:20000, maximumAge:30000}
+      );
+    },
+    {enableHighAccuracy:true, timeout:12000, maximumAge:0}
   );
+
+  // If no fix after 15 seconds, nudge the user
+  setTimeout(()=>{
+    if(!_gotFirstFix){
+      const el=statusEl();
+      if(el && el.textContent.includes('Acquiring'))
+        el.textContent='Still locating — make sure location is enabled';
+    }
+  }, 15000);
 }
 
 function stopGPS(){
