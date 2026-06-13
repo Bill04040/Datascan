@@ -267,6 +267,18 @@ body{background:#0f1e30;color:#f0f4f8}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.success{border-color:var(--green);background:rgba(11,29,52,.95)}
 #toast.error{border-color:var(--red);background:rgba(11,29,52,.95)}
+/* ── Return trip ─────────────────────────────────────────────────────────── */
+.leg-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.leg-outbound{background:rgba(30,95,174,.2);color:#90b8f0}
+.leg-return{background:rgba(244,169,58,.2);color:#F4A93A}
+.leg-jobtojob{background:rgba(106,179,79,.2);color:#6AB34F}
+.dest-option{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:.875rem;margin-bottom:.625rem;cursor:pointer;transition:border-color .15s}
+.dest-option:active{background:var(--bg3)}
+.dest-option.selected{border-color:var(--green);background:rgba(106,179,79,.08)}
+.dest-option-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:3px}
+.dest-option-sub{font-size:12px;color:var(--text2)}
 /* ── Leaflet trip replay ─────────────────────────────────────────────────────*/
 #trip-replay-map{width:100%;height:280px;border-radius:var(--radius);
   overflow:hidden;background:var(--bg2);margin-top:.75rem}
@@ -407,7 +419,7 @@ body{background:#0f1e30;color:#f0f4f8}
     <div class="screen active" id="screen-home">
       <div style="padding:1rem 1rem 0;display:flex;align-items:flex-start;justify-content:space-between">
         <div>
-          <div class="screen-title">Today's Jobs</div>
+          <div class="screen-title">My Trips</div>
           <div class="screen-sub" id="home-date-sub">Loading...</div>
         </div>
         <button onclick="doLogout()" style="background:transparent;border:1px solid var(--border);
@@ -417,7 +429,7 @@ body{background:#0f1e30;color:#f0f4f8}
           <i class="ti ti-logout" style="font-size:14px"></i> Sign out
         </button>
       </div>
-      <div id="jobs-loading" style="display:none;padding:1rem">
+      <div id="jobs-loading" style="display:none;padding:1rem;text-align:center">
         <div class="spinner"></div>
       </div>
       <div id="jobs-list" style="padding:.75rem 1rem 5rem"></div>
@@ -452,7 +464,7 @@ body{background:#0f1e30;color:#f0f4f8}
   <!-- Bottom nav -->
   <div class="bottom-nav">
     <button class="nav-btn active" id="nav-home" onclick="showScreen('home')">
-      <i class="ti ti-map-2"></i>Jobs
+      <i class="ti ti-steering-wheel"></i>My Trips
     </button>
     <button class="nav-btn" id="nav-trip" onclick="showScreen('trip')" style="display:none">
       <i class="ti ti-steering-wheel"></i>Trip
@@ -472,7 +484,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.26';
+const APP_VERSION  = 'v1.0.32';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -594,7 +606,7 @@ async function onSignedIn(user){
       today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 
     // Load today's jobs
-    await loadTodaysJobs();
+    await loadMyTrips();
 
   } catch(e) {
     console.error('[onSignedIn] unexpected error:', e);
@@ -605,168 +617,193 @@ async function onSignedIn(user){
 }
 
 // ── Load today's jobs (today's timesheets for this supervisor) ─────────────────
-async function loadTodaysJobs(){
+// ── My Trips: travel_logs as source of truth ─────────────────────────────────
+async function loadTodaysJobs(){ return loadMyTrips(); } // backward compat alias
+
+async function loadMyTrips(){
   const loading = document.getElementById('jobs-loading');
   const list    = document.getElementById('jobs-list');
   loading.style.display = 'block';
   list.innerHTML = '';
 
-  // Use local date not UTC to avoid timezone-related off-by-one issues
   const now   = new Date();
-  const today = now.getFullYear() + '-' +
-    String(now.getMonth()+1).padStart(2,'0') + '-' +
+  const today = now.getFullYear()+'-'+
+    String(now.getMonth()+1).padStart(2,'0')+'-'+
     String(now.getDate()).padStart(2,'0');
 
-  console.log('[loadTodaysJobs] querying for date:', today, 'supervisor_id:', currentUser.id);
+  // Update subtitle
+  const sub = document.getElementById('home-date-sub');
+  if(sub) sub.textContent = now.toLocaleDateString('en-US',
+    {weekday:'long',month:'long',day:'numeric'});
 
-  // Query by supervisor_id first
-  let {data, error} = await getSupabase()
-    .from('timesheets')
-    .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id, dest_lat, dest_lng, dest_address')
-    .eq('supervisor_id', currentUser.id)
-    .eq('job_date', today)
-    .order('created_at', {ascending: false});
-
-  console.log('[loadTodaysJobs] by supervisor_id — rows:', data?.length, 'error:', error?.message);
-
-  // Fallback: if no results, try matching by supervisor_name (in case timesheet was
-  // created by another user but assigned to this supervisor by name)
-  if((!data || !data.length) && !error && currentProfile?.full_name){
-    const fallback = await getSupabase()
-      .from('timesheets')
-      .select('id, client_name, client_code, store_number, city, state, job_date, status, supervisor_name, supervisor_id, dest_lat, dest_lng, dest_address')
-      .eq('job_date', today)
-      .ilike('supervisor_name', currentProfile.full_name.trim())
-      .order('created_at', {ascending: false});
-    console.log('[loadTodaysJobs] fallback by supervisor_name:', fallback.data?.length, 'error:', fallback.error?.message);
-    if(fallback.data?.length) data = fallback.data;
-  }
+  // ── Primary query: this driver's travel logs today ────────────────────────
+  const {data:myLogs, error:logErr} = await getSupabase()
+    .from('travel_logs')
+    .select(`id, timesheet_id, status, leg_type, vehicle_plate, vehicle_make,
+             vehicle_model, vehicle_year, vehicle_color, vehicle_capacity, vehicle_type,
+             miles_start, miles_end, started_at, completed_at,
+             origin_lat, origin_lng, dest_lat, dest_lng, dest_address, parent_log_id,
+             from_job_id, to_job_id, driver_name`)
+    .eq('driver_id', currentUser.id)
+    .gte('started_at', today+'T00:00:00.000Z')
+    .lte('started_at', today+'T23:59:59.999Z')
+    .order('started_at', {ascending: false});
 
   loading.style.display = 'none';
 
-  if(error){
+  if(logErr){
     list.innerHTML = `<div class="empty-state">
       <i class="ti ti-alert-circle empty-icon"></i>
-      <div class="empty-title">Could not load jobs</div>
-      <div class="empty-msg">${error.message}</div>
+      <div class="empty-title">Could not load trips</div>
+      <div class="empty-msg">${logErr.message}</div>
     </div>`; return;
   }
 
-  if(!data || !data.length){
-    list.innerHTML = `<div class="empty-state">
-      <i class="ti ti-calendar-off empty-icon"></i>
-      <div class="empty-title">No jobs today</div>
-      <div class="empty-msg">No timesheets found for today.<br>Create a timesheet in the Datascan app first.</div>
-    </div>`; return;
+  // ── Check one-trip-at-a-time gate ─────────────────────────────────────────
+  const activeLog = (myLogs||[]).find(l=>l.status==='active');
+
+  // ── Fetch timesheet metadata for each log ─────────────────────────────────
+  let tsMap = {};
+  if(myLogs?.length){
+    const tsIds = [...new Set(myLogs.map(l=>l.timesheet_id).filter(Boolean))];
+    const {data:sheets} = await getSupabase()
+      .from('timesheets')
+      .select('id, client_name, store_number, city, state, job_date, dest_lat, dest_lng, dest_address')
+      .in('id', tsIds);
+    (sheets||[]).forEach(t=>{ tsMap[t.id] = t; });
   }
 
-  // Check which jobs already have an active travel log
-  const tsIds = data.map(t=>t.id);
-  const {data:existingLogs} = await getSupabase()
-    .from('travel_logs')
-    .select('id, timesheet_id, status, vehicle_plate, vehicle_make, vehicle_model, vehicle_year, vehicle_color, vehicle_capacity, vehicle_type, miles_start, miles_end, started_at, completed_at, origin_lat, origin_lng')
-    .in('timesheet_id', tsIds)
-    .order('created_at', {ascending: false});
-  const logMap = {};
-  (existingLogs||[]).forEach(l=>{
-    if(!logMap[l.timesheet_id]) logMap[l.timesheet_id] = l; // keep most recent
-  });
+  // ── Render trip cards ─────────────────────────────────────────────────────
+  if(!myLogs?.length){
+    // No trips yet today — show new trip button
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="ti ti-steering-wheel empty-icon"></i>
+        <div class="empty-title">No trips today</div>
+        <div class="empty-msg">Ready to drive? Start a new trip below.</div>
+      </div>`;
+    _appendNewTripButton(list, null);
+    return;
+  }
 
-  // Check if any trip is active — if so only that card is selectable
-  const hasActiveTrip = Object.values(logMap).some(l=>l.status==='active');
+  // Render each trip log as a card
+  myLogs.forEach(log => {
+    const ts      = tsMap[log.timesheet_id] || {};
+    const isActive = log.status === 'active';
+    const isSetup  = log.status === 'setup';
+    const isDone   = log.status === 'completed';
 
-  data.forEach(ts=>{
-    const log       = logMap[ts.id];
-    const logStatus = log?.status || null;
-    const hasLog    = !!log;
-    const isActive  = logStatus === 'active';
-    const isSetup   = logStatus === 'setup';
-    const isDone    = logStatus === 'completed';
+    const legLabel = log.leg_type === 'return'     ? 'Return'
+                   : log.leg_type === 'job_to_job' ? 'Job to Job'
+                   : 'Outbound';
+    const legColor = log.leg_type === 'return'     ? 'var(--amber)'
+                   : log.leg_type === 'job_to_job' ? 'var(--green)'
+                   : 'var(--blue)';
 
-    // Grey out cards that aren't the active trip
-    const isDisabled = hasActiveTrip && !isActive;
-    const isClickable = !isDisabled;
-
-    const statusPillMap = {
-      draft:     '<span class="pill pill-draft">Draft</span>',
-      submitted: '<span class="pill pill-submitted">Pending Review</span>',
-      approved:  '<span class="pill pill-approved">Approved</span>',
-      rejected:  '<span class="pill pill-rejected">Rejected</span>',
-    };
-    const tsPill = statusPillMap[ts.status] || '';
-
-    const logBadge = isActive
-      ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"></i> Trip in progress</span>'
+    const statusBadge = isActive
+      ? '<span class="pill pill-active"><i class="ti ti-steering-wheel"></i> In Progress</span>'
       : isSetup
-      ? '<span class="pill pill-active" style="background:rgba(30,95,174,.2);color:#90b8f0"><i class="ti ti-users"></i> Check-in incomplete</span>'
-      : isDone
-      ? '<span class="pill pill-approved">Log complete</span>'
-      : '<span style="font-size:12px;color:var(--text3)">No travel log yet</span>';
+      ? '<span class="pill" style="background:rgba(30,95,174,.2);color:#90b8f0"><i class="ti ti-users"></i> Checking In</span>'
+      : '<span class="pill pill-approved"><i class="ti ti-circle-check"></i> Complete</span>';
 
-    const actionLabel = isActive
-      ? 'Resume trip <i class="ti ti-chevron-right"></i>'
-      : isSetup
-      ? 'Continue check-in <i class="ti ti-chevron-right"></i>'
-      : isDone
-      ? 'View summary <i class="ti ti-chevron-right"></i>'
-      : 'Start trip <i class="ti ti-chevron-right"></i>';
+    const actionLabel = isActive ? 'Resume <i class="ti ti-chevron-right"></i>'
+      : isSetup ? 'Continue <i class="ti ti-chevron-right"></i>'
+      : 'View Summary <i class="ti ti-chevron-right"></i>';
 
-    const city = [ts.city, ts.state].filter(Boolean).join(', ');
-    const date = ts.job_date
-      ? new Date(ts.job_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+    const started = log.started_at
+      ? new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+      : '';
+    const completed = log.completed_at
+      ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+      : '';
+    const miles = log.miles_end && log.miles_start
+      ? (log.miles_end - log.miles_start).toLocaleString()+' mi'
       : '';
 
     const card = document.createElement('button');
-    card.className = 'job-card'
-      + (isActive  ? ' active-trip' : '')
-      + (isDisabled ? ' disabled'   : '');
-
+    card.className = 'job-card' + (isActive ? ' active-trip' : '');
     card.innerHTML = `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div class="job-client">${ts.client_name || 'Unknown Client'}</div>
-        ${tsPill}
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:.5rem">
+        <div>
+          <div class="job-client" style="margin-bottom:3px">${ts.client_name||'Unknown Store'}</div>
+          <span style="font-size:11px;font-weight:700;color:${legColor};
+            text-transform:uppercase;letter-spacing:.06em">${legLabel}</span>
+        </div>
+        ${statusBadge}
       </div>
       <div class="job-meta">
         ${ts.store_number ? `<div class="job-meta-item"><i class="ti ti-building-store"></i> Store ${ts.store_number}</div>` : ''}
-        ${city ? `<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${city}</div>` : ''}
-        ${date ? `<div class="job-meta-item"><i class="ti ti-calendar"></i> ${date}</div>` : ''}
+        ${[ts.city,ts.state].filter(Boolean).length ? `<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${[ts.city,ts.state].filter(Boolean).join(', ')}</div>` : ''}
+        ${log.vehicle_plate ? `<div class="job-meta-item"><i class="ti ti-car"></i> ${log.vehicle_plate}${log.vehicle_make?' · '+log.vehicle_make:''}</div>` : ''}
+        ${started ? `<div class="job-meta-item"><i class="ti ti-clock"></i> Departed ${started}${completed?' · Arrived '+completed:''}</div>` : ''}
+        ${miles ? `<div class="job-meta-item"><i class="ti ti-route"></i> ${miles}</div>` : ''}
       </div>
       <div class="job-divider"></div>
       <div class="job-footer">
-        ${logBadge}
-        <div style="display:flex;align-items:center;gap:4px;font-size:12px;
-          color:${isClickable?'var(--green)':'var(--text3)'};font-weight:600">
-          ${isDisabled ? 'Unavailable' : actionLabel}
-        </div>
+        <div style="font-size:12px;color:var(--text3)">Tap to ${isActive?'resume':'view'}</div>
+        <div style="font-size:12px;color:var(--green);font-weight:600">${actionLabel}</div>
       </div>`;
 
-    if(isClickable) card.onclick = () => selectJob(ts, log);
+    card.onclick = () => selectTrip(log, ts);
     list.appendChild(card);
   });
+
+  // Show + New Trip button only if no active trip (one-at-a-time gate)
+  _appendNewTripButton(list, activeLog);
 }
 
-// ── Select a job — resumes at correct step based on log status ───────────────
-async function selectJob(ts, log){
-  _activeJob = ts;
+function _appendNewTripButton(container, activeLog){
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:.75rem 0';
 
-  document.getElementById('trip-screen-title').textContent = ts.client_name || 'Trip';
-  document.getElementById('trip-screen-sub').textContent =
-    [ts.store_number ? 'Store '+ts.store_number : '', ts.city, ts.state].filter(Boolean).join(' · ');
+  if(activeLog){
+    // Blocked — active trip in progress
+    wrap.innerHTML = `
+      <div style="background:rgba(244,169,58,.08);border:1px solid rgba(244,169,58,.3);
+        border-radius:var(--radius);padding:1rem;text-align:center">
+        <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:4px">
+          <i class="ti ti-lock"></i> Trip in progress
+        </div>
+        <div style="font-size:12px;color:var(--text2)">
+          Complete or reset your current trip before starting a new one.
+        </div>
+      </div>`;
+  } else {
+    // Available — show new trip button
+    wrap.innerHTML = `
+      <button class="btn btn-primary" onclick="startNewTrip()"
+        style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <i class="ti ti-plus" style="font-size:18px"></i>
+        Start New Trip
+      </button>`;
+  }
+  container.appendChild(wrap);
+}
+
+// ── selectTrip: log IS the source of truth — resume at correct step ──────────
+async function selectTrip(log, ts){
+  // ts may be partial — ensure _activeJob has full timesheet data
+  _activeJob  = ts || {};
+  _activeJob.id           = _activeJob.id || log.timesheet_id;
+  _activeJob.dest_lat     = _activeJob.dest_lat  || log.dest_lat;
+  _activeJob.dest_lng     = _activeJob.dest_lng  || log.dest_lng;
+  _activeJob.dest_address = _activeJob.dest_address || log.dest_address;
+
+  const clientName = ts?.client_name || 'Trip';
+  const storeSub   = [ts?.store_number?'Store '+ts.store_number:'', ts?.city, ts?.state]
+    .filter(Boolean).join(' · ');
+
+  document.getElementById('trip-screen-title').textContent = clientName;
+  document.getElementById('trip-screen-sub').textContent   = storeSub;
   document.getElementById('nav-trip').style.display = 'flex';
   showScreen('trip');
 
-  const logStatus = log?.status || null;
-
-  if(logStatus === 'active'){
-    // ── Resume active trip ────────────────────────────────────────────────────
+  if(log.status === 'active'){
     _activeTrip = log;
-    // Restore vehicle + passenger state from Supabase
     await _resumeActiveTrip(log);
 
-  } else if(logStatus === 'setup'){
-    // ── Resume passenger check-in ─────────────────────────────────────────────
-    _activeTrip = log;
-    // Restore vehicle from log record
+  } else if(log.status === 'setup'){
+    _activeTrip      = log;
     _selectedVehicle = {
       plate:        log.vehicle_plate,
       make:         log.vehicle_make,
@@ -779,15 +816,113 @@ async function selectJob(ts, log){
     _startingMileage = log.miles_start;
     showPassengerCheckIn();
 
-  } else if(logStatus === 'completed'){
-    // ── Show read-only trip summary ───────────────────────────────────────────
+  } else if(log.status === 'completed'){
     showTripSummary(log);
-
-  } else {
-    // ── No log yet — start fresh ──────────────────────────────────────────────
-    loadTripState(); // restore any locally saved vehicle/state
-    showVehicleSelection();
   }
+}
+
+// Backward compat — old code may still call selectJob
+function selectJob(ts, log){ return log ? selectTrip(log, ts) : startNewTrip(); }
+
+// ── Start New Trip: pick a store, then create the log ─────────────────────────
+async function startNewTrip(){
+  // One-at-a-time gate — double check before proceeding
+  const {data:activeLogs} = await getSupabase()
+    .from('travel_logs')
+    .select('id, status')
+    .eq('driver_id', currentUser.id)
+    .eq('status', 'active')
+    .limit(1);
+
+  if(activeLogs?.length){
+    showToast('Complete your current trip before starting a new one','error');
+    return;
+  }
+
+  // Show store picker in the trip screen
+  document.getElementById('trip-screen-title').textContent = 'New Trip';
+  document.getElementById('trip-screen-sub').textContent   = 'Select your destination';
+  document.getElementById('nav-trip').style.display = 'flex';
+  showScreen('trip');
+  await showStorePicker();
+}
+
+// ── Store picker: choose today's job ─────────────────────────────────────────
+async function showStorePicker(){
+  setStepBar(1);
+  const content = document.getElementById('trip-content');
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.75rem">
+        Where are you heading today?
+      </div>
+      <div id="store-picker-list">
+        <div style="text-align:center;padding:2rem">
+          <div class="spinner"></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" style="margin-top:1rem" onclick="showScreen('home');loadMyTrips()">
+        <i class="ti ti-arrow-left"></i> Cancel
+      </button>
+    </div>`;
+
+  const now   = new Date();
+  const today = now.getFullYear()+'-'+
+    String(now.getMonth()+1).padStart(2,'0')+'-'+
+    String(now.getDate()).padStart(2,'0');
+
+  // Load all timesheets for today (any supervisor)
+  const {data:sheets, error} = await getSupabase()
+    .from('timesheets')
+    .select('id, client_name, store_number, city, state, job_date, dest_lat, dest_lng, dest_address, supervisor_name')
+    .eq('job_date', today)
+    .order('client_name', {ascending:true});
+
+  const listEl = document.getElementById('store-picker-list');
+  if(!listEl) return;
+
+  if(error || !sheets?.length){
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="ti ti-calendar-off empty-icon"></i>
+        <div class="empty-title">No jobs scheduled today</div>
+        <div class="empty-msg">A supervisor needs to create a timesheet first<br>in the Datascan Timesheet app.</div>
+      </div>`;
+    return;
+  }
+
+  listEl.innerHTML = '';
+  sheets.forEach(ts=>{
+    const card = document.createElement('button');
+    card.className = 'job-card';
+    const city = [ts.city,ts.state].filter(Boolean).join(', ');
+    const hasCoords = !!(ts.dest_lat && ts.dest_lng);
+    card.innerHTML = `
+      <div class="job-client">${ts.client_name||'Unknown'}</div>
+      <div class="job-meta">
+        ${ts.store_number?`<div class="job-meta-item"><i class="ti ti-building-store"></i> Store ${ts.store_number}</div>`:''}
+        ${city?`<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${city}</div>`:''}
+        ${ts.supervisor_name?`<div class="job-meta-item"><i class="ti ti-user"></i> ${ts.supervisor_name}</div>`:''}
+        ${hasCoords
+          ? `<div class="job-meta-item" style="color:var(--green)"><i class="ti ti-map-check"></i> GPS coordinates ready</div>`
+          : `<div class="job-meta-item" style="color:var(--amber)"><i class="ti ti-map-exclamation"></i> No GPS coords — enter street address in timesheet</div>`}
+      </div>
+      <div class="job-divider"></div>
+      <div class="job-footer">
+        <div style="font-size:12px;color:var(--text3)">${ts.dest_address||city||''}</div>
+        <div style="font-size:12px;color:var(--green);font-weight:600">
+          Select <i class="ti ti-chevron-right"></i>
+        </div>
+      </div>`;
+    card.onclick = ()=>{
+      _activeJob = ts;
+      document.getElementById('trip-screen-title').textContent = ts.client_name||'Trip';
+      document.getElementById('trip-screen-sub').textContent =
+        [ts.store_number?'Store '+ts.store_number:'',ts.city,ts.state].filter(Boolean).join(' · ');
+      showVehicleSelection();
+    };
+    listEl.appendChild(card);
+  });
 }
 
 // ── Resume an active trip ─────────────────────────────────────────────────────
@@ -822,8 +957,11 @@ const resetSummaryBtn =
   'border:1px dashed rgba(163,45,45,.4);border-radius:var(--radius)">' +
   '<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;' +
   'letter-spacing:.08em;margin-bottom:.625rem">&#9888; Dev / Test Only</div>' +
-  '<button class="btn btn-danger btn-sm" onclick="resetCompletedTrip()">' +
-  '<i class="ti ti-trash"></i> Delete trip record &amp; start over' +
+  '<button class="btn btn-danger btn-sm" onclick="resetCompletedTrip()" style="margin-bottom:.5rem">' +
+  '<i class="ti ti-trash"></i> Delete this trip &amp; start over' +
+  '</button>' +
+  '<button class="btn btn-danger btn-sm" onclick="fullTestCleanup()">' +
+  '<i class="ti ti-database-x"></i> Full test cleanup (all my trips)' +
   '</button></div>';
 
 async function showTripSummary(log){
@@ -896,17 +1034,45 @@ async function loadTripReplay(logId){
   const mapEl   = document.getElementById('trip-replay-map');
   const labelEl = document.getElementById('ping-summary-label');
 
-  // Fetch all pings for this trip ordered by time
-  const {data:pings, error} = await getSupabase()
+  // First try exact logId match
+  // If that returns few pings, also check sibling logs for the same timesheet
+  // (handles race condition where multiple logs were created for same trip)
+  let {data:pings, error} = await getSupabase()
     .from('gps_pings')
-    .select('lat, lng, speed, heading, accuracy, recorded_at')
+    .select('lat, lng, speed, heading, accuracy, recorded_at, travel_log_id')
     .eq('travel_log_id', logId)
     .order('recorded_at', {ascending: true});
+
+  // If we got fewer than 3 pings, check if a sibling log has more
+  if(!error && (!pings?.length || pings.length < 3) && _activeTrip?.timesheet_id){
+    console.log('[loadTripReplay] few pings for this log — checking sibling logs for same timesheet');
+    const {data:siblingLogs} = await getSupabase()
+      .from('travel_logs')
+      .select('id')
+      .eq('timesheet_id', _activeTrip.timesheet_id)
+      .neq('id', logId);
+
+    if(siblingLogs?.length){
+      const siblingIds = siblingLogs.map(l=>l.id);
+      const {data:siblingPings} = await getSupabase()
+        .from('gps_pings')
+        .select('lat, lng, speed, heading, accuracy, recorded_at, travel_log_id')
+        .in('travel_log_id', siblingIds)
+        .order('recorded_at', {ascending: true});
+
+      if(siblingPings?.length > (pings?.length||0)){
+        console.log('[loadTripReplay] using sibling log pings:', siblingPings.length, 'vs', pings?.length||0);
+        pings = siblingPings;
+      }
+    }
+  }
+
+  console.log('[loadTripReplay] final ping count:', pings?.length);
 
   if(error || !pings?.length){
     mapEl.innerHTML = '<div class="replay-loading" style="flex-direction:column;gap:.5rem">' +
       '<i class="ti ti-map-off" style="font-size:32px;color:var(--text3)"></i>' +
-      '<div>' + (error ? 'Error loading pings' : 'No GPS pings recorded for this trip') + '</div>' +
+      '<div>' + (error ? 'Error: '+error.message : 'No GPS pings recorded for this trip') + '</div>' +
       '<div style="font-size:11px;color:var(--text3)">GPS pings are captured every 30s while the trip is active on mobile</div>' +
       '</div>';
     if(labelEl) labelEl.textContent = '0 pings';
@@ -1560,6 +1726,9 @@ function cancelStartTrip(){
 
 async function confirmPassengers(){
   if(_boardedIds.size === 0){ showToast('Select at least one passenger','error'); return; }
+  // Guard against double-tap creating duplicate travel logs
+  if(window._confirmPassengersRunning){ console.warn('[confirmPassengers] already running — ignoring double tap'); return; }
+  window._confirmPassengersRunning = true;
 
   // Build passengers list from boarded IDs
   _passengers = _availablePassengers
@@ -1602,9 +1771,15 @@ async function confirmPassengers(){
       vehicle_capacity:_selectedVehicle.capacity || null,
       miles_start:     _startingMileage,
       status:          'active',
+      leg_type:        'outbound',
+      from_job_id:     null,
+      to_job_id:       _activeJob.id,
       started_at:      new Date().toISOString(),
       origin_lat:      originLat,
       origin_lng:      originLng,
+      dest_lat:        _activeJob.dest_lat || null,
+      dest_lng:        _activeJob.dest_lng || null,
+      dest_address:    _activeJob.dest_address || null,
     };
 
     const {data:log, error:logErr} = await getSupabase()
@@ -1637,6 +1812,8 @@ async function confirmPassengers(){
     showToast('Error starting trip: ' + e.message, 'error');
     btn.disabled = false;
     btn.innerHTML = '<i class="ti ti-flag"></i> Confirm & Start Trip';
+  } finally {
+    window._confirmPassengersRunning = false;
   }
 }
 
@@ -1647,6 +1824,9 @@ async function confirmPassengers(){
 
 // ── GPS state ─────────────────────────────────────────────────────────────────
 let _gpsWatchId       = null;
+let _outboundLog      = null;  // reference to the outbound trip for return
+let _returnDest       = null;  // {lat, lng, address, type} for return trip
+let _legType          = 'outbound'; // outbound | return | job_to_job
 let _lastPingTime     = 0;
 let _pingCount        = 0;
 let _currentPos       = null;
@@ -1732,6 +1912,20 @@ async function _onVisibilityChange(){
   );
 }
 
+// Handle starting mileage entry for return/j2j legs
+function onLegStartMilesInput(val){
+  const miles = parseInt(val||'0');
+  const err   = document.getElementById('leg-start-miles-err');
+  if(miles > 0 && _activeTrip?.id){
+    if(err) err.style.display='none';
+    // Update the travel_logs record with start mileage
+    getSupabase().from('travel_logs').update({miles_start:miles}).eq('id',_activeTrip.id)
+      .then(()=>{ _activeTrip.miles_start=miles; });
+  } else if(val && miles <= 0){
+    if(err){ err.textContent='Enter a valid odometer reading'; err.style.display='block'; }
+  }
+}
+
 // Format distance in miles, switching to feet under 1/4 mile
 function formatDist(meters){
   const miles = meters / 1609.34;
@@ -1765,8 +1959,11 @@ function showTripActive(log){
       'border:1px dashed rgba(163,45,45,.4);border-radius:var(--radius)">' +
       '<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;' +
       'letter-spacing:.08em;margin-bottom:.625rem">&#9888; Dev / Test Only</div>' +
-      '<button class="btn btn-danger btn-sm" onclick="resetTrip()">' +
+      '<button class="btn btn-danger btn-sm" onclick="resetTrip()" style="margin-bottom:.5rem">' +
       '<i class="ti ti-refresh"></i> Reset trip — re-do passenger check-in' +
+      '</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="fullTestCleanup()">' +
+      '<i class="ti ti-database-x"></i> Full test cleanup (all my trips)' +
       '</button></div>'
     : '';
 
@@ -1774,11 +1971,24 @@ function showTripActive(log){
     <div style="padding:1rem;padding-bottom:6rem">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.875rem">
         <span class="ping-dot"></span>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:#fff">En Route — <span id="trip-status-text">Locating...</span></div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <div style="font-size:14px;font-weight:700;color:#fff">En Route — <span id="trip-status-text">Locating...</span></div>
+            ${log.leg_type==='return'?'<span class="leg-badge leg-return">Return</span>':log.leg_type==='job_to_job'?'<span class="leg-badge leg-jobtojob">Job to Job</span>':'<span class="leg-badge leg-outbound">Outbound</span>'}
+          </div>
           <div style="font-size:12px;color:var(--text2)">Departed ${started} · ${paxCount} passenger${paxCount!==1?'s':''} aboard</div>
         </div>
       </div>
+      <!-- Starting mileage for return/j2j legs -->
+      ${_isReturnLeg(log) ? `
+      <div class="field" style="margin-bottom:.875rem">
+        <label>Starting mileage for this leg <span style="color:#f87171">*</span></label>
+        <input type="number" id="leg-start-miles" placeholder="Current odometer"
+          inputmode="numeric" style="font-size:18px"
+          oninput="onLegStartMilesInput(this.value)"/>
+        <div id="leg-start-miles-err" style="font-size:12px;color:#f87171;margin-top:4px;display:none"></div>
+      </div>` : ''}
+
       <!-- Native maps navigation button -->
       <div style="margin-bottom:.875rem">
         <button class="btn btn-primary" onclick="openNativeMap()"
@@ -1966,7 +2176,30 @@ async function onGPSUpdate(pos,log){
   if(now-_lastPingTime>=PING_INTERVAL){
     _lastPingTime=now;
     _pingCount++;
-    const ping={travel_log_id:log.id,lat,lng,accuracy:acc||null,speed:spd||null,heading:hdg||null};
+    // Calculate distance to destination for this ping
+    const _destLat = _activeJob?.dest_lat || log.dest_lat;
+    const _destLng = _activeJob?.dest_lng || log.dest_lng;
+    const _distToDestM = (_destLat && _destLng)
+      ? haversineMeters(lat, lng, _destLat, _destLng)
+      : null;
+    const _isMoving = spd != null ? spd > 0.9 : null; // > ~2mph
+
+    const ping={
+      travel_log_id:  log.id,
+      driver_id:      currentUser.id,
+      timesheet_id:   log.timesheet_id || _activeJob?.id || null,
+      vehicle_plate:  log.vehicle_plate || _selectedVehicle?.plate || null,
+      leg_type:       log.leg_type || _legType || 'outbound',
+      trip_status:    'active',
+      sequence_num:   _pingCount,
+      lat, lng,
+      accuracy:       acc||null,
+      speed:          spd||null,
+      heading:        hdg||null,
+      dist_to_dest_m: _distToDestM ? Math.round(_distToDestM) : null,
+      is_moving:      _isMoving,
+      geofence_hit:   _distToDestM != null && _distToDestM <= GEOFENCE_M,
+    };
     try{
       await getSupabase().from('gps_pings').insert(ping);
       // Update QA ping display
@@ -2044,24 +2277,311 @@ async function submitArrival(){
     clearTripState();
 
     showToast('Arrival confirmed — trip complete!','success');
-    // Show summary screen instead of jumping to home
-    setTimeout(()=>{
-      showTripSummary(_activeTrip);
-      _activeTrip = null;
-      loadTodaysJobs(); // refresh job list in background
-    }, 800);
+    const completedLog = {..._activeTrip};
+    _activeTrip = null;
+
+    // If this was an outbound trip — offer return trip
+    if(completedLog.leg_type === 'outbound' || !completedLog.leg_type){
+      _outboundLog = completedLog;
+      setTimeout(()=>{ showPostArrivalScreen(completedLog); loadTodaysJobs(); }, 800);
+    } else {
+      setTimeout(()=>{ showTripSummary(completedLog); loadTodaysJobs(); }, 800);
+    }
   } catch(e){
     showToast('Error: '+e.message,'error');
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-flag-check"></i> Confirm Arrival'; }
   }
 }
 
-// Convert ISO string to datetime-local format (YYYY-MM-DDTHH:MM)
+// Convert UTC ISO string to local datetime-local format (YYYY-MM-DDTHH:MM)
+// datetime-local inputs are LOCAL time — must convert from UTC before storing
 function isoToDatetimeLocal(iso){
   if(!iso) return null;
-  // Strip seconds and timezone — datetime-local wants YYYY-MM-DDTHH:MM
-  return iso.substring(0,16);
+  const d = new Date(iso);
+  // Subtract timezone offset to get local time
+  const localMs = d.getTime() - (d.getTimezoneOffset() * 60000);
+  return new Date(localMs).toISOString().substring(0,16);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST-ARRIVAL: offer return trip or view summary
+// ══════════════════════════════════════════════════════════════════════════════
+function showPostArrivalScreen(log){
+  setStepBar(4);
+  const content = document.getElementById('trip-content');
+  const arrived = log.completed_at
+    ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+    : new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      <div style="background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.25);
+        border-radius:var(--radius);padding:1.25rem;margin-bottom:1.25rem;text-align:center">
+        <i class="ti ti-map-pin-check" style="font-size:36px;color:var(--green);display:block;margin-bottom:.5rem"></i>
+        <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">Arrived at ${_activeJob.client_name||'destination'}</div>
+        <div style="font-size:13px;color:var(--text2)">${arrived} · ${log.vehicle_plate||''}</div>
+      </div>
+
+      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.75rem">What happens next?</div>
+
+      <!-- Option 1: Start return trip -->
+      <div class="dest-option" id="opt-return" onclick="selectPostArrivalOption('return')">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="dest-option-title"><i class="ti ti-arrow-back-up" style="color:var(--amber)"></i> Return trip</div>
+          <span class="leg-badge leg-return">Return</span>
+        </div>
+        <div class="dest-option-sub">Drive crew back toward the meet spot or original waypoints</div>
+      </div>
+
+      <!-- Option 2: Job to job -->
+      <div class="dest-option" id="opt-jobtojob" onclick="selectPostArrivalOption('job_to_job')">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="dest-option-title"><i class="ti ti-arrows-right-left" style="color:var(--green)"></i> Go to next job</div>
+          <span class="leg-badge leg-jobtojob">Job to Job</span>
+        </div>
+        <div class="dest-option-sub">Travel directly from this job to another job site</div>
+      </div>
+
+      <!-- Option 3: End day -->
+      <div class="dest-option" id="opt-done" onclick="selectPostArrivalOption('done')">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="dest-option-title"><i class="ti ti-home-check" style="color:var(--blue)"></i> No return trip needed</div>
+          <span class="leg-badge" style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.6)">Done</span>
+        </div>
+        <div class="dest-option-sub">Work is complete — view trip summary</div>
+      </div>
+
+      <div id="post-arrival-next" style="margin-top:1.25rem"></div>
+    </div>`;
+}
+
+function selectPostArrivalOption(option){
+  // Highlight selected
+  ['return','jobtojob','done'].forEach(o=>{
+    const el = document.getElementById('opt-'+o);
+    if(el) el.classList.toggle('selected', o === option.replace('job_to_job','jobtojob'));
+  });
+
+  const nextEl = document.getElementById('post-arrival-next');
+  if(!nextEl) return;
+
+  if(option === 'return'){
+    nextEl.innerHTML = `
+      <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:.75rem">Return destination:</div>
+
+      <!-- Default: back to meet spot -->
+      <div class="dest-option selected" id="dest-meetspot"
+        onclick="selectReturnDest('meetspot')">
+        <div class="dest-option-title"><i class="ti ti-map-pin" style="color:var(--amber)"></i> Original meet spot</div>
+        <div class="dest-option-sub">${_outboundLog?.origin_lat ? 'GPS coordinates on file' : 'No meet spot coordinates saved'}</div>
+      </div>
+
+      <!-- Custom destination -->
+      <div class="dest-option" id="dest-custom" onclick="selectReturnDest('custom')">
+        <div class="dest-option-title"><i class="ti ti-map-search" style="color:var(--blue)"></i> Different destination</div>
+        <div class="dest-option-sub">Hotel, next job, or another address</div>
+      </div>
+
+      <div id="custom-dest-fields" style="display:none;margin-top:.75rem">
+        <div class="field">
+          <label>Destination address</label>
+          <input type="text" id="return-dest-address" placeholder="Enter address"
+            oninput="onReturnAddressInput(this.value)"/>
+        </div>
+      </div>
+
+      <button class="btn btn-success" id="start-return-btn"
+        style="margin-top:1rem" onclick="startReturnTrip()">
+        <i class="ti ti-steering-wheel"></i> Begin return trip
+      </button>`;
+
+    // Default return destination to meet spot
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Original meet spot', type:'meetspot'}
+      : null;
+
+  } else if(option === 'job_to_job'){
+    nextEl.innerHTML = `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:.75rem">
+        Select the next job from today's schedule or enter a destination.
+      </div>
+      <div id="next-job-list"></div>
+      <button class="btn btn-success" id="start-j2j-btn"
+        style="margin-top:1rem" onclick="startJobToJobTrip()" disabled>
+        <i class="ti ti-arrows-right-left"></i> Start job-to-job trip
+      </button>`;
+    loadNextJobOptions();
+
+  } else {
+    // Done — show summary
+    showTripSummary(_outboundLog);
+  }
+}
+
+function selectReturnDest(type){
+  document.getElementById('dest-meetspot')?.classList.toggle('selected', type==='meetspot');
+  document.getElementById('dest-custom')?.classList.toggle('selected', type==='custom');
+  document.getElementById('custom-dest-fields').style.display = type==='custom' ? '' : 'none';
+
+  if(type === 'meetspot'){
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Original meet spot', type:'meetspot'}
+      : null;
+  } else {
+    _returnDest = null; // will be set by geocoding
+  }
+}
+
+async function onReturnAddressInput(val){
+  if(!val || val.length < 5) return;
+  // Debounce geocoding
+  clearTimeout(window._returnGeoTimer);
+  window._returnGeoTimer = setTimeout(async()=>{
+    try{
+      const url = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+        + encodeURIComponent(val) + '&key=AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if(data.status === 'OK' && data.results[0]){
+        const loc = data.results[0].geometry.location;
+        _returnDest = {lat:loc.lat, lng:loc.lng,
+          address:data.results[0].formatted_address, type:'custom'};
+        showToast('Destination found: ' + data.results[0].formatted_address,'success');
+      }
+    } catch(e){ console.warn('[returnGeocode]', e.message); }
+  }, 1000);
+}
+
+async function loadNextJobOptions(){
+  const listEl = document.getElementById('next-job-list');
+  if(!listEl) return;
+  // Load today's other timesheets (not the current one)
+  const now   = new Date();
+  const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const {data} = await getSupabase()
+    .from('timesheets')
+    .select('id, client_name, store_number, city, state, dest_lat, dest_lng, dest_address')
+    .eq('supervisor_id', currentUser.id)
+    .eq('job_date', today)
+    .neq('id', _activeJob?.id||'');
+
+  if(!data?.length){
+    listEl.innerHTML = '<div style="font-size:13px;color:var(--text3);padding:.5rem 0">No other jobs today — enter a custom destination above</div>';
+    return;
+  }
+
+  listEl.innerHTML = data.map(ts=>`
+    <div class="dest-option" id="j2j-${ts.id}" onclick="selectNextJob('${ts.id}', ${ts.dest_lat||null}, ${ts.dest_lng||null}, '${(ts.dest_address||[ts.client_name,ts.city,ts.state].filter(Boolean).join(', ')).replace(/'/g,"\'")}')">
+      <div class="dest-option-title">${ts.client_name||'Job'}</div>
+      <div class="dest-option-sub">${[ts.store_number?'Store '+ts.store_number:'',ts.city,ts.state].filter(Boolean).join(' · ')}</div>
+    </div>`).join('');
+}
+
+function selectNextJob(tsId, lat, lng, address){
+  document.querySelectorAll('[id^="j2j-"]').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('j2j-'+tsId)?.classList.add('selected');
+  _returnDest = {lat, lng, address, type:'job', to_job_id: tsId};
+  document.getElementById('start-j2j-btn').disabled = !lat;
+}
+
+// ── Start return trip ─────────────────────────────────────────────────────────
+async function startReturnTrip(){
+  if(!_returnDest && !_outboundLog?.origin_lat){
+    showToast('Please select a return destination','error'); return;
+  }
+  await _beginNewLeg('return');
+}
+
+async function startJobToJobTrip(){
+  if(!_returnDest){ showToast('Please select the next job','error'); return; }
+  await _beginNewLeg('job_to_job');
+}
+
+async function _beginNewLeg(legType){
+  const btn = document.getElementById(legType==='return'?'start-return-btn':'start-j2j-btn');
+  if(btn){ btn.disabled=true; btn.innerHTML='Starting...'; }
+
+  try{
+    // Capture current GPS position as new origin
+    let originLat=null, originLng=null;
+    try{
+      const pos = await new Promise((res,rej)=>{
+        navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:8000});
+      });
+      originLat=pos.coords.latitude; originLng=pos.coords.longitude;
+    } catch(e){ console.warn('[newLeg] GPS unavailable'); }
+
+    const dest = _returnDest;
+    const logPayload = {
+      timesheet_id:  _outboundLog?.timesheet_id || _activeJob?.id,
+      driver_id:     currentUser.id,
+      driver_name:   currentProfile?.full_name||'',
+      vehicle_id:    _selectedVehicle?.id||null,
+      vehicle_plate: _selectedVehicle?.plate,
+      vehicle_type:  _selectedVehicle?.vehicle_type||'fleet',
+      vehicle_year:  _selectedVehicle?.year||null,
+      vehicle_make:  _selectedVehicle?.make||null,
+      vehicle_model: _selectedVehicle?.model||null,
+      vehicle_color: _selectedVehicle?.color||null,
+      vehicle_capacity: _selectedVehicle?.capacity||null,
+      miles_start:   null, // driver enters at start of this leg
+      status:        'active',
+      leg_type:      legType,
+      parent_log_id: _outboundLog?.id||null,
+      from_job_id:   _activeJob?.id||null,
+      to_job_id:     dest?.to_job_id||null,
+      started_at:    new Date().toISOString(),
+      origin_lat:    originLat,
+      origin_lng:    originLng,
+      dest_lat:      dest?.lat||null,
+      dest_lng:      dest?.lng||null,
+      dest_address:  dest?.address||null,
+    };
+
+    const {data:newLog, error} = await getSupabase()
+      .from('travel_logs').insert(logPayload).select().single();
+    if(error) throw error;
+
+    // Re-board passengers from outbound trip as starting point
+    const {data:prevPax} = await getSupabase()
+      .from('travel_passengers')
+      .select('profile_id, full_name, role')
+      .eq('travel_log_id', _outboundLog?.id||'');
+
+    _passengers = prevPax || [];
+    if(_passengers.length){
+      const paxRows = _passengers.map(p=>({
+        travel_log_id: newLog.id,
+        profile_id:    p.profile_id,
+        full_name:     p.full_name,
+        role:          p.role,
+        boarded_at:    new Date().toISOString(),
+        waypoint:      legType==='return'?'job_site':'job_site',
+      }));
+      await getSupabase().from('travel_passengers').insert(paxRows);
+    }
+
+    _activeTrip  = newLog;
+    _legType     = legType;
+    _arrivedFired = false;
+    _arrivedAt   = null;
+    clearTripState();
+
+    showToast(legType==='return'?'Return trip started':'Job-to-job trip started','success');
+    showTripActive(newLog);
+
+  } catch(e){
+    console.error('[beginNewLeg]', e);
+    showToast('Error starting trip: '+e.message,'error');
+    if(btn){ btn.disabled=false; btn.innerHTML=legType==='return'?'Begin return trip':'Start job-to-job trip'; }
+  }
+}
+
+// ── Return trip needs starting mileage ───────────────────────────────────────
+// Override showTripActive for return legs to prompt for starting mileage first
+function _isReturnLeg(log){ return ['return','job_to_job'].includes(log?.leg_type); }
 
 async function pushTravelBlocksToTimesheet(){
   if(!_activeTrip?.timesheet_id) return;
@@ -2082,17 +2602,45 @@ async function pushTravelBlocksToTimesheet(){
 
   console.log('[pushTravel] inserting travel blocks — time_in:', timeIn, 'time_out:', timeOut);
 
-  // Insert travel block for each employee
-  const blocks = emps.map(emp=>({
-    employee_id:   emp.id,
-    timesheet_id:  _activeTrip.timesheet_id,
-    block_type:    'travel',
-    time_in:       timeIn,
-    time_out:      timeOut,
-    is_primary:    false,
-    is_default:    false,
-    display_order: 99,
-  }));
+  // Determine pay rate type per employee role
+  const legType = _activeTrip.leg_type || 'outbound';
+  const driverId = _activeTrip.driver_id;
+
+  // Check if existing travel block for this trip already exists (prevent dupes)
+  const {data:existing} = await getSupabase()
+    .from('time_blocks')
+    .select('id, employee_id')
+    .eq('travel_log_id', _activeTrip.id)
+    .eq('block_type', 'travel');
+  const existingEmpIds = new Set((existing||[]).map(b=>b.employee_id));
+
+  // Insert travel block for each employee not already inserted
+  const blocks = emps
+    .filter(emp => !existingEmpIds.has(emp.id))
+    .map(emp=>{
+      const isDriver = emp.profile_id === driverId;
+      const payRateType = isDriver ? 'driver'
+        : legType === 'job_to_job' ? 'passenger_full'
+        : 'passenger';
+      return {
+        employee_id:      emp.id,
+        timesheet_id:     _activeTrip.timesheet_id,
+        block_type:       'travel',
+        time_in:          timeIn,
+        time_out:         timeOut,
+        is_primary:       false,
+        is_default:       false,
+        display_order:    99,
+        travel_log_id:    _activeTrip.id,
+        travel_leg_type:  legType,
+        pay_rate_type:    payRateType,
+      };
+    });
+
+  if(!blocks.length){
+    console.log('[pushTravel] all blocks already exist — skipping');
+    return;
+  }
 
   const {error:blockErr} = await getSupabase().from('time_blocks').insert(blocks);
   if(blockErr){
@@ -2110,6 +2658,57 @@ function _isDevUser(){
 
 // ── Reset trip (dev/test only) ────────────────────────────────────────────────
 // Reset from completed summary screen
+// ── Full test data cleanup (dev only) ────────────────────────────────────────
+async function fullTestCleanup(){
+  if(!confirm(
+    'This will delete ALL travel logs, passengers, GPS pings and orphaned travel blocks ' +
+    'for your account.\n\nThis cannot be undone. Continue?'
+  )) return;
+
+  try{
+    // 1. Get all travel log IDs for this driver
+    const {data:logs} = await getSupabase()
+      .from('travel_logs')
+      .select('id')
+      .eq('driver_id', currentUser.id);
+
+    const logIds = (logs||[]).map(l=>l.id);
+    console.log('[cleanup] found', logIds.length, 'travel logs');
+
+    // 2. Delete in dependency order
+    if(logIds.length){
+      await getSupabase().from('gps_pings').delete().in('travel_log_id', logIds);
+      await getSupabase().from('travel_passengers').delete().in('travel_log_id', logIds);
+      await getSupabase().from('travel_logs').delete().in('id', logIds);
+    }
+
+    // 3. Delete orphaned travel blocks (no time_in)
+    await getSupabase().from('time_blocks').delete()
+      .eq('block_type','travel')
+      .is('time_in', null);
+
+    // 4. Reset local state
+    stopGPS();
+    _stopReturnWatch();
+    _activeTrip      = null;
+    _selectedVehicle = null;
+    _startingMileage = null;
+    _passengers      = [];
+    _arrivedAt       = null;
+    _arrivedFired    = false;
+    clearTripState();
+    document.getElementById('nav-trip').style.display = 'none';
+
+    showToast('Cleanup complete — ' + logIds.length + ' trip(s) deleted','success');
+    showScreen('home');
+    await loadMyTrips();
+
+  } catch(e){
+    console.error('[fullTestCleanup]', e);
+    showToast('Cleanup failed: ' + e.message, 'error');
+  }
+}
+
 async function resetCompletedTrip(){
   const logId = _activeTrip?.id;
   if(!logId){ showToast('No trip record found — refresh the page','error'); return; }
@@ -2125,7 +2724,7 @@ async function resetCompletedTrip(){
     document.getElementById('nav-trip').style.display='none';
     showToast('Trip deleted — ready to start over','success');
     showScreen('home');
-    await loadTodaysJobs();
+    await loadMyTrips();
   } catch(e){
     console.error('[resetCompletedTrip]', e);
     showToast('Delete failed: '+e.message,'error');
@@ -2158,7 +2757,7 @@ async function resetTrip(){
     showToast('Trip reset — starting from vehicle selection','success');
     document.getElementById('nav-trip').style.display = 'none';
     showScreen('home');
-    await loadTodaysJobs();
+    await loadMyTrips();
 
   } catch(e){
     showToast('Reset failed: ' + e.message, 'error');
