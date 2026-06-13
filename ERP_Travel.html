@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <title>Datascan Travel Log</title>
@@ -513,7 +516,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.37';
+const APP_VERSION  = 'v1.0.39';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -2211,21 +2214,32 @@ function showTripActive(log){
         <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">You have arrived!</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:.5rem">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:1rem" id="arrived-time-display"></div>
-        <div class="field" style="text-align:left">
-          <label>Ending mileage <span style="color:#f87171">*</span>
-            <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none">
-              (must be greater than start: ${_startingMileage?.toLocaleString()||'—'})
-            </span>
-          </label>
+        <!-- Ending mileage — prominent pulsing amber box -->
+        <div id="arrival-miles-block" style="background:rgba(244,169,58,.12);
+          border:2px solid var(--amber);border-radius:var(--radius);padding:1rem;
+          margin:.75rem 0;animation:milePulse 1.5s ease-in-out infinite">
+          <div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:.5rem;
+            display:flex;align-items:center;gap:6px">
+            <i class="ti ti-gauge" style="font-size:18px"></i>
+            Enter ending odometer to confirm arrival
+          </div>
           <input type="number" id="ending-miles"
-            placeholder="Current odometer"
+            placeholder="e.g. ${((_startingMileage||0)+30)}"
             inputmode="numeric"
             min="${(_startingMileage||0)+1}"
-            style="font-size:18px"
+            style="font-size:28px;font-weight:700;text-align:center;width:100%;
+              padding:.75rem;border:2px solid var(--amber);border-radius:var(--radius-sm);
+              background:rgba(244,169,58,.06);color:#fff;font-family:inherit"
             oninput="onEndMilesInput(this)"/>
-          <div id="miles-err" style="font-size:12px;color:#f87171;margin-top:4px;display:none"></div>
+          <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:5px">
+            Start odometer: <strong style="color:#fff">${(_startingMileage||0).toLocaleString()}</strong>
+            — ending must be greater
+          </div>
+          <div id="miles-err" style="font-size:12px;color:#f87171;margin-top:4px;
+            display:none;text-align:center"></div>
         </div>
-        <button class="btn btn-success" id="confirm-arrival-btn" style="margin-top:.75rem"
+        <button class="btn btn-success" id="confirm-arrival-btn"
+          style="opacity:.4;transition:opacity .3s"
           onclick="submitArrival()" disabled>
           <i class="ti ti-flag-check"></i> Confirm Arrival
         </button>
@@ -2470,23 +2484,25 @@ function showArrivalBanner(isManual){
 }
 
 function onEndMilesInput(inp){
-  const val     = parseInt(inp.value||'0');
-  const minVal  = (_startingMileage||0) + 1;
-  const errEl   = document.getElementById('miles-err');
-  const btn     = document.getElementById('confirm-arrival-btn');
+  const val   = parseInt(inp.value||'0');
+  const errEl = document.getElementById('miles-err');
+  const btn   = document.getElementById('confirm-arrival-btn');
+  const block = document.getElementById('arrival-miles-block');
   if(!inp.value){
-    errEl.style.display='none';
-    btn.disabled = true;
+    if(errEl) errEl.style.display='none';
+    if(btn){ btn.disabled=true; btn.style.opacity='.4'; }
+    if(block){ block.style.borderColor='var(--amber)';
+      block.style.animation='milePulse 1.5s ease-in-out infinite'; }
     return;
   }
   if(val <= (_startingMileage||0)){
-    errEl.textContent = 'Ending mileage must be greater than starting mileage (' + (_startingMileage||0).toLocaleString() + ')';
-    errEl.style.display='block';
+    if(errEl){ errEl.textContent='Must be greater than '+(_startingMileage||0).toLocaleString(); errEl.style.display='block'; }
     inp.style.borderColor='#f87171';
-    btn.disabled = true;
+    if(block){ block.style.borderColor='#f87171'; block.style.animation='none'; }
+    if(btn){ btn.disabled=true; btn.style.opacity='.4'; }
   } else {
-    errEl.style.display='none';
-    inp.style.borderColor='';
+    if(errEl) errEl.style.display='none';
+    inp.style.borderColor='var(--green)';
     btn.disabled = false;
   }
 }
