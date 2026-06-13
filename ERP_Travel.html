@@ -516,7 +516,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.41';
+const APP_VERSION  = 'v1.0.42';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1341,10 +1341,11 @@ function headingToCompass(deg){
 // ── Step bar renderer ─────────────────────────────────────────────────────────
 function renderStepBar(activeStep){
   const steps = [
-    {n:1, label:'Job'},
-    {n:2, label:'Vehicle'},
-    {n:3, label:'Passengers'},
+    {n:1, label:'Meet Site'},
+    {n:2, label:'Job'},
+    {n:3, label:'Timesheet'},
     {n:4, label:'Trip'},
+    {n:5, label:'Destinated'},
   ];
   return `<div class="step-bar">
     ${steps.map((s,i)=>`
@@ -1420,7 +1421,7 @@ function setStepBar(active){
     el.id = 'trip-step-bar';
     document.getElementById('app-content').insertBefore(el, document.getElementById('app-content').firstChild);
   }
-  const steps = [{n:1,label:'Job'},{n:2,label:'Vehicle'},{n:3,label:'Passengers'},{n:4,label:'Trip'}];
+  const steps = [{n:1,label:'Meet Site'},{n:2,label:'Job'},{n:3,label:'Timesheet'},{n:4,label:'Trip'},{n:5,label:'Destinated'}];
   el.innerHTML = `<div class="step-bar">${steps.map((s,i)=>`
     ${i>0?`<div class="step-connector ${active>s.n?'done':''}"></div>`:''}
     <div class="step-item">
@@ -2174,20 +2175,37 @@ function playArrivalTone(){
   try{
     if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const ctx = _audioCtx;
-    // Three-note ascending chime
-    [[0,523],[0.15,659],[0.3,784]].forEach(([delay,freq])=>{
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'sine'; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.4, ctx.currentTime+delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.4);
-      osc.start(ctx.currentTime+delay);
-      osc.stop(ctx.currentTime+delay+0.5);
+    if(ctx.state === 'suspended') ctx.resume();
+    // Four-note ascending chime — louder, layered sine+triangle
+    [[0,523],[0.2,659],[0.4,784],[0.6,1047]].forEach(([delay,freq])=>{
+      ['sine','triangle'].forEach(type=>{
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime+delay);
+        gain.gain.linearRampToValueAtTime(0.85, ctx.currentTime+delay+0.05);
+        gain.gain.setValueAtTime(0.7, ctx.currentTime+delay+0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.6);
+        osc.start(ctx.currentTime+delay);
+        osc.stop(ctx.currentTime+delay+0.7);
+      });
     });
-    // Vibrate if supported
-    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    // Long vibration pattern — hard to miss
+    if(navigator.vibrate) navigator.vibrate([300,100,300,100,500]);
   } catch(e){ console.warn('[arrivalTone]', e.message); }
+
+  // Voice prompt — "You have arrived at your destination"
+  try{
+    if(window.speechSynthesis){
+      const utter = new SpeechSynthesisUtterance('You have arrived at your destination');
+      utter.volume = 1;
+      utter.rate   = 0.95;
+      utter.pitch  = 1;
+      setTimeout(()=>{ window.speechSynthesis.speak(utter); }, 900);
+    }
+  } catch(e){ console.warn('[arrivalVoice]', e.message); }
 }
 
 // Format distance in miles, switching to feet under 1/4 mile
@@ -2657,6 +2675,13 @@ async function submitArrival(){
   if(!endMiles || endMiles <= (_startingMileage||0)){
     showToast('Ending mileage must be greater than starting mileage','error'); return;
   }
+  if(!confirm(
+    'Confirm arrival?\n\n' +
+    'This will end the current trip leg and record:\n' +
+    '• Ending odometer: ' + endMiles.toLocaleString() + '\n' +
+    '• Arrival time: now\n\n' +
+    'This cannot be undone.'
+  )) return;
   const completedAt = _arrivedAt || new Date().toISOString();
   const btn = document.getElementById('confirm-arrival-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
@@ -2809,8 +2834,31 @@ async function showPostArrivalScreen(log){
 
       <div id="post-arrival-next" style="margin-top:.875rem"></div>
 
+      <!-- Starting odometer for the return/next leg — required before departure -->
+      <div id="post-miles-block" style="background:rgba(244,169,58,.12);
+        border:2px solid var(--amber);border-radius:var(--radius);padding:1rem;
+        margin-top:.875rem;animation:milePulse 1.5s ease-in-out infinite">
+        <div id="post-miles-label" style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:.5rem;
+          display:flex;align-items:center;gap:6px">
+          <i class="ti ti-gauge" style="font-size:18px"></i>
+          Starting odometer for this leg — required
+        </div>
+        <input type="number" id="post-start-miles"
+          placeholder="e.g. ${(log.miles_end||0).toLocaleString()}"
+          inputmode="numeric"
+          style="font-size:26px;font-weight:700;text-align:center;width:100%;
+            padding:.75rem;border:2px solid var(--amber);border-radius:var(--radius-sm);
+            background:rgba(244,169,58,.06);color:#fff;font-family:inherit"
+          oninput="onPostStartMilesInput(this.value)"/>
+        <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:5px">
+          Previous leg ended at: <strong style="color:#fff">${(log.miles_end||0).toLocaleString()}</strong>
+          — must be ≥ this
+        </div>
+        <div id="post-miles-err" style="font-size:12px;color:#f87171;margin-top:4px;display:none;text-align:center"></div>
+      </div>
+
       <button class="btn btn-success" id="begin-return-btn"
-        style="margin-top:1rem" onclick="beginReturnLeg()">
+        style="margin-top:1rem;opacity:.4;transition:opacity .3s" onclick="beginReturnLeg()" disabled>
         <i class="ti ti-steering-wheel"></i> Begin trip
       </button>
 
@@ -2969,6 +3017,43 @@ async function confirmReleaseDriver(){
   setTimeout(()=>{ showScreen('home'); loadMyTrips(); }, 1200);
 }
 
+function onPostStartMilesInput(val){
+  const miles  = parseInt(val||'0');
+  const minVal = _outboundLog?.miles_end || 0;
+  const err    = document.getElementById('post-miles-err');
+  const block  = document.getElementById('post-miles-block');
+  const label  = document.getElementById('post-miles-label');
+  const btn    = document.getElementById('begin-return-btn');
+  const inp    = document.getElementById('post-start-miles');
+
+  if(!val){
+    if(err) err.style.display='none';
+    if(block){ block.style.borderColor='var(--amber)'; block.style.background='rgba(244,169,58,.12)';
+      block.style.animation='milePulse 1.5s ease-in-out infinite'; }
+    if(label) label.innerHTML='<i class="ti ti-gauge" style="font-size:18px"></i> Starting odometer for this leg — required';
+    if(inp) inp.style.borderColor='var(--amber)';
+    _startingMileage = null;
+    if(btn){ btn.disabled=true; btn.style.opacity='.4'; }
+    return;
+  }
+
+  if(miles < minVal){
+    if(err){ err.textContent='Must be ≥ '+minVal.toLocaleString()+' (end of previous leg)'; err.style.display='block'; }
+    if(block){ block.style.borderColor='#f87171'; block.style.background='rgba(248,113,113,.08)'; block.style.animation='none'; }
+    if(label) label.innerHTML='<i class="ti ti-alert-triangle" style="font-size:18px"></i> Mileage too low';
+    if(inp) inp.style.borderColor='#f87171';
+    _startingMileage = null;
+    if(btn){ btn.disabled=true; btn.style.opacity='.4'; }
+  } else {
+    if(err) err.style.display='none';
+    if(block){ block.style.borderColor='var(--green)'; block.style.background='rgba(106,179,79,.12)'; block.style.animation='none'; }
+    if(label) label.innerHTML='<i class="ti ti-circle-check" style="font-size:18px"></i> Ready';
+    if(inp) inp.style.borderColor='var(--green)';
+    _startingMileage = miles;
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+  }
+}
+
 async function beginReturnLeg(){
   // Validate / default destination
   if(!_returnDest && (_legType==='return'||!_legType)){
@@ -2980,6 +3065,23 @@ async function beginReturnLeg(){
   if(!_returnDest){
     showToast('Please select a destination first','error'); return;
   }
+
+  // Validate starting mileage was entered
+  if(!_startingMileage || _startingMileage <= 0){
+    showToast('Please enter the starting odometer for this leg','error'); return;
+  }
+
+  // Confirmation — prevent accidental taps
+  const legLabel = _legType==='return' ? 'return trip'
+    : _legType==='job_to_job' ? 'job-to-job trip'
+    : 'trip';
+  if(!confirm(
+    'Start ' + legLabel + '?\n\n' +
+    'Destination: ' + (_returnDest.address||_activeJob?.client_name||'—') + '\n' +
+    'Starting odometer: ' + _startingMileage.toLocaleString() + '\n' +
+    'Passengers: ' + (window._returnPaxSelected?.size||0) + '\n\n' +
+    'Make sure everyone is aboard before continuing.'
+  )) return;
 
   // ── CRITICAL: overwrite _activeJob destination with the RETURN destination ──
   // _activeJob.dest_lat/lng drives geofence + navigation on the active trip screen.
@@ -3173,7 +3275,7 @@ async function _beginNewLeg(legType){
       vehicle_model: _selectedVehicle?.model||null,
       vehicle_color: _selectedVehicle?.color||null,
       vehicle_capacity: _selectedVehicle?.capacity||null,
-      miles_start:   null, // driver enters at start of this leg
+      miles_start:   _startingMileage || null, // entered on post-arrival screen before departure
       status:        'active',
       leg_type:      legType,
       parent_log_id: _outboundLog?.id||null,
