@@ -516,7 +516,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.39';
+const APP_VERSION  = 'v1.0.40';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -2669,6 +2669,19 @@ async function showPostArrivalScreen(log){
         <i class="ti ti-steering-wheel"></i> Begin trip
       </button>
 
+      <!-- Dev debug: show parsed destination data -->
+      ${_isDevUser() ? `<div style="background:rgba(30,95,174,.08);
+        border:1px dashed rgba(30,95,174,.4);border-radius:var(--radius);
+        padding:.75rem;margin-top:.875rem;font-family:monospace;font-size:11px;
+        color:#90b8f0;line-height:1.7" id="dest-debug-card">
+        <div style="font-weight:700;color:#90b8f0;margin-bottom:4px">⚙ DEV: Destination Debug</div>
+        <div>_legType: <span id="dbg-legtype">${_legType||'(none)'}</span></div>
+        <div>_returnDest: <span id="dbg-returndest">${JSON.stringify(_returnDest)}</span></div>
+        <div>outboundLog.origin: <span id="dbg-origin">${_outboundLog?.origin_lat||'null'}, ${_outboundLog?.origin_lng||'null'}</span></div>
+        <div>outboundLog.dest (store): <span id="dbg-storedst">${_outboundLog?.dest_lat||'null'}, ${_outboundLog?.dest_lng||'null'}</span></div>
+        <div>_activeJob.dest (current): <span id="dbg-activedst">${_activeJob?.dest_lat||'null'}, ${_activeJob?.dest_lng||'null'}</span></div>
+      </div>` : ''}
+
       <!-- Release driver option -->
       <div class="release-driver-btn" style="margin-top:1rem">
         <div style="font-size:12px;font-weight:600;color:#f87171;margin-bottom:.375rem">
@@ -2812,8 +2825,8 @@ async function confirmReleaseDriver(){
 }
 
 async function beginReturnLeg(){
+  // Validate / default destination
   if(!_returnDest && (_legType==='return'||!_legType)){
-    // Default to meet spot if nothing selected
     _returnDest = _outboundLog?.origin_lat
       ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
          address:'Meet spot', type:'return'}
@@ -2822,14 +2835,32 @@ async function beginReturnLeg(){
   if(!_returnDest){
     showToast('Please select a destination first','error'); return;
   }
+
+  // ── CRITICAL: overwrite _activeJob destination with the RETURN destination ──
+  // _activeJob.dest_lat/lng drives geofence + navigation on the active trip screen.
+  // Without this, the return leg would navigate back to the STORE, not the meet spot.
+  _activeJob = {
+    ..._activeJob,
+    dest_lat:     _returnDest.lat,
+    dest_lng:     _returnDest.lng,
+    dest_address: _returnDest.address,
+    client_name:  _returnDest.type === 'return' ? 'Meet Spot'
+                : _returnDest.type === 'job'    ? (_returnDest.client_name||'Next Job')
+                : (_returnDest.address || 'Destination'),
+    store_number: _returnDest.type === 'job' ? _returnDest.store_number : null,
+  };
+
+  console.log('[beginReturnLeg] _activeJob dest updated:',
+    _activeJob.dest_lat, _activeJob.dest_lng, _activeJob.dest_address);
+
   // Collect selected passengers from the UI
   const selectedPax = (window._returnPaxData||[]).filter(p=>{
     const key = p.profile_id||p.external_name;
     return window._returnPaxSelected?.has(key);
   });
-  // Set _passengers here — _beginNewLeg will use them directly
-  _passengers = selectedPax.length ? selectedPax : (_passengers||[]);
-  console.log('[beginReturnLeg] leg:', _legType, 'dest:', _returnDest, 'pax:', _passengers.length);
+  _passengers = selectedPax.length ? selectedPax : [];
+
+  console.log('[beginReturnLeg] leg:', _legType, 'returnDest:', _returnDest, 'pax:', _passengers.length);
   await _beginNewLeg(_legType||'return');
 }
 
@@ -2891,6 +2922,14 @@ function selectPostArrivalOption(option){
       <div id="return-dest-resolved" style="font-size:12px;color:var(--green);margin-top:4px"></div>
     </div>`;
   }
+  _updateDestDebugCard();
+}
+
+// Live-update dev debug card when _returnDest changes
+function _updateDestDebugCard(){
+  const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
+  set('dbg-legtype', _legType||'(none)');
+  set('dbg-returndest', JSON.stringify(_returnDest));
 }
 
 async function onReturnAddressInput(val){
@@ -2913,6 +2952,7 @@ async function onReturnAddressInput(val){
         _returnDest = {lat:loc.lat, lng:loc.lng,
           address:data.results[0].formatted_address,
           type: _legType||'custom'};
+        _updateDestDebugCard();
         if(resolvedEl) resolvedEl.innerHTML =
           '<i class="ti ti-map-check"></i> ' + data.results[0].formatted_address;
       } else {
