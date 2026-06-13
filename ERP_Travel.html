@@ -512,7 +512,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.33';
+const APP_VERSION  = 'v1.0.35';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1136,21 +1136,61 @@ async function loadTripReplay(logId){
     weight:  4,
     opacity: .85,
   }).addTo(lmap);
-  lmap.fitBounds(routeLine.getBounds(), {padding:[20,20]});
+  // Add destination pin if coords available — shown before fitBounds so it's included
+  const _destLat = _activeTrip?.dest_lat || _outboundLog?.dest_lat || _activeJob?.dest_lat;
+  const _destLng = _activeTrip?.dest_lng || _outboundLog?.dest_lng || _activeJob?.dest_lng;
+  const _destName = _activeJob?.client_name || 'Destination';
+  const _storeNum = _activeJob?.store_number ? ' · Store '+_activeJob.store_number : '';
 
-  // Start marker (blue)
+  // Destination pin — flag style (green with label)
+  const destIcon = L.divIcon({
+    html: '<div style="display:flex;flex-direction:column;align-items:center">' +
+      '<div style="background:#6AB34F;color:#fff;font-size:10px;font-weight:700;' +
+      'padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4)">' +
+      _destName + _storeNum + '</div>' +
+      '<div style="width:2px;height:8px;background:#6AB34F"></div>' +
+      '<div style="width:12px;height:12px;border-radius:50%;background:#6AB34F;' +
+      'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>' +
+      '</div>',
+    className:'', iconAnchor:[30,28]
+  });
+
+  let allBounds = routeLine.getBounds();
+
+  if(_destLat && _destLng){
+    const destMarker = L.marker([_destLat, _destLng], {icon:destIcon}).addTo(lmap);
+    destMarker.bindPopup(
+      '<div class="ping-popup"><b>' + _destName + _storeNum + '</b><br>' +
+      (_activeJob?.dest_address||[_activeJob?.city,_activeJob?.state].filter(Boolean).join(', ')||'') +
+      '<br><span style="color:#6AB34F">Destination</span></div>'
+    );
+    // Expand bounds to include destination pin
+    allBounds = allBounds.extend([_destLat, _destLng]);
+  }
+
+  lmap.fitBounds(allBounds, {padding:[24,24]});
+
+  // Start marker (blue dot)
   const startIcon = L.divIcon({
-    html: '<div style="width:14px;height:14px;border-radius:50%;background:#1E5FAE;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
-    className:'', iconAnchor:[7,7]
+    html: '<div style="display:flex;flex-direction:column;align-items:center">' +
+      '<div style="background:#1E5FAE;color:#fff;font-size:10px;font-weight:700;' +
+      'padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4)">Start</div>' +
+      '<div style="width:2px;height:6px;background:#1E5FAE"></div>' +
+      '<div style="width:12px;height:12px;border-radius:50%;background:#1E5FAE;' +
+      'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>' +
+      '</div>',
+    className:'', iconAnchor:[15,26]
   });
-  // End marker (green)
+  // Last ping marker (amber dot — where tracking ended)
   const endIcon = L.divIcon({
-    html: '<div style="width:14px;height:14px;border-radius:50%;background:#6AB34F;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:#F4A93A;' +
+      'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
     className:'', iconAnchor:[7,7]
   });
-  // Ping dot (small)
+  // Ping dot (small amber)
   const pingIcon = L.divIcon({
-    html: '<div style="width:8px;height:8px;border-radius:50%;background:#F4A93A;border:1px solid #fff;opacity:.8"></div>',
+    html: '<div style="width:8px;height:8px;border-radius:50%;background:#F4A93A;' +
+      'border:1px solid #fff;opacity:.8"></div>',
     className:'', iconAnchor:[4,4]
   });
 
@@ -1159,7 +1199,7 @@ async function loadTripReplay(logId){
       new Date(pings[0].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</div>');
 
   L.marker(coords[coords.length-1], {icon:endIcon}).addTo(lmap)
-    .bindPopup('<div class="ping-popup"><b>Arrived</b><br>' +
+    .bindPopup('<div class="ping-popup"><b>Last GPS ping</b><br>' +
       new Date(pings[pings.length-1].recorded_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</div>');
 
   // Add ping dots with popups (skip first and last — already have markers)
@@ -1871,7 +1911,7 @@ const FAST_PING_INTERVAL = 10000; // 10s inside geofence
 let _audioCtx         = null;  // Web Audio context for arrival tone
 let _gpsOfflineBuffer = [];
 const PING_INTERVAL   = 30000;
-const GEOFENCE_M      = 75;
+let GEOFENCE_M        = 200; // configurable per store type
 const MAPS_KEY        = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 
 // ── Native maps integration ──────────────────────────────────────────────────
@@ -2032,7 +2072,12 @@ function _buildGeofenceDebugPanel(){
     </div>
     <div class="geo-stat">
       <span class="geo-stat-label">Fence radius</span>
-      <span class="geo-stat-value">${GEOFENCE_M}m (${Math.round(GEOFENCE_M*3.28084)} ft)</span>
+      <span class="geo-stat-value">
+        <input type="range" min="50" max="500" step="25" value="${GEOFENCE_M}"
+          style="width:80px;vertical-align:middle"
+          oninput="GEOFENCE_M=parseInt(this.value);document.getElementById('gd-radius-val').textContent=this.value+'m ('+Math.round(this.value*3.28084)+' ft)'"/>
+        <span id="gd-radius-val">${GEOFENCE_M}m (${Math.round(GEOFENCE_M*3.28084)} ft)</span>
+      </span>
     </div>
     <div class="geo-stat">
       <span class="geo-stat-label">Hit at</span>
@@ -2434,12 +2479,18 @@ async function submitArrival(){
     const completedLog = {..._activeTrip};
     _activeTrip = null;
 
-    // If this was an outbound trip — offer return trip
+    // Always set _outboundLog and _returnDest BEFORE showing post-arrival screen
     if(completedLog.leg_type === 'outbound' || !completedLog.leg_type){
       _outboundLog = completedLog;
-      setTimeout(()=>{ showPostArrivalScreen(completedLog); loadTodaysJobs(); }, 800);
+      // Default return dest = meet spot captured at trip start
+      _returnDest = completedLog.origin_lat
+        ? {lat:completedLog.origin_lat, lng:completedLog.origin_lng,
+           address:'Meet spot', type:'return'}
+        : null;
+      console.log('[submitArrival] outboundLog set — origin:', completedLog.origin_lat, completedLog.origin_lng);
+      setTimeout(()=>{ showPostArrivalScreen(completedLog); loadMyTrips(); }, 800);
     } else {
-      setTimeout(()=>{ showTripSummary(completedLog); loadTodaysJobs(); }, 800);
+      setTimeout(()=>{ showTripSummary(completedLog); loadMyTrips(); }, 800);
     }
   } catch(e){
     showToast('Error: '+e.message,'error');
@@ -2705,11 +2756,24 @@ async function confirmReleaseDriver(){
 }
 
 async function beginReturnLeg(){
+  if(!_returnDest && (_legType==='return'||!_legType)){
+    // Default to meet spot if nothing selected
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Meet spot', type:'return'}
+      : null;
+  }
+  if(!_returnDest){
+    showToast('Please select a destination first','error'); return;
+  }
+  // Collect selected passengers from the UI
   const selectedPax = (window._returnPaxData||[]).filter(p=>{
-    const key = p.profile_id||(p.external_name);
+    const key = p.profile_id||p.external_name;
     return window._returnPaxSelected?.has(key);
   });
-  _passengers = selectedPax;
+  // Set _passengers here — _beginNewLeg will use them directly
+  _passengers = selectedPax.length ? selectedPax : (_passengers||[]);
+  console.log('[beginReturnLeg] leg:', _legType, 'dest:', _returnDest, 'pax:', _passengers.length);
   await _beginNewLeg(_legType||'return');
 }
 
@@ -2728,6 +2792,17 @@ function selectPostArrivalOption(option){
   });
   const activeId = option==='return'?'opt-return':option==='job_to_job'?'opt-jobtojob':'opt-custom';
   document.getElementById(activeId)?.classList.add('selected');
+
+  // Update _returnDest based on selection
+  if(option === 'return'){
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Meet spot', type:'return'}
+      : null;
+  } else if(option === 'done'){
+    _returnDest = null;
+  }
+  // job_to_job and custom set their own _returnDest in their own pickers
 
   const nextEl = document.getElementById('post-arrival-next');
   if(!nextEl) return;
@@ -2867,7 +2942,7 @@ async function startJobToJobTrip(){
 }
 
 async function _beginNewLeg(legType){
-  const btn = document.getElementById(legType==='return'?'start-return-btn':'start-j2j-btn');
+  const btn = document.getElementById('begin-return-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Starting...'; }
 
   try{
@@ -2911,23 +2986,22 @@ async function _beginNewLeg(legType){
       .from('travel_logs').insert(logPayload).select().single();
     if(error) throw error;
 
-    // Re-board passengers from outbound trip as starting point
-    const {data:prevPax} = await getSupabase()
-      .from('travel_passengers')
-      .select('profile_id, full_name, role')
-      .eq('travel_log_id', _outboundLog?.id||'');
-
-    _passengers = prevPax || [];
-    if(_passengers.length){
+    // Insert passengers — use _passengers as set by beginReturnLeg
+    // (already filtered by driver's selection — do NOT overwrite from Supabase)
+    if(_passengers?.length){
       const paxRows = _passengers.map(p=>({
         travel_log_id: newLog.id,
-        profile_id:    p.profile_id,
-        full_name:     p.full_name,
-        role:          p.role,
+        profile_id:    p.profile_id||null,
+        full_name:     p.full_name||p.external_name||'Unknown',
+        role:          p.role||null,
+        worker_type:   p.worker_type||'w2',
+        external_name: p.external_name||null,
+        external_id:   p.external_id||null,
         boarded_at:    new Date().toISOString(),
-        waypoint:      legType==='return'?'job_site':'job_site',
+        waypoint:      'job_site',
       }));
       await getSupabase().from('travel_passengers').insert(paxRows);
+      console.log('[beginNewLeg] inserted', paxRows.length, 'passengers');
     }
 
     _activeTrip  = newLog;
