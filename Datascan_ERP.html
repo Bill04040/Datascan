@@ -1462,6 +1462,20 @@ function checkSubmitReady(){
   } else {
     hint.innerHTML='<i class="ti ti-alert-circle" style="color:#f4c26a"></i> <span style="color:#f4c26a">Still needed: </span><span style="color:rgba(255,255,255,0.75)">'+missing.join(' &bull; ')+'</span>';
   }
+  // Async check for active travel logs (non-blocking UI warning)
+  if(ready && currentTimesheetId){
+    getSupabase().from('travel_logs').select('id,vehicle_plate,status')
+      .eq('timesheet_id', currentTimesheetId)
+      .in('status',['active','setup'])
+      .then(({data})=>{
+        if(data?.length){
+          hint.innerHTML='<i class="ti ti-steering-wheel" style="color:#f87171"></i> ' +
+            '<span style="color:#f87171">Active travel log — trip not yet complete: ' +
+            data.map(l=>l.vehicle_plate||'vehicle').join(', ')+'</span>';
+          btn.disabled = true;
+        }
+      }).catch(()=>{});
+  }
 
   // No-break warning list — shown when submit is ready but some employees have 8h+ with no break
   const warnDiv   = document.getElementById('no-break-warning-list');
@@ -2525,7 +2539,65 @@ function stopSupabaseAutoSave(){
 
 function validateAll(){let ok=true;document.querySelectorAll('.emp-card').forEach(card=>{if(!validateEmployee(card.dataset.empId).empValid)ok=false;});return ok;}
 function saveDraft(){ saveTimesheet('draft'); }
-function submitSheet(){ saveTimesheet('submitted'); }
+async function submitSheet(){
+  // ── Hard block: check for incomplete travel logs ─────────────────────────
+  if(currentTimesheetId){
+    try{
+      const {data:activeLogs} = await getSupabase()
+        .from('travel_logs')
+        .select('id, vehicle_plate, leg_type, status')
+        .eq('timesheet_id', currentTimesheetId)
+        .in('status', ['active','setup']);
+
+      if(activeLogs?.length){
+        const vehicles = activeLogs.map(l=>l.vehicle_plate||'Unknown vehicle').join(', ');
+        alert(
+          '⚠ Cannot submit timesheet\n\n' +
+          'The following vehicle(s) have not completed their travel log:\n' +
+          vehicles + '\n\n' +
+          'All vehicles must arrive and confirm before this timesheet can be submitted.'
+        );
+        return;
+      }
+
+      // Also check: any outbound vehicles that have no return/complete status
+      const {data:outboundLogs} = await getSupabase()
+        .from('travel_logs')
+        .select('id, vehicle_plate, status')
+        .eq('timesheet_id', currentTimesheetId)
+        .eq('leg_type', 'outbound')
+        .eq('status', 'completed');
+
+      if(outboundLogs?.length){
+        // Check each outbound log has a corresponding return leg started
+        const outboundIds = outboundLogs.map(l=>l.id);
+        const {data:returnLogs} = await getSupabase()
+          .from('travel_logs')
+          .select('parent_log_id, status')
+          .in('parent_log_id', outboundIds)
+          .in('leg_type', ['return','job_to_job','custom']);
+
+        const returnedIds = new Set((returnLogs||[]).map(l=>l.parent_log_id));
+        const noReturn = outboundLogs.filter(l=>!returnedIds.has(l.id));
+
+        if(noReturn.length){
+          const vehicles = noReturn.map(l=>l.vehicle_plate||'Unknown').join(', ');
+          const proceed = confirm(
+            '⚠ Return trip not confirmed\n\n' +
+            'Vehicle(s) ' + vehicles + ' drove to this job but have no return trip recorded.\n\n' +
+            'This may mean employees are still at the job site.\n\n' +
+            'Submit anyway?'
+          );
+          if(!proceed) return;
+        }
+      }
+    } catch(e){
+      console.warn('[submitSheet] travel log check failed:', e.message);
+      // Non-fatal — allow submission if check fails
+    }
+  }
+  saveTimesheet('submitted');
+}
 function saveApproval(){alert('Approval saved!');}
 
 const today=new Date();
@@ -2847,7 +2919,7 @@ function buildCustomerAC(){
 
 // ── Supabase client ───────────────────────────────────────────────────────
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.40';
+const APP_VERSION = 'v1.0.41';
 const MAPS_API_KEY  = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
 const GEOCODE_KEY   = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI'; // unrestricted — Geocoding API only
 
@@ -2946,7 +3018,7 @@ async function onSignedIn(user){
   initSidebar(); // wraps DOM into sidebar shell — must run before role routing
 
   // Show address + dev coord fields for test users only
-  const _testEmails    = ['nford@datascan.com','supervisor@datascan.com'];
+  const _testEmails    = ['supervisor@datascan.com'];
   const _debugEmails   = ['supervisor@datascan.com'];
   const _userEmail     = currentProfile?.email || currentUser?.email || '';
   const _isTestUser    = _testEmails.some(e => _userEmail.toLowerCase() === e.toLowerCase());
@@ -4415,7 +4487,7 @@ function _openJobInfoModal(){
     String(today.getDate()).padStart(2,'0');
 
   const userEmail = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  const isDevUser = ['nford@datascan.com','supervisor@datascan.com'].includes(userEmail);
+  const isDevUser = ['supervisor@datascan.com'].includes(userEmail);
 
   openWizModal('Job Information', `
     <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">

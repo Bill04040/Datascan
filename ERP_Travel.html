@@ -267,6 +267,34 @@ body{background:#0f1e30;color:#f0f4f8}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.success{border-color:var(--green);background:rgba(11,29,52,.95)}
 #toast.error{border-color:var(--red);background:rgba(11,29,52,.95)}
+/* ── Arrival + geofence debug ───────────────────────────────────────────── */
+.geofence-debug{background:rgba(244,169,58,.08);border:1px solid rgba(244,169,58,.3);
+  border-radius:var(--radius);padding:.875rem;margin-bottom:.75rem}
+.geofence-debug-title{font-size:11px;font-weight:700;color:var(--amber);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:.625rem}
+.geo-stat{display:flex;justify-content:space-between;align-items:center;
+  padding:3px 0;font-size:12px}
+.geo-stat-label{color:var(--text3)}
+.geo-stat-value{color:#fff;font-weight:600;font-family:monospace}
+.geo-stat-value.inside{color:var(--green)}
+.geo-stat-value.outside{color:var(--amber)}
+.arrival-sound-btn{background:rgba(106,179,79,.15);border:1px solid rgba(106,179,79,.3);
+  border-radius:var(--radius-sm);padding:4px 10px;font-size:11px;color:var(--green);
+  font-family:inherit;cursor:pointer}
+.pax-group-header{font-size:11px;font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.08em;margin:.875rem 0 .375rem;
+  display:flex;align-items:center;gap:6px}
+.pax-select-card{display:flex;align-items:center;gap:10px;padding:.625rem .75rem;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+  margin-bottom:.375rem;cursor:pointer;transition:border-color .15s}
+.pax-select-card.checked{border-color:var(--green);background:rgba(106,179,79,.08)}
+.pax-select-card.warned{border-color:var(--amber);background:rgba(244,169,58,.06)}
+.pax-check{width:20px;height:20px;border-radius:4px;border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:13px;color:var(--green)}
+.pax-select-card.checked .pax-check{background:var(--green);border-color:var(--green);color:#fff}
+.release-driver-btn{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);
+  border-radius:var(--radius);padding:.875rem;text-align:center;margin-top:.5rem}
 /* ── Return trip ─────────────────────────────────────────────────────────── */
 .leg-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
   border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
@@ -484,7 +512,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.32';
+const APP_VERSION  = 'v1.0.33';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1834,7 +1862,13 @@ let _tripMap          = null;
 let _driverMarker     = null;
 let _directionsRenderer = null;
 let _arrivedFired     = false;
-let _arrivedAt        = null;  // timestamp when arrival was detected/confirmed
+let _arrivedAt        = null;
+let _insideGeofence   = false; // true once within GEOFENCE_M
+let _geofenceHitAt    = null;  // timestamp of first geofence entry
+let _geofenceHitDist  = null;  // distance at hit
+let _fastPingActive   = false; // true when pinging every 10s inside geofence
+const FAST_PING_INTERVAL = 10000; // 10s inside geofence
+let _audioCtx         = null;  // Web Audio context for arrival tone
 let _gpsOfflineBuffer = [];
 const PING_INTERVAL   = 30000;
 const GEOFENCE_M      = 75;
@@ -1926,6 +1960,27 @@ function onLegStartMilesInput(val){
   }
 }
 
+// ── Arrival sound notification (Web Audio API — no file needed) ──────────────
+function playArrivalTone(){
+  try{
+    if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    // Three-note ascending chime
+    [[0,523],[0.15,659],[0.3,784]].forEach(([delay,freq])=>{
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.4, ctx.currentTime+delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.4);
+      osc.start(ctx.currentTime+delay);
+      osc.stop(ctx.currentTime+delay+0.5);
+    });
+    // Vibrate if supported
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  } catch(e){ console.warn('[arrivalTone]', e.message); }
+}
+
 // Format distance in miles, switching to feet under 1/4 mile
 function formatDist(meters){
   const miles = meters / 1609.34;
@@ -1934,6 +1989,68 @@ function formatDist(meters){
     return feet + ' ft';
   }
   return miles.toFixed(1) + ' mi';
+}
+
+// ── Geofence debug panel (dev users only) ────────────────────────────────────
+function _updateGeofenceDebug(distM){
+  const panel = document.getElementById('geofence-debug-panel');
+  if(!panel) return;
+  const feetStr  = distM < 1609 ? Math.round(distM*3.28084)+' ft' : (distM/1609.34).toFixed(2)+' mi';
+  const isInside = distM <= GEOFENCE_M;
+  document.getElementById('gd-dist').textContent  = feetStr;
+  document.getElementById('gd-dist').className    = 'geo-stat-value '+(isInside?'inside':'outside');
+  document.getElementById('gd-status').textContent = isInside ? 'INSIDE ✓' : 'Outside';
+  document.getElementById('gd-status').className  = 'geo-stat-value '+(isInside?'inside':'outside');
+  if(_geofenceHitAt){
+    document.getElementById('gd-hit-time').textContent =
+      new Date(_geofenceHitAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('gd-hit-dist').textContent =
+      Math.round((_geofenceHitDist||0)*3.28084)+' ft';
+  }
+  document.getElementById('gd-ping-mode').textContent =
+    _fastPingActive ? '10s (fast — inside fence)' : '30s (normal)';
+  document.getElementById('gd-accuracy').textContent =
+    _currentPos ? '±'+Math.round(_currentPos.accuracy||0)+'m' : '—';
+}
+
+function _buildGeofenceDebugPanel(){
+  if(!_isDevUser()) return '';
+  return `<div class="geofence-debug" id="geofence-debug-panel">
+    <div class="geofence-debug-title">
+      Geofence debug
+      <button class="arrival-sound-btn" onclick="playArrivalTone()" style="float:right">
+        Test tone
+      </button>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Distance to dest</span>
+      <span class="geo-stat-value outside" id="gd-dist">—</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Geofence status</span>
+      <span class="geo-stat-value outside" id="gd-status">Outside</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Fence radius</span>
+      <span class="geo-stat-value">${GEOFENCE_M}m (${Math.round(GEOFENCE_M*3.28084)} ft)</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Hit at</span>
+      <span class="geo-stat-value" id="gd-hit-time">—</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Distance at hit</span>
+      <span class="geo-stat-value" id="gd-hit-dist">—</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">Ping interval</span>
+      <span class="geo-stat-value" id="gd-ping-mode">30s (normal)</span>
+    </div>
+    <div class="geo-stat">
+      <span class="geo-stat-label">GPS accuracy</span>
+      <span class="geo-stat-value" id="gd-accuracy">—</span>
+    </div>
+  </div>`;
 }
 
 function haversineMeters(lat1,lng1,lat2,lng2){
@@ -2047,6 +2164,7 @@ function showTripActive(log){
       <button class="btn btn-ghost" style="margin-top:.5rem" onclick="showArrivalBanner(true)">
         <i class="ti ti-map-pin"></i> I have arrived (manual)
       </button>
+      ${_buildGeofenceDebugPanel()}
       ${devResetBtn}
     </div>`;
   startGPS(log);
@@ -2169,11 +2287,47 @@ async function onGPSUpdate(pos,log){
       etaEl.textContent = etaMins <= 1 ? 'Arriving' : etaMins+' min';
     }
 
-    // Geofence check
-    if(!_arrivedFired&&distM<=GEOFENCE_M){ _arrivedFired=true; showArrivalBanner(false); }
+    // ── Geofence check ────────────────────────────────────────────────────────
+    const justEnteredFence = !_insideGeofence && distM <= GEOFENCE_M;
+    const stillInFence     = _insideGeofence && distM <= GEOFENCE_M;
+    const exitedFence      = _insideGeofence && distM > GEOFENCE_M;
+
+    if(justEnteredFence){
+      _insideGeofence  = true;
+      _geofenceHitAt   = new Date().toISOString();
+      _geofenceHitDist = Math.round(distM);
+      _fastPingActive  = true;
+
+      // Record geofence hit on travel log
+      if(_activeTrip?.id){
+        getSupabase().from('travel_logs').update({
+          geofence_hit_at:    _geofenceHitAt,
+          geofence_hit_dist_m: _geofenceHitDist,
+        }).eq('id', _activeTrip.id).then(()=>{});
+      }
+
+      // Play arrival tone
+      playArrivalTone();
+      showToast('You are near the destination!','success');
+    }
+
+    if(exitedFence){
+      _insideGeofence = false;
+      _fastPingActive = false;
+    }
+
+    // Show arrival banner only once inside fence
+    if(!_arrivedFired && distM <= GEOFENCE_M){
+      _arrivedFired = true;
+      showArrivalBanner(false);
+    }
+
+    // Update debug panel if visible
+    _updateGeofenceDebug(distM);
   }
   const now=Date.now();
-  if(now-_lastPingTime>=PING_INTERVAL){
+  const interval = _fastPingActive ? FAST_PING_INTERVAL : PING_INTERVAL;
+  if(now-_lastPingTime>=interval){
     _lastPingTime=now;
     _pingCount++;
     // Calculate distance to destination for this ping
@@ -2304,63 +2458,276 @@ function isoToDatetimeLocal(iso){
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// POST-ARRIVAL: offer return trip or view summary
+// POST-ARRIVAL FLOW
 // ══════════════════════════════════════════════════════════════════════════════
-function showPostArrivalScreen(log){
+async function showPostArrivalScreen(log){
   setStepBar(4);
   const content = document.getElementById('trip-content');
   const arrived = log.completed_at
     ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
     : new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
 
+  // Load full passenger list for this job
+  // Priority: 1) this vehicle's passengers 2) other vehicles' passengers 3) timesheet only
+  const {data:allJobPassengers} = await getSupabase()
+    .from('travel_passengers')
+    .select('profile_id, full_name, role, travel_log_id, worker_type, external_name')
+    .in('travel_log_id', await _getSiblingLogIds(log.timesheet_id));
+
+  // Get all employees on the timesheet
+  const {data:tsEmps} = await getSupabase()
+    .from('employees')
+    .select('id, is_primary')
+    .eq('timesheet_id', log.timesheet_id);
+
+  // Categorize passengers
+  const myPax    = (allJobPassengers||[]).filter(p=>p.travel_log_id === log.id);
+  const otherPax = (allJobPassengers||[]).filter(p=>p.travel_log_id !== log.id);
+  const myPaxIds = new Set(myPax.map(p=>p.profile_id));
+  const allPaxIds= new Set((allJobPassengers||[]).map(p=>p.profile_id));
+
+  // Initialize return passenger selection — pre-check this vehicle's passengers
+  window._returnPaxSelected = new Set(myPax.map(p=>p.profile_id||p.external_name));
+  window._returnPaxData = [...myPax, ...otherPax];
+
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
+      <!-- Arrived banner -->
       <div style="background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.25);
         border-radius:var(--radius);padding:1.25rem;margin-bottom:1.25rem;text-align:center">
-        <i class="ti ti-map-pin-check" style="font-size:36px;color:var(--green);display:block;margin-bottom:.5rem"></i>
-        <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">Arrived at ${_activeJob.client_name||'destination'}</div>
+        <i class="ti ti-map-pin-check" style="font-size:36px;color:var(--green);
+          display:block;margin-bottom:.5rem"></i>
+        <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">
+          Arrived at ${_activeJob.client_name||'destination'}
+        </div>
         <div style="font-size:13px;color:var(--text2)">${arrived} · ${log.vehicle_plate||''}</div>
       </div>
 
-      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.75rem">What happens next?</div>
+      <!-- Passenger selection for return -->
+      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.25rem">
+        Who is returning in this vehicle?
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.875rem">
+        Select everyone leaving in <strong>${log.vehicle_plate||'this vehicle'}</strong>
+      </div>
 
-      <!-- Option 1: Start return trip -->
-      <div class="dest-option" id="opt-return" onclick="selectPostArrivalOption('return')">
+      <div id="return-pax-list"></div>
+
+      <!-- Destination selection -->
+      <div style="font-size:14px;font-weight:700;color:#fff;
+        margin:.875rem 0 .5rem">Where are you heading?</div>
+
+      <div class="dest-option selected" id="opt-return"
+        onclick="selectPostArrivalOption('return')">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div class="dest-option-title"><i class="ti ti-arrow-back-up" style="color:var(--amber)"></i> Return trip</div>
+          <div class="dest-option-title">
+            <i class="ti ti-arrow-back-up" style="color:var(--amber)"></i>
+            Return to meet spot
+          </div>
           <span class="leg-badge leg-return">Return</span>
         </div>
-        <div class="dest-option-sub">Drive crew back toward the meet spot or original waypoints</div>
+        <div class="dest-option-sub">
+          ${_outboundLog?.origin_lat ? 'GPS coordinates on file ✓' : 'Meet spot address'}
+        </div>
       </div>
 
-      <!-- Option 2: Job to job -->
-      <div class="dest-option" id="opt-jobtojob" onclick="selectPostArrivalOption('job_to_job')">
+      <div class="dest-option" id="opt-jobtojob"
+        onclick="selectPostArrivalOption('job_to_job')">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div class="dest-option-title"><i class="ti ti-arrows-right-left" style="color:var(--green)"></i> Go to next job</div>
+          <div class="dest-option-title">
+            <i class="ti ti-arrows-right-left" style="color:var(--green)"></i>
+            Go to next job
+          </div>
           <span class="leg-badge leg-jobtojob">Job to Job</span>
         </div>
-        <div class="dest-option-sub">Travel directly from this job to another job site</div>
+        <div class="dest-option-sub">Select another job on today's schedule</div>
       </div>
 
-      <!-- Option 3: End day -->
-      <div class="dest-option" id="opt-done" onclick="selectPostArrivalOption('done')">
+      <div class="dest-option" id="opt-custom"
+        onclick="selectPostArrivalOption('custom')">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div class="dest-option-title"><i class="ti ti-home-check" style="color:var(--blue)"></i> No return trip needed</div>
-          <span class="leg-badge" style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.6)">Done</span>
+          <div class="dest-option-title">
+            <i class="ti ti-map-search" style="color:var(--blue)"></i>
+            Custom destination
+          </div>
+          <span class="leg-badge" style="background:rgba(30,95,174,.2);color:#90b8f0">Custom</span>
         </div>
-        <div class="dest-option-sub">Work is complete — view trip summary</div>
+        <div class="dest-option-sub">Hotel, office, or any other address</div>
       </div>
 
-      <div id="post-arrival-next" style="margin-top:1.25rem"></div>
+      <div id="post-arrival-next" style="margin-top:.875rem"></div>
+
+      <button class="btn btn-success" id="begin-return-btn"
+        style="margin-top:1rem" onclick="beginReturnLeg()">
+        <i class="ti ti-steering-wheel"></i> Begin trip
+      </button>
+
+      <!-- Release driver option -->
+      <div class="release-driver-btn" style="margin-top:1rem">
+        <div style="font-size:12px;font-weight:600;color:#f87171;margin-bottom:.375rem">
+          <i class="ti ti-user-x"></i> Not driving back?
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:.625rem">
+          If someone else is driving this vehicle back, release your driver status
+          so you can return as a passenger.
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="confirmReleaseDriver()"
+          style="border-color:rgba(248,113,113,.4);color:#f87171;font-size:12px">
+          Release driver status — I am not driving back
+        </button>
+      </div>
+
+      <button class="btn btn-ghost" style="margin-top:.75rem"
+        onclick="showTripSummary(_outboundLog)">
+        <i class="ti ti-file-description"></i> View trip summary only
+      </button>
     </div>`;
+
+  // Default: return trip selected
+  _returnDest = _outboundLog?.origin_lat
+    ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+       address:'Meet spot', type:'return'}
+    : null;
+
+  // Render passenger list
+  _renderReturnPaxList(myPax, otherPax);
+}
+
+async function _getSiblingLogIds(timesheetId){
+  if(!timesheetId) return [];
+  const {data} = await getSupabase()
+    .from('travel_logs').select('id')
+    .eq('timesheet_id', timesheetId)
+    .eq('leg_type', 'outbound');
+  return (data||[]).map(l=>l.id);
+}
+
+function _renderReturnPaxList(myPax, otherPax){
+  const el = document.getElementById('return-pax-list');
+  if(!el) return;
+  let html = '';
+
+  if(myPax.length){
+    html += '<div class="pax-group-header"><i class="ti ti-users"></i> ' +
+      'Previous passengers — this vehicle</div>';
+    myPax.forEach(p=>{
+      const key = p.profile_id||p.external_name;
+      const chk = window._returnPaxSelected.has(key);
+      html += `<div class="pax-select-card ${chk?'checked':''}"
+        onclick="toggleReturnPax('${key}',this)">
+        <div class="pax-check">${chk?'✓':''}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#fff">${p.full_name||p.external_name||'Unknown'}</div>
+          <div style="font-size:11px;color:var(--text3)">Arrived in this vehicle</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  if(otherPax.length){
+    html += '<div class="pax-group-header"><i class="ti ti-transfer"></i> ' +
+      'Arrived in other vehicles</div>';
+    otherPax.forEach(p=>{
+      const key = p.profile_id||p.external_name;
+      const chk = window._returnPaxSelected.has(key);
+      html += `<div class="pax-select-card ${chk?'':''}"
+        onclick="toggleReturnPax('${key}',this)">
+        <div class="pax-check">${chk?'✓':''}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#fff">${p.full_name||p.external_name||'Unknown'}</div>
+          <div style="font-size:11px;color:var(--text3)">Arrived via other vehicle</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `<div class="pax-group-header"><i class="ti ti-user-plus"></i> Add someone</div>
+    <div class="pax-select-card" onclick="showAddExternalPassenger()" style="border-style:dashed">
+      <div class="pax-check" style="color:var(--text3);border-style:dashed">+</div>
+      <div style="font-size:13px;color:var(--text2)">Add a passenger not in the list</div>
+    </div>`;
+
+  el.innerHTML = html;
+}
+
+function toggleReturnPax(key, card){
+  if(window._returnPaxSelected.has(key)){
+    window._returnPaxSelected.delete(key);
+    card.classList.remove('checked');
+    card.querySelector('.pax-check').textContent = '';
+  } else {
+    window._returnPaxSelected.add(key);
+    card.classList.add('checked');
+    card.querySelector('.pax-check').textContent = '✓';
+  }
+}
+
+function showAddExternalPassenger(){
+  const name = prompt('Passenger name:');
+  if(!name?.trim()) return;
+  const id = prompt('Employee ID or badge # (optional):');
+  const key = 'ext_'+Date.now();
+  window._returnPaxData = window._returnPaxData||[];
+  window._returnPaxData.push({profile_id:null,full_name:name.trim(),
+    external_name:name.trim(),external_id:id||null,worker_type:'unknown'});
+  window._returnPaxSelected.add(key);
+  // Re-render
+  const el = document.getElementById('return-pax-list');
+  if(el) el.insertAdjacentHTML('beforeend',
+    `<div class="pax-select-card checked">
+      <div class="pax-check">✓</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#fff">${name.trim()}</div>
+        <div style="font-size:11px;color:var(--text3)">Added manually${id?' · '+id:''}</div>
+      </div>
+    </div>`);
+}
+
+async function confirmReleaseDriver(){
+  const ok = confirm(
+    'Release driver status?\n\n' +
+    'You drove TO this job as the driver of '+(_outboundLog?.vehicle_plate||'this vehicle')+'.' +
+    '\nYou will NOT be driving back.\n\n' +
+    'This will:\n' +
+    '• Mark you as a passenger for the return trip\n' +
+    '• Release the vehicle for another driver\n' +
+    '• Keep all your trip data intact\n\n' +
+    'Confirm — I am not driving back?'
+  );
+  if(!ok) return;
+  if(_outboundLog?.id){
+    await getSupabase().from('travel_logs').update({
+      driver_released:true, driver_released_at:new Date().toISOString()
+    }).eq('id',_outboundLog.id);
+  }
+  showToast('Driver status released — you will return as a passenger','success');
+  setTimeout(()=>{ showScreen('home'); loadMyTrips(); }, 1200);
+}
+
+async function beginReturnLeg(){
+  const selectedPax = (window._returnPaxData||[]).filter(p=>{
+    const key = p.profile_id||(p.external_name);
+    return window._returnPaxSelected?.has(key);
+  });
+  _passengers = selectedPax;
+  await _beginNewLeg(_legType||'return');
 }
 
 function selectPostArrivalOption(option){
-  // Highlight selected
-  ['return','jobtojob','done'].forEach(o=>{
-    const el = document.getElementById('opt-'+o);
-    if(el) el.classList.toggle('selected', o === option.replace('job_to_job','jobtojob'));
+  _legType = option === 'done' ? 'return' : option;
+  ['return','jobtojob','custom'].forEach(o=>{
+    const el = document.getElementById('opt-'+o.replace('_','-'));
+    if(el) el.classList.toggle('selected',
+      o === option || (o==='return'&&option==='return') ||
+      (o==='jobtojob'&&option==='job_to_job') ||
+      (o==='custom'&&option==='custom'));
   });
+  // Re-highlight correctly
+  ['opt-return','opt-jobtojob','opt-custom'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.classList.remove('selected');
+  });
+  const activeId = option==='return'?'opt-return':option==='job_to_job'?'opt-jobtojob':'opt-custom';
+  document.getElementById(activeId)?.classList.add('selected');
 
   const nextEl = document.getElementById('post-arrival-next');
   if(!nextEl) return;
@@ -2653,7 +3020,7 @@ async function pushTravelBlocksToTimesheet(){
 // ── Dev user check ────────────────────────────────────────────────────────────
 function _isDevUser(){
   const email = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  return ['supervisor@datascan.com','nford@datascan.com'].includes(email);
+  return ['supervisor@datascan.com'].includes(email);
 }
 
 // ── Reset trip (dev/test only) ────────────────────────────────────────────────
