@@ -297,8 +297,6 @@ body{background:#0f1e30;color:#f0f4f8}
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   font-size:13px;color:var(--green)}
 .pax-select-card.checked .pax-check{background:var(--green);border-color:var(--green);color:#fff}
-.release-driver-btn{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);
-  border-radius:var(--radius);padding:.875rem;text-align:center;margin-top:.5rem}
 /* ── Return trip ─────────────────────────────────────────────────────────── */
 .leg-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
   border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
@@ -516,7 +514,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.46';
+const APP_VERSION  = 'v1.0.50';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1006,7 +1004,7 @@ const resetSummaryBtn =
 
 async function showTripSummary(log){
   _activeTrip = log;
-  setStepBar(4);
+  setStepBar(5);
   const content = document.getElementById('trip-content');
   const started   = log.started_at   ? new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
   const completed = log.completed_at ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
@@ -2766,8 +2764,24 @@ async function submitArrival(){
            address:'Meet spot', type:'return'}
         : null;
       console.log('[submitArrival] outboundLog set — origin:', completedLog.origin_lat, completedLog.origin_lng);
-      setTimeout(()=>{ showPostArrivalScreen(completedLog); loadMyTrips(); }, 800);
+      setTimeout(()=>{ showArrivalSummaryScreen(completedLog); loadMyTrips(); }, 800);
     } else {
+      // Return (or job-to-job) leg complete — this concludes the job.
+      // Release the driver from the vehicle and clear all trip-session state
+      // so nothing carries over into the next job, and hide the "Trip" nav
+      // tab so the only action available on the summary screen is "Back to jobs".
+      _selectedVehicle = null;
+      _startingMileage = null;
+      _outboundLog     = null;
+      _returnDest      = null;
+      _legType         = 'outbound';
+      _passengers      = [];
+      window._returnPaxSelected = new Set();
+      window._returnPaxData     = [];
+      const navTrip = document.getElementById('nav-trip');
+      if(navTrip) navTrip.style.display = 'none';
+
+      showToast('Trip complete — you have been released from this vehicle','success');
       setTimeout(()=>{ showTripSummary(completedLog); loadMyTrips(); }, 800);
     }
   } catch(e){
@@ -2789,85 +2803,49 @@ function isoToDatetimeLocal(iso){
 // ══════════════════════════════════════════════════════════════════════════════
 // POST-ARRIVAL FLOW
 // ══════════════════════════════════════════════════════════════════════════════
-async function showPostArrivalScreen(log){
-  setStepBar(4);
+// Page A — arrival summary + "What's next?"  (step 5 · Destination)
+async function showArrivalSummaryScreen(log){
+  setStepBar(5);
   const content = document.getElementById('trip-content');
+  const departed = log.started_at
+    ? new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+    : '—';
   const arrived = log.completed_at
     ? new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
     : new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-
-  // Load full passenger list for this job
-  // Priority: 1) this vehicle's passengers 2) other vehicles' passengers 3) timesheet only
-  const {data:allJobPassengers} = await getSupabase()
-    .from('travel_passengers')
-    .select('profile_id, full_name, role, travel_log_id, worker_type, external_name')
-    .in('travel_log_id', await _getSiblingLogIds(log.timesheet_id));
-
-  // Get all employees on the timesheet
-  const {data:tsEmps} = await getSupabase()
-    .from('employees')
-    .select('id, is_primary')
-    .eq('timesheet_id', log.timesheet_id);
-
-  // Categorize passengers
-  const myPax    = (allJobPassengers||[]).filter(p=>p.travel_log_id === log.id);
-  const otherPax = (allJobPassengers||[]).filter(p=>p.travel_log_id !== log.id);
-  const myPaxIds = new Set(myPax.map(p=>p.profile_id));
-  const allPaxIds= new Set((allJobPassengers||[]).map(p=>p.profile_id));
-
-  // Initialize return passenger selection — pre-check this vehicle's passengers
-  // Each passenger gets a unique _key. profile_id is unique per person, but
-  // external passengers commonly have null profile_id AND null external_name —
-  // using `profile_id||external_name` as the key collapses all of those onto a
-  // single shared key (e.g. `undefined`), so selecting/deselecting one toggles
-  // them all together and the Set's size under-counts. A position-based
-  // fallback key keeps every passenger distinct.
-  const myPaxKeyed    = myPax.map((p,idx)=>({...p, _key: p.profile_id ? `p_${p.profile_id}` : `row_${idx}`}));
-  const otherPaxKeyed = otherPax.map((p,idx)=>({...p, _key: p.profile_id ? `p_${p.profile_id}` : `row_${myPax.length+idx}`}));
-  window._returnPaxSelected = new Set(myPaxKeyed.map(p=>p._key));
-  window._returnPaxData = [...myPaxKeyed, ...otherPaxKeyed];
-
-  // Default: "Return to meet spot" is the option pre-selected (class="selected")
-  // in the markup below, so default _legType/_returnDest to match it. Without
-  // this, _legType stays at its stale/initial 'outbound' value when the user
-  // taps "Begin trip" without explicitly re-selecting "Return to meet spot",
-  // the new leg gets persisted with leg_type:'outbound', and submitArrival
-  // loops back to this screen instead of showing the trip summary.
-  _legType = 'return';
-  _returnDest = _outboundLog?.origin_lat
-    ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
-       address:'Meet spot', type:'return'}
-    : null;
+  const address    = _activeJob?.dest_address || log.dest_address || '—';
+  const vehicleStr = [log.vehicle_plate, log.vehicle_make, log.vehicle_model].filter(Boolean).join(' · ') || '—';
 
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
       <!-- Arrived banner -->
       <div style="background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.25);
-        border-radius:var(--radius);padding:1.25rem;margin-bottom:1.25rem;text-align:center">
+        border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;text-align:center">
         <i class="ti ti-map-pin-check" style="font-size:36px;color:var(--green);
           display:block;margin-bottom:.5rem"></i>
         <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">
-          Arrived at ${_activeJob.client_name||'destination'}
+          Arrived at ${_activeJob?.client_name||'destination'}
         </div>
-        <div style="font-size:13px;color:var(--text2)">${arrived} · ${log.vehicle_plate||''}</div>
+        <div style="font-size:12px;color:var(--text2)">${address}</div>
       </div>
 
-      <!-- Passenger selection for return -->
-      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.25rem">
-        Who is returning in this vehicle?
+      <!-- Arrival detail card -->
+      <div class="card">
+        <div class="info-row"><div class="info-label">Time</div><div class="info-value">${arrived}</div></div>
+        <div class="info-row"><div class="info-label">Vehicle</div><div class="info-value">${vehicleStr}</div></div>
+        <div class="info-row"><div class="info-label">Depart</div><div class="info-value">${departed}</div></div>
+        <div class="info-row"><div class="info-label">Arrive</div><div class="info-value">${arrived}</div></div>
+        <div class="info-row"><div class="info-label">Driver</div><div class="info-value">${log.driver_name||'—'}</div></div>
+        <div class="info-row">
+          <div class="info-label">Passengers</div>
+          <div class="info-value" id="arrival-summary-pax">Loading...</div>
+        </div>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:.875rem">
-        Select everyone leaving in <strong>${log.vehicle_plate||'this vehicle'}</strong>
-      </div>
 
-      <div id="return-pax-list"></div>
+      <!-- What's next -->
+      <div style="font-size:14px;font-weight:700;color:#fff;margin:1rem 0 .5rem">What's next?</div>
 
-      <!-- Destination selection -->
-      <div style="font-size:14px;font-weight:700;color:#fff;
-        margin:.875rem 0 .5rem">Where are you heading?</div>
-
-      <div class="dest-option selected" id="opt-return"
-        onclick="selectPostArrivalOption('return')">
+      <div class="dest-option" onclick="chooseNextDestination('return')">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-arrow-back-up" style="color:var(--amber)"></i>
@@ -2880,8 +2858,7 @@ async function showPostArrivalScreen(log){
         </div>
       </div>
 
-      <div class="dest-option" id="opt-jobtojob"
-        onclick="selectPostArrivalOption('job_to_job')">
+      <div class="dest-option" onclick="chooseNextDestination('job_to_job')">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-arrows-right-left" style="color:var(--green)"></i>
@@ -2892,8 +2869,7 @@ async function showPostArrivalScreen(log){
         <div class="dest-option-sub">Select another job on today's schedule</div>
       </div>
 
-      <div class="dest-option" id="opt-custom"
-        onclick="selectPostArrivalOption('custom')">
+      <div class="dest-option" onclick="chooseNextDestination('custom')">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-map-search" style="color:var(--blue)"></i>
@@ -2903,6 +2879,102 @@ async function showPostArrivalScreen(log){
         </div>
         <div class="dest-option-sub">Hotel, office, or any other address</div>
       </div>
+
+      <div class="dest-option" style="border-color:rgba(248,113,113,.3)" onclick="confirmReleaseDriver()">
+        <div class="dest-option-title" style="color:#f87171">
+          <i class="ti ti-user-x"></i> Not driving back
+        </div>
+        <div class="dest-option-sub">Release your driver status — someone else will drive this vehicle back</div>
+      </div>
+    </div>`;
+
+  _loadArrivalSummaryPax(log);
+}
+
+// Load the passenger list for the just-completed leg into the arrival summary card
+async function _loadArrivalSummaryPax(log){
+  const el = document.getElementById('arrival-summary-pax');
+  if(!el) return;
+  const {data:pax} = await getSupabase()
+    .from('travel_passengers')
+    .select('full_name, external_name')
+    .eq('travel_log_id', log.id);
+  el.textContent = pax?.length
+    ? pax.map(p=>p.full_name||p.external_name||'Unknown').join(', ')
+    : 'None recorded';
+}
+
+// User picked one of the "What's next?" destination options — store the choice
+// and move on to passenger selection (step 3) for the next leg.
+function chooseNextDestination(option){
+  _legType = option;
+  if(option === 'return'){
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Meet spot', type:'return'}
+      : null;
+  } else {
+    _returnDest = null;
+  }
+  showReturnSetupScreen(_outboundLog);
+}
+
+// Page B — "Who is returning in this vehicle?" + destination details + begin trip
+// (step 3 · Passengers — resumes the normal pre-departure flow)
+async function showReturnSetupScreen(log){
+  setStepBar(3);
+  const content = document.getElementById('trip-content');
+
+  // Load full passenger list for this job
+  // Priority: 1) this vehicle's passengers 2) other vehicles' passengers 3) timesheet only
+  const {data:allJobPassengers} = await getSupabase()
+    .from('travel_passengers')
+    .select('profile_id, full_name, role, travel_log_id, worker_type, external_name')
+    .in('travel_log_id', await _getSiblingLogIds(log.timesheet_id));
+
+  // Categorize passengers
+  const myPax    = (allJobPassengers||[]).filter(p=>p.travel_log_id === log.id);
+  const otherPax = (allJobPassengers||[]).filter(p=>p.travel_log_id !== log.id);
+
+  // Initialize return passenger selection — pre-check this vehicle's passengers.
+  // Each passenger gets a unique _key, prefixed by section ("my_" vs "other_")
+  // so the SAME person appearing in both "this vehicle" and "other vehicles"
+  // doesn't share a key — otherwise pre-checking the "this vehicle" row also
+  // (incorrectly) shows a check on their "other vehicle" row. profile_id is
+  // unique per person, but external passengers commonly have null profile_id
+  // AND null external_name, so a position-based fallback keeps every row distinct.
+  const myPaxKeyed    = myPax.map((p,idx)=>({...p, _key: p.profile_id ? `my_${p.profile_id}` : `my_row_${idx}`}));
+  const otherPaxKeyed = otherPax.map((p,idx)=>({...p, _key: p.profile_id ? `other_${p.profile_id}` : `other_row_${idx}`}));
+  window._returnPaxSelected = new Set(myPaxKeyed.map(p=>p._key));
+  window._returnPaxData = [...myPaxKeyed, ...otherPaxKeyed];
+
+  const legLabel = _legType==='return' ? 'Return to meet spot'
+    : _legType==='job_to_job' ? 'Go to next job'
+    : 'Custom destination';
+  const legBadge = _legType==='return' ? '<span class="leg-badge leg-return">Return</span>'
+    : _legType==='job_to_job' ? '<span class="leg-badge leg-jobtojob">Job to Job</span>'
+    : '<span class="leg-badge" style="background:rgba(30,95,174,.2);color:#90b8f0">Custom</span>';
+
+  content.innerHTML = `
+    <div style="padding:1rem;padding-bottom:5rem">
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:1rem" onclick="showArrivalSummaryScreen(_outboundLog)">
+        <i class="ti ti-arrow-left"></i> Back to "What's next?"
+      </button>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem">
+        <div style="font-size:14px;font-weight:700;color:#fff">${legLabel}</div>
+        ${legBadge}
+      </div>
+
+      <!-- Passenger selection for return -->
+      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.25rem">
+        Who is returning in this vehicle?
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.875rem">
+        Select everyone leaving in <strong>${log.vehicle_plate||'this vehicle'}</strong>
+      </div>
+
+      <div id="return-pax-list"></div>
 
       <div id="post-arrival-next" style="margin-top:.875rem"></div>
 
@@ -2971,30 +3043,11 @@ async function showPostArrivalScreen(log){
         <div>outboundLog.dest (store): <span id="dbg-storedst">${_outboundLog?.dest_lat||'null'}, ${_outboundLog?.dest_lng||'null'}</span></div>
         <div>_activeJob.dest (current): <span id="dbg-activedst">${_activeJob?.dest_lat||'null'}, ${_activeJob?.dest_lng||'null'}</span></div>
       </div>` : ''}
-
-      <!-- Release driver option -->
-      <div class="release-driver-btn" style="margin-top:1rem">
-        <div style="font-size:12px;font-weight:600;color:#f87171;margin-bottom:.375rem">
-          <i class="ti ti-user-x"></i> Not driving back?
-        </div>
-        <div style="font-size:11px;color:var(--text2);margin-bottom:.625rem">
-          If someone else is driving this vehicle back, release your driver status
-          so you can return as a passenger.
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="confirmReleaseDriver()"
-          style="border-color:rgba(248,113,113,.4);color:#f87171;font-size:12px">
-          Release driver status — I am not driving back
-        </button>
-      </div>
-
-      <button class="btn btn-ghost" style="margin-top:.75rem"
-        onclick="showTripSummary(_outboundLog)">
-        <i class="ti ti-file-description"></i> View trip summary only
-      </button>
     </div>`;
 
-  // Render passenger list
+  // Render passenger list and the destination-specific panel for the chosen option
   _renderReturnPaxList(myPaxKeyed, otherPaxKeyed);
+  _renderDestNextPanel();
 }
 
 async function _getSiblingLogIds(timesheetId){
@@ -3226,29 +3279,14 @@ async function beginReturnLeg(){
   await _beginNewLeg(_legType||'return');
 }
 
-function selectPostArrivalOption(option){
-  _legType = option;
-
-  // Highlight selected option card
-  ['opt-return','opt-jobtojob','opt-custom'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.classList.remove('selected');
-  });
-  const activeId = option==='return'?'opt-return'
-    : option==='job_to_job'?'opt-jobtojob'
-    : 'opt-custom';
-  document.getElementById(activeId)?.classList.add('selected');
-
-  // Set _returnDest based on option
+// Populate the destination-specific panel on the passenger/setup screen (Page B)
+// based on the "What's next?" choice already made on the arrival summary screen.
+function _renderDestNextPanel(){
   const nextEl = document.getElementById('post-arrival-next');
   if(!nextEl) return;
   nextEl.innerHTML = '';
 
-  if(option === 'return'){
-    _returnDest = _outboundLog?.origin_lat
-      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
-         address:'Meet spot', type:'return'}
-      : null;
+  if(_legType === 'return'){
     if(!_returnDest){
       // No GPS captured — show address entry
       nextEl.innerHTML = `<div style="background:rgba(244,169,58,.1);border:1px solid rgba(244,169,58,.3);
@@ -3265,17 +3303,20 @@ function selectPostArrivalOption(option){
         </div>
         <div id="return-dest-resolved" style="font-size:12px;color:var(--green);margin-top:4px"></div>
       </div>`;
+    } else {
+      nextEl.innerHTML = `<div style="font-size:12px;color:var(--text2)">
+        <i class="ti ti-map-pin-check" style="color:var(--green)"></i>
+        Returning to <strong style="color:#fff">${_returnDest.address||'meet spot'}</strong> — GPS coordinates on file
+      </div>`;
     }
 
-  } else if(option === 'job_to_job'){
-    _returnDest = null;
+  } else if(_legType === 'job_to_job'){
     nextEl.innerHTML = `<div id="next-job-list">
       <div style="text-align:center;padding:1rem"><div class="spinner"></div></div>
     </div>`;
     loadNextJobOptions();
 
-  } else if(option === 'custom'){
-    _returnDest = null;
+  } else if(_legType === 'custom'){
     nextEl.innerHTML = `<div class="field">
       <label>Destination address</label>
       <input type="text" id="return-dest-address"
@@ -3286,6 +3327,7 @@ function selectPostArrivalOption(option){
   }
   _updateDestDebugCard();
 }
+
 
 // Live-update dev debug card when _returnDest changes
 function _updateDestDebugCard(){
@@ -3357,7 +3399,7 @@ function selectNextJob(tsId, lat, lng, address){
   document.querySelectorAll('[id^="j2j-"]').forEach(el=>el.classList.remove('selected'));
   document.getElementById('j2j-'+tsId)?.classList.add('selected');
   _returnDest = {lat, lng, address, type:'job', to_job_id: tsId};
-  document.getElementById('start-j2j-btn').disabled = !lat;
+  _updateDestDebugCard();
 }
 
 // ── Start return trip ─────────────────────────────────────────────────────────
