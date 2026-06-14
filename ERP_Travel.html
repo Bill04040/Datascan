@@ -2816,8 +2816,28 @@ async function showPostArrivalScreen(log){
   const allPaxIds= new Set((allJobPassengers||[]).map(p=>p.profile_id));
 
   // Initialize return passenger selection — pre-check this vehicle's passengers
-  window._returnPaxSelected = new Set(myPax.map(p=>p.profile_id||p.external_name));
-  window._returnPaxData = [...myPax, ...otherPax];
+  // Each passenger gets a unique _key. profile_id is unique per person, but
+  // external passengers commonly have null profile_id AND null external_name —
+  // using `profile_id||external_name` as the key collapses all of those onto a
+  // single shared key (e.g. `undefined`), so selecting/deselecting one toggles
+  // them all together and the Set's size under-counts. A position-based
+  // fallback key keeps every passenger distinct.
+  const myPaxKeyed    = myPax.map((p,idx)=>({...p, _key: p.profile_id ? `p_${p.profile_id}` : `row_${idx}`}));
+  const otherPaxKeyed = otherPax.map((p,idx)=>({...p, _key: p.profile_id ? `p_${p.profile_id}` : `row_${myPax.length+idx}`}));
+  window._returnPaxSelected = new Set(myPaxKeyed.map(p=>p._key));
+  window._returnPaxData = [...myPaxKeyed, ...otherPaxKeyed];
+
+  // Default: "Return to meet spot" is the option pre-selected (class="selected")
+  // in the markup below, so default _legType/_returnDest to match it. Without
+  // this, _legType stays at its stale/initial 'outbound' value when the user
+  // taps "Begin trip" without explicitly re-selecting "Return to meet spot",
+  // the new leg gets persisted with leg_type:'outbound', and submitArrival
+  // loops back to this screen instead of showing the trip summary.
+  _legType = 'return';
+  _returnDest = _outboundLog?.origin_lat
+    ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+       address:'Meet spot', type:'return'}
+    : null;
 
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
@@ -2973,14 +2993,8 @@ async function showPostArrivalScreen(log){
       </button>
     </div>`;
 
-  // Default: return trip selected
-  _returnDest = _outboundLog?.origin_lat
-    ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
-       address:'Meet spot', type:'return'}
-    : null;
-
   // Render passenger list
-  _renderReturnPaxList(myPax, otherPax);
+  _renderReturnPaxList(myPaxKeyed, otherPaxKeyed);
 }
 
 async function _getSiblingLogIds(timesheetId){
@@ -3001,7 +3015,7 @@ function _renderReturnPaxList(myPax, otherPax){
     html += '<div class="pax-group-header"><i class="ti ti-users"></i> ' +
       'Previous passengers — this vehicle</div>';
     myPax.forEach(p=>{
-      const key = p.profile_id||p.external_name;
+      const key = p._key;
       const chk = window._returnPaxSelected.has(key);
       html += `<div class="pax-select-card ${chk?'checked':''}"
         onclick="toggleReturnPax('${key}',this)">
@@ -3018,7 +3032,7 @@ function _renderReturnPaxList(myPax, otherPax){
     html += '<div class="pax-group-header"><i class="ti ti-transfer"></i> ' +
       'Arrived in other vehicles</div>';
     otherPax.forEach(p=>{
-      const key = p.profile_id||p.external_name;
+      const key = p._key;
       const chk = window._returnPaxSelected.has(key);
       html += `<div class="pax-select-card ${chk?'':''}"
         onclick="toggleReturnPax('${key}',this)">
@@ -3058,7 +3072,7 @@ function showAddExternalPassenger(){
   const id = prompt('Employee ID or badge # (optional):');
   const key = 'ext_'+Date.now();
   window._returnPaxData = window._returnPaxData||[];
-  window._returnPaxData.push({profile_id:null,full_name:name.trim(),
+  window._returnPaxData.push({_key:key, profile_id:null,full_name:name.trim(),
     external_name:name.trim(),external_id:id||null,worker_type:'unknown'});
   window._returnPaxSelected.add(key);
   // Re-render
@@ -3204,8 +3218,7 @@ async function beginReturnLeg(){
 
   // Collect selected passengers from the UI
   const selectedPax = (window._returnPaxData||[]).filter(p=>{
-    const key = p.profile_id||p.external_name;
-    return window._returnPaxSelected?.has(key);
+    return window._returnPaxSelected?.has(p._key);
   });
   _passengers = selectedPax.length ? selectedPax : [];
 
