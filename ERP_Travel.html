@@ -516,7 +516,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.42';
+const APP_VERSION  = 'v1.0.46';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -668,6 +668,14 @@ async function loadMyTrips(){
   if(sub) sub.textContent = now.toLocaleDateString('en-US',
     {weekday:'long',month:'long',day:'numeric'});
 
+  // ── Build LOCAL midnight-to-midnight range, converted to UTC for the query ──
+  // Using today+'T00:00:00.000Z' treats local midnight as UTC midnight, which is
+  // wrong for any timezone offset — trips in the evening (local) can land on the
+  // "next day" in UTC and fall outside this range. Build the range from actual
+  // local Date objects instead so the conversion to UTC is correct.
+  const localStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const localEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0);
+
   // ── Primary query: this driver's travel logs today ────────────────────────
   const {data:myLogs, error:logErr} = await getSupabase()
     .from('travel_logs')
@@ -677,8 +685,8 @@ async function loadMyTrips(){
              origin_lat, origin_lng, dest_lat, dest_lng, dest_address, parent_log_id,
              from_job_id, to_job_id, driver_name`)
     .eq('driver_id', currentUser.id)
-    .gte('started_at', today+'T00:00:00.000Z')
-    .lte('started_at', today+'T23:59:59.999Z')
+    .gte('started_at', localStart.toISOString())
+    .lt('started_at', localEnd.toISOString())
     .order('started_at', {ascending: false});
 
   loading.style.display = 'none';
@@ -1015,7 +1023,10 @@ async function showTripSummary(log){
       <div class="card">
         <div class="card-header">
           <div class="card-title">Trip Summary</div>
-          <span style="font-size:11px;color:var(--text3)">Read only</span>
+          ${log.leg_type==='return'?'<span class="leg-badge leg-return">Return</span>'
+            :log.leg_type==='job_to_job'?'<span class="leg-badge leg-jobtojob">Job to Job</span>'
+            :log.leg_type==='custom'?'<span class="leg-badge" style="background:rgba(30,95,174,.2);color:#90b8f0">Custom</span>'
+            :'<span class="leg-badge leg-outbound">Outbound</span>'}
         </div>
         <div class="info-row"><div class="info-label">Vehicle</div>
           <div class="info-value">${[log.vehicle_plate,log.vehicle_make,log.vehicle_model].filter(Boolean).join(' · ')}</div></div>
@@ -1341,11 +1352,11 @@ function headingToCompass(deg){
 // ── Step bar renderer ─────────────────────────────────────────────────────────
 function renderStepBar(activeStep){
   const steps = [
-    {n:1, label:'Meet Site'},
-    {n:2, label:'Job'},
-    {n:3, label:'Timesheet'},
+    {n:1, label:'Job'},
+    {n:2, label:'Vehicle'},
+    {n:3, label:'Passengers'},
     {n:4, label:'Trip'},
-    {n:5, label:'Destinated'},
+    {n:5, label:'Destination'},
   ];
   return `<div class="step-bar">
     ${steps.map((s,i)=>`
@@ -1421,7 +1432,7 @@ function setStepBar(active){
     el.id = 'trip-step-bar';
     document.getElementById('app-content').insertBefore(el, document.getElementById('app-content').firstChild);
   }
-  const steps = [{n:1,label:'Meet Site'},{n:2,label:'Job'},{n:3,label:'Timesheet'},{n:4,label:'Trip'},{n:5,label:'Destinated'}];
+  const steps = [{n:1,label:'Job'},{n:2,label:'Vehicle'},{n:3,label:'Passengers'},{n:4,label:'Trip'},{n:5,label:'Destination'}];
   el.innerHTML = `<div class="step-bar">${steps.map((s,i)=>`
     ${i>0?`<div class="step-connector ${active>s.n?'done':''}"></div>`:''}
     <div class="step-item">
@@ -2397,9 +2408,34 @@ function showTripActive(log){
         </div>
         <button class="btn btn-success" id="confirm-arrival-btn"
           style="opacity:.4;transition:opacity .3s"
-          onclick="submitArrival()" disabled>
+          onclick="promptConfirmArrival()" disabled>
           <i class="ti ti-flag-check"></i> Confirm Arrival
         </button>
+
+        <!-- Confirmation banner — shown on button tap -->
+        <div id="arrival-confirm-banner" style="display:none;margin-top:.875rem;
+          background:rgba(244,169,58,.1);border:1.5px solid rgba(244,169,58,.4);
+          border-radius:var(--radius);padding:1rem;text-align:left">
+          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:.875rem">
+            <i class="ti ti-alert-triangle" style="color:var(--amber);font-size:22px;flex-shrink:0;margin-top:1px"></i>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:4px">
+                Confirm arrival?
+              </div>
+              <div style="font-size:13px;color:var(--text2);line-height:1.6" id="arrival-confirm-body">
+                This will end the current trip leg and cannot be undone.
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.625rem">
+            <button class="btn btn-ghost btn-sm" onclick="cancelConfirmArrival()">
+              <i class="ti ti-arrow-left"></i> Go back
+            </button>
+            <button class="btn btn-success btn-sm" id="final-arrival-btn" onclick="submitArrival()">
+              <i class="ti ti-flag-check"></i> Confirm arrival
+            </button>
+          </div>
+        </div>
       </div>
       <div class="card" style="margin-top:.75rem">
         <div class="card-header"><div class="card-title">Trip Details</div></div>
@@ -2670,18 +2706,34 @@ function onEndMilesInput(inp){
   }
 }
 
+function promptConfirmArrival(){
+  const endMiles = parseInt(document.getElementById('ending-miles')?.value||'0');
+  if(!endMiles || endMiles <= (_startingMileage||0)){
+    showToast('Ending mileage must be greater than starting mileage','error'); return;
+  }
+
+  document.getElementById('arrival-confirm-body').innerHTML =
+    'This will end the current trip leg and record:<br>' +
+    '&bull; Ending odometer: <strong style="color:#fff">' + endMiles.toLocaleString() + '</strong><br>' +
+    '&bull; Arrival time: <strong style="color:#fff">now</strong><br><br>' +
+    'This cannot be undone.';
+
+  document.getElementById('arrival-confirm-banner').style.display = '';
+  document.getElementById('confirm-arrival-btn').style.display     = 'none';
+  document.getElementById('arrival-confirm-banner').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function cancelConfirmArrival(){
+  document.getElementById('arrival-confirm-banner').style.display = 'none';
+  document.getElementById('confirm-arrival-btn').style.display     = '';
+}
+
 async function submitArrival(){
   const endMiles = parseInt(document.getElementById('ending-miles')?.value||'0');
   if(!endMiles || endMiles <= (_startingMileage||0)){
     showToast('Ending mileage must be greater than starting mileage','error'); return;
   }
-  if(!confirm(
-    'Confirm arrival?\n\n' +
-    'This will end the current trip leg and record:\n' +
-    '• Ending odometer: ' + endMiles.toLocaleString() + '\n' +
-    '• Arrival time: now\n\n' +
-    'This cannot be undone.'
-  )) return;
+  // Confirmation already shown via promptConfirmArrival banner — proceed directly
   const completedAt = _arrivedAt || new Date().toISOString();
   const btn = document.getElementById('confirm-arrival-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
@@ -2858,9 +2910,34 @@ async function showPostArrivalScreen(log){
       </div>
 
       <button class="btn btn-success" id="begin-return-btn"
-        style="margin-top:1rem;opacity:.4;transition:opacity .3s" onclick="beginReturnLeg()" disabled>
+        style="margin-top:1rem;opacity:.4;transition:opacity .3s" onclick="promptBeginReturnLeg()" disabled>
         <i class="ti ti-steering-wheel"></i> Begin trip
       </button>
+
+      <!-- Confirmation banner — shown on button tap -->
+      <div id="begin-trip-confirm" style="display:none;margin-top:.875rem;
+        background:rgba(244,169,58,.1);border:1.5px solid rgba(244,169,58,.4);
+        border-radius:var(--radius);padding:1rem">
+        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:.875rem">
+          <i class="ti ti-alert-triangle" style="color:var(--amber);font-size:22px;flex-shrink:0;margin-top:1px"></i>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:4px" id="begin-trip-confirm-title">
+              Ready to depart?
+            </div>
+            <div style="font-size:13px;color:var(--text2);line-height:1.6" id="begin-trip-confirm-body">
+              Make sure everyone who is returning in this vehicle is accounted for above.
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.625rem">
+          <button class="btn btn-ghost btn-sm" onclick="cancelBeginReturnLeg()">
+            <i class="ti ti-arrow-left"></i> Go back
+          </button>
+          <button class="btn btn-success btn-sm" id="final-begin-btn" onclick="beginReturnLeg()">
+            <i class="ti ti-steering-wheel"></i> Start trip
+          </button>
+        </div>
+      </div>
 
       <!-- Dev debug: show parsed destination data -->
       ${_isDevUser() ? `<div style="background:rgba(30,95,174,.08);
@@ -3054,6 +3131,42 @@ function onPostStartMilesInput(val){
   }
 }
 
+function promptBeginReturnLeg(){
+  // Validate destination + mileage before showing confirmation
+  if(!_returnDest && (_legType==='return'||!_legType)){
+    _returnDest = _outboundLog?.origin_lat
+      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
+         address:'Meet spot', type:'return'}
+      : null;
+  }
+  if(!_returnDest){ showToast('Please select a destination first','error'); return; }
+  if(!_startingMileage || _startingMileage <= 0){
+    showToast('Please enter the starting odometer for this leg','error'); return;
+  }
+
+  const legLabel = _legType==='return' ? 'return trip'
+    : _legType==='job_to_job' ? 'job-to-job trip'
+    : 'trip';
+  const paxCount = window._returnPaxSelected?.size||0;
+
+  document.getElementById('begin-trip-confirm-title').textContent =
+    'Start ' + legLabel + '?';
+  document.getElementById('begin-trip-confirm-body').innerHTML =
+    'Destination: <strong style="color:#fff">' + (_returnDest.address||_activeJob?.client_name||'—') + '</strong><br>' +
+    'Starting odometer: <strong style="color:#fff">' + _startingMileage.toLocaleString() + '</strong><br>' +
+    'Passengers: <strong style="color:#fff">' + paxCount + '</strong><br><br>' +
+    'Make sure everyone is aboard before continuing.';
+
+  document.getElementById('begin-trip-confirm').style.display = '';
+  document.getElementById('begin-return-btn').style.display   = 'none';
+  document.getElementById('begin-trip-confirm').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function cancelBeginReturnLeg(){
+  document.getElementById('begin-trip-confirm').style.display = 'none';
+  document.getElementById('begin-return-btn').style.display   = '';
+}
+
 async function beginReturnLeg(){
   // Validate / default destination
   if(!_returnDest && (_legType==='return'||!_legType)){
@@ -3066,22 +3179,11 @@ async function beginReturnLeg(){
     showToast('Please select a destination first','error'); return;
   }
 
-  // Validate starting mileage was entered
+  // Validate starting mileage was entered (already checked in promptBeginReturnLeg,
+  // re-checked here as a safety net since this function can be called directly)
   if(!_startingMileage || _startingMileage <= 0){
     showToast('Please enter the starting odometer for this leg','error'); return;
   }
-
-  // Confirmation — prevent accidental taps
-  const legLabel = _legType==='return' ? 'return trip'
-    : _legType==='job_to_job' ? 'job-to-job trip'
-    : 'trip';
-  if(!confirm(
-    'Start ' + legLabel + '?\n\n' +
-    'Destination: ' + (_returnDest.address||_activeJob?.client_name||'—') + '\n' +
-    'Starting odometer: ' + _startingMileage.toLocaleString() + '\n' +
-    'Passengers: ' + (window._returnPaxSelected?.size||0) + '\n\n' +
-    'Make sure everyone is aboard before continuing.'
-  )) return;
 
   // ── CRITICAL: overwrite _activeJob destination with the RETURN destination ──
   // _activeJob.dest_lat/lng drives geofence + navigation on the active trip screen.
@@ -3315,7 +3417,10 @@ async function _beginNewLeg(legType){
     _legType     = legType;
     _arrivedFired = false;
     _arrivedAt   = null;
-    _startingMileage = null; // require fresh entry for this leg
+    // NOTE: do NOT reset _startingMileage here — it was just used as miles_start
+    // for THIS leg and is needed by the arrival screen's "must be greater than"
+    // validation. The post-arrival mileage box for the NEXT leg renders with a
+    // fresh empty input regardless, so no global reset is needed.
     clearTripState();
 
     showToast(legType==='return'?'Return trip started':'Job-to-job trip started','success');
