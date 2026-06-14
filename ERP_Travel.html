@@ -514,7 +514,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.50';
+const APP_VERSION  = 'v1.0.51';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -1021,13 +1021,12 @@ async function showTripSummary(log){
       <div class="card">
         <div class="card-header">
           <div class="card-title">Trip Summary</div>
-          ${log.leg_type==='return'?'<span class="leg-badge leg-return">Return</span>'
-            :log.leg_type==='job_to_job'?'<span class="leg-badge leg-jobtojob">Job to Job</span>'
-            :log.leg_type==='custom'?'<span class="leg-badge" style="background:rgba(30,95,174,.2);color:#90b8f0">Custom</span>'
-            :'<span class="leg-badge leg-outbound">Outbound</span>'}
+          ${legTypeBadge(log.leg_type)}
         </div>
         <div class="info-row"><div class="info-label">Vehicle</div>
           <div class="info-value">${[log.vehicle_plate,log.vehicle_make,log.vehicle_model].filter(Boolean).join(' · ')}</div></div>
+        <div class="info-row"><div class="info-label">Destination</div>
+          <div class="info-value">${log.dest_address||'—'}</div></div>
         <div class="info-row"><div class="info-label">Departed</div>
           <div class="info-value">${started}</div></div>
         <div class="info-row"><div class="info-label">Arrived</div>
@@ -1038,6 +1037,10 @@ async function showTripSummary(log){
           <div class="info-value">${log.miles_start?.toLocaleString()||'—'}</div></div>
         <div class="info-row"><div class="info-label">End odometer</div>
           <div class="info-value">${log.miles_end?.toLocaleString()||'—'}</div></div>
+        ${log.is_end_point ? `<div class="info-row"><div class="info-label">End point</div>
+          <div class="info-value" style="color:var(--green)">
+            <i class="ti ti-flag-filled"></i> ${log.dest_address||'Travel complete for today'}
+          </div></div>` : ''}
       </div>
 
       <!-- Driver & Passenger roster -->
@@ -1750,6 +1753,7 @@ let _boardedIds = new Set();   // profile ids checked as boarded
 
 async function showPassengerCheckIn(){
   setStepBar(3);
+  startSetupGPS();
   const content = document.getElementById('trip-content');
 
   // Vehicle summary chip
@@ -2035,6 +2039,14 @@ async function confirmPassengers(){
 
     _activeTrip = log;
     clearTripState(); // clean up localStorage now that it's in Supabase
+
+    // Pre-trip GPS tracking is no longer needed — flush its buffered pings now
+    // that this leg has a travel_log_id, then record a "board" ping (at the
+    // meet-spot origin fix) for every passenger boarding this vehicle.
+    stopSetupGPS();
+    await _flushSetupPingBuffer(log, 'outbound');
+    await _recordPaxBoardAlight(log, 'outbound', _passengers, []);
+
     showTripActive(log);
 
   } catch(e){
@@ -2054,7 +2066,10 @@ async function confirmPassengers(){
 
 // ── GPS state ─────────────────────────────────────────────────────────────────
 let _gpsWatchId       = null;
-let _outboundLog      = null;  // reference to the outbound trip for return
+let _outboundLog      = null;  // the ORIGINAL outbound leg — stays pinned to this all day
+                                // (its origin_lat/lng is the meet spot for "Return to meet spot")
+let _lastArrivalLog   = null;  // the leg that MOST RECENTLY completed — drives the
+                                // "What's next?" / passenger-setup screens for THIS stop
 let _returnDest       = null;  // {lat, lng, address, type} for return trip
 let _legType          = 'outbound'; // outbound | return | job_to_job
 let _lastPingTime     = 0;
@@ -2075,6 +2090,12 @@ let _gpsOfflineBuffer = [];
 const PING_INTERVAL   = 30000;
 let GEOFENCE_M        = 200; // configurable per store type
 const MAPS_KEY        = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+
+// ── Pre-trip "setup" GPS tracking (runs during passenger selection, before a
+//    travel_logs row exists for this leg) ────────────────────────────────────
+let _setupGPSActive   = false; // true while the setup-phase watch is running
+let _setupPingBuffer  = [];    // tracking pings captured before travel_log_id is known
+let _setupLastPing    = 0;     // throttle timer for setup-phase tracking pings
 
 // ── Native maps integration ──────────────────────────────────────────────────
 function openNativeMap(){
@@ -2154,7 +2175,7 @@ function onLegStartMilesInput(val){
   const err   = document.getElementById('leg-start-miles-err');
   const block = document.getElementById('leg-miles-block');
   const label = document.getElementById('leg-miles-label');
-  const minVal = _outboundLog?.miles_end || _activeTrip?.miles_end || 0;
+  const minVal = _lastArrivalLog?.miles_end || _outboundLog?.miles_end || _activeTrip?.miles_end || 0;
 
   if(miles > 0 && miles >= minVal){
     if(err) err.style.display='none';
@@ -2309,7 +2330,8 @@ function showTripActive(log){
   const paxCount=_passengers.length;
   const paxNames=_passengers.map(p=>p.full_name).join(', ');
   const vehStr=[_selectedVehicle?.plate,_selectedVehicle?.make,_selectedVehicle?.model].filter(Boolean).join(' · ');
-  const destStr=_activeJob.client_name+' · '+[_activeJob.city,_activeJob.state].filter(Boolean).join(', ');
+  const cityState=[_activeJob.city,_activeJob.state].filter(Boolean).join(', ');
+  const destStr=_activeJob.client_name+(cityState?' · '+cityState:'');
 
   // Build dev reset panel as plain string — avoids nested template literal browser parse issue
   const devResetBtn = _isDevUser()
@@ -2332,7 +2354,7 @@ function showTripActive(log){
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
             <div style="font-size:14px;font-weight:700;color:#fff">En Route — <span id="trip-status-text">Locating...</span></div>
-            ${log.leg_type==='return'?'<span class="leg-badge leg-return">Return</span>':log.leg_type==='job_to_job'?'<span class="leg-badge leg-jobtojob">Job to Job</span>':'<span class="leg-badge leg-outbound">Outbound</span>'}
+            ${legTypeBadge(log.leg_type)}
           </div>
           <div style="font-size:12px;color:var(--text2)">Departed ${started} · ${paxCount} passenger${paxCount!==1?'s':''} aboard</div>
         </div>
@@ -2499,7 +2521,9 @@ function initTripMap(log, attempt){
     icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:'#1E5FAE',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
 }
 
-function startGPS(log){
+// Shared geolocation watch — acquires a high-accuracy fix, falling back to low
+// accuracy if needed. `onUpdate(pos)` is called for every position update.
+function _startGeoWatch(onUpdate){
   const statusEl = ()=>document.getElementById('gps-status-text');
   if(!navigator.geolocation){
     const el=statusEl();
@@ -2512,7 +2536,7 @@ function startGPS(log){
   _gpsWatchId = navigator.geolocation.watchPosition(
     pos=>{
       _gotFirstFix = true;
-      onGPSUpdate(pos, log);
+      onUpdate(pos);
     },
     err=>{
       const el = statusEl();
@@ -2525,7 +2549,7 @@ function startGPS(log){
       if(el) el.textContent = 'Acquiring signal (low accuracy)...';
       if(_gpsWatchId !== null){ navigator.geolocation.clearWatch(_gpsWatchId); _gpsWatchId=null; }
       _gpsWatchId = navigator.geolocation.watchPosition(
-        pos=>{ _gotFirstFix=true; onGPSUpdate(pos,log); },
+        pos=>{ _gotFirstFix=true; onUpdate(pos); },
         err2=>{
           const msgs=['','Permission denied','Position unavailable','Timeout'];
           if(statusEl()) statusEl().textContent = msgs[err2.code]||'GPS unavailable';
@@ -2546,9 +2570,128 @@ function startGPS(log){
   }, 15000);
 }
 
+function startGPS(log){
+  _startGeoWatch(pos => onGPSUpdate(pos, log));
+}
+
 function stopGPS(){
   if(_gpsWatchId!==null){ navigator.geolocation.clearWatch(_gpsWatchId); _gpsWatchId=null; }
 }
+
+// ── Pre-trip "setup" tracking — runs while the driver is on a passenger
+// selection screen, before this leg's travel_logs row exists. Pings are
+// buffered locally and flushed (with the real travel_log_id) once the leg's
+// log row is created. No-op if already running.
+function startSetupGPS(){
+  if(_setupGPSActive) return;
+  _setupGPSActive = true;
+  _setupLastPing  = 0; // ping promptly on the first fix of this setup phase
+  _startGeoWatch(pos => onSetupGPSUpdate(pos));
+}
+
+function stopSetupGPS(){
+  if(!_setupGPSActive) return;
+  _setupGPSActive = false;
+  stopGPS();
+}
+
+// Lightweight handler for the pre-trip watch — just tracks position and
+// buffers throttled tracking pings (no geofence/arrival logic, since there's
+// no active leg yet).
+function onSetupGPSUpdate(pos){
+  const lat=pos.coords.latitude, lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy, spd=pos.coords.speed, hdg=pos.coords.heading;
+  _currentPos = {lat,lng};
+
+  const statusEl = document.getElementById('gps-status-text');
+  if(statusEl) statusEl.textContent = '±'+Math.round(acc||0)+'m accuracy';
+
+  const now = Date.now();
+  if(now - _setupLastPing >= PING_INTERVAL){
+    _setupLastPing = now;
+    _pingCount++;
+    _setupPingBuffer.push({
+      event_type:     'tracking',
+      lat, lng,
+      accuracy:       acc||null,
+      speed:          spd||null,
+      heading:        hdg||null,
+      recorded_at:    new Date().toISOString(),
+      sequence_num:   _pingCount,
+      profile_id:     null,
+      passenger_name: null,
+    });
+  }
+}
+
+// Flush buffered pre-trip tracking pings once this leg's travel_logs row
+// exists — fills in the FK and leg context that wasn't known yet when they
+// were captured.
+async function _flushSetupPingBuffer(log, legType){
+  if(!_setupPingBuffer.length) return;
+  const rows = _setupPingBuffer.map(p=>({
+    travel_log_id: log.id,
+    driver_id:     currentUser.id,
+    timesheet_id:  log.timesheet_id || _activeJob?.id || null,
+    vehicle_plate: log.vehicle_plate || _selectedVehicle?.plate || null,
+    leg_type:      legType,
+    trip_status:   'setup',
+    dist_to_dest_m: null,
+    is_moving:      p.speed != null ? p.speed > 0.9 : null,
+    geofence_hit:   false,
+    ...p,
+  }));
+  _setupPingBuffer = [];
+  try{
+    await getSupabase().from('gps_pings').insert(rows);
+    console.log('[setupPings] flushed', rows.length, 'pre-trip ping(s) for', legType, 'leg');
+  } catch(e){
+    console.warn('[flushSetupPingBuffer]', e.message);
+    _gpsOfflineBuffer.push(...rows);
+  }
+}
+
+// Record one GPS-stamped "board"/"alight" ping per passenger affected by a leg
+// boundary — boardedPax are riding this new leg, alightedPax were on the
+// previous leg but are not continuing. Uses this leg's origin fix so every
+// event shares the exact boarding-location coordinates and timestamp.
+async function _recordPaxBoardAlight(log, legType, boardedPax, alightedPax){
+  const rows = [];
+  const base = {
+    travel_log_id: log.id,
+    driver_id:     currentUser.id,
+    timesheet_id:  log.timesheet_id || _activeJob?.id || null,
+    vehicle_plate: log.vehicle_plate || _selectedVehicle?.plate || null,
+    leg_type:      legType,
+    trip_status:   'active',
+    lat:            log.origin_lat || null,
+    lng:            log.origin_lng || null,
+    accuracy:       null,
+    speed:          null,
+    heading:        null,
+    recorded_at:    log.started_at || new Date().toISOString(),
+    dist_to_dest_m: null,
+    is_moving:      false,
+    geofence_hit:   false,
+  };
+  (boardedPax||[]).forEach(p=>{
+    rows.push({...base, event_type:'board', sequence_num: ++_pingCount,
+      profile_id: p.profile_id||null, passenger_name: p.full_name||p.external_name||'Unknown'});
+  });
+  (alightedPax||[]).forEach(p=>{
+    rows.push({...base, event_type:'alight', sequence_num: ++_pingCount,
+      profile_id: p.profile_id||null, passenger_name: p.full_name||p.external_name||'Unknown'});
+  });
+  if(!rows.length) return;
+  try{
+    await getSupabase().from('gps_pings').insert(rows);
+    console.log('[paxEvents] recorded', rows.length, 'board/alight ping(s) for', legType, 'leg');
+  } catch(e){
+    console.warn('[recordPaxBoardAlight]', e.message);
+    _gpsOfflineBuffer.push(...rows);
+  }
+}
+
 
 async function onGPSUpdate(pos,log){
   const lat=pos.coords.latitude,lng=pos.coords.longitude;
@@ -2635,6 +2778,9 @@ async function onGPSUpdate(pos,log){
       vehicle_plate:  log.vehicle_plate || _selectedVehicle?.plate || null,
       leg_type:       log.leg_type || _legType || 'outbound',
       trip_status:    'active',
+      event_type:     'tracking',
+      profile_id:     null,
+      passenger_name: null,
       sequence_num:   _pingCount,
       lat, lng,
       accuracy:       acc||null,
@@ -2726,6 +2872,24 @@ function cancelConfirmArrival(){
   document.getElementById('confirm-arrival-btn').style.display     = '';
 }
 
+// Release the driver from the vehicle and clear all trip-session state so
+// nothing carries over into the next job. Called whenever a job concludes —
+// either a "return to meet spot" leg arrives, or the driver chooses "Complete
+// travel for today" from a custom-destination stop.
+function _releaseDriverAndResetTripState(){
+  _selectedVehicle = null;
+  _startingMileage = null;
+  _outboundLog     = null;
+  _lastArrivalLog  = null;
+  _returnDest      = null;
+  _legType         = 'outbound';
+  _passengers      = [];
+  window._returnPaxSelected = new Set();
+  window._returnPaxData     = [];
+  const navTrip = document.getElementById('nav-trip');
+  if(navTrip) navTrip.style.display = 'none';
+}
+
 async function submitArrival(){
   const endMiles = parseInt(document.getElementById('ending-miles')?.value||'0');
   if(!endMiles || endMiles <= (_startingMileage||0)){
@@ -2755,34 +2919,31 @@ async function submitArrival(){
     const completedLog = {..._activeTrip};
     _activeTrip = null;
 
-    // Always set _outboundLog and _returnDest BEFORE showing post-arrival screen
-    if(completedLog.leg_type === 'outbound' || !completedLog.leg_type){
-      _outboundLog = completedLog;
-      // Default return dest = meet spot captured at trip start
-      _returnDest = completedLog.origin_lat
-        ? {lat:completedLog.origin_lat, lng:completedLog.origin_lng,
-           address:'Meet spot', type:'return'}
-        : null;
-      console.log('[submitArrival] outboundLog set — origin:', completedLog.origin_lat, completedLog.origin_lng);
-      setTimeout(()=>{ showArrivalSummaryScreen(completedLog); loadMyTrips(); }, 800);
-    } else {
-      // Return (or job-to-job) leg complete — this concludes the job.
-      // Release the driver from the vehicle and clear all trip-session state
-      // so nothing carries over into the next job, and hide the "Trip" nav
-      // tab so the only action available on the summary screen is "Back to jobs".
-      _selectedVehicle = null;
-      _startingMileage = null;
-      _outboundLog     = null;
-      _returnDest      = null;
-      _legType         = 'outbound';
-      _passengers      = [];
-      window._returnPaxSelected = new Set();
-      window._returnPaxData     = [];
-      const navTrip = document.getElementById('nav-trip');
-      if(navTrip) navTrip.style.display = 'none';
-
+    if(completedLog.leg_type === 'return'){
+      // Return leg complete — this concludes the job. Release the driver
+      // from the vehicle and clear all trip-session state so nothing
+      // carries over into the next job, and hide the "Trip" nav tab so the
+      // only action available on the summary screen is "Back to jobs".
+      _releaseDriverAndResetTripState();
       showToast('Trip complete — you have been released from this vehicle','success');
       setTimeout(()=>{ showTripSummary(completedLog); loadMyTrips(); }, 800);
+    } else {
+      // Outbound, job-to-job, or custom leg complete — arriving here does
+      // NOT conclude the job. Show "What's next?" so the driver can pick
+      // where this vehicle goes from this stop.
+      _lastArrivalLog = completedLog;
+      if(completedLog.leg_type === 'outbound' || !completedLog.leg_type){
+        // First arrival of the day — pin _outboundLog so "Return to meet
+        // spot" always points back here, regardless of how many job-to-job
+        // stops happen in between.
+        _outboundLog = completedLog;
+        _returnDest = completedLog.origin_lat
+          ? {lat:completedLog.origin_lat, lng:completedLog.origin_lng,
+             address:'Meet spot', type:'return'}
+          : null;
+        console.log('[submitArrival] outboundLog set — origin:', completedLog.origin_lat, completedLog.origin_lng);
+      }
+      setTimeout(()=>{ showArrivalSummaryScreen(completedLog); loadMyTrips(); }, 800);
     }
   } catch(e){
     showToast('Error: '+e.message,'error');
@@ -2831,6 +2992,11 @@ async function showArrivalSummaryScreen(log){
 
       <!-- Arrival detail card -->
       <div class="card">
+        <div class="card-header">
+          <div class="card-title">This Leg</div>
+          ${legTypeBadge(log.leg_type)}
+        </div>
+        <div class="info-row"><div class="info-label">Destination</div><div class="info-value">${address}</div></div>
         <div class="info-row"><div class="info-label">Time</div><div class="info-value">${arrived}</div></div>
         <div class="info-row"><div class="info-label">Vehicle</div><div class="info-value">${vehicleStr}</div></div>
         <div class="info-row"><div class="info-label">Depart</div><div class="info-value">${departed}</div></div>
@@ -2886,6 +3052,14 @@ async function showArrivalSummaryScreen(log){
         </div>
         <div class="dest-option-sub">Release your driver status — someone else will drive this vehicle back</div>
       </div>
+
+      ${log.leg_type === 'custom' ? `
+      <div class="dest-option" style="border-color:rgba(106,179,79,.4)" onclick="completeTravelForToday()">
+        <div class="dest-option-title" style="color:var(--green)">
+          <i class="ti ti-flag-filled"></i> Complete travel for today
+        </div>
+        <div class="dest-option-sub">This is the end point — no more driving today. Closes out this travel log.</div>
+      </div>` : ''}
     </div>`;
 
   _loadArrivalSummaryPax(log);
@@ -2916,25 +3090,32 @@ function chooseNextDestination(option){
   } else {
     _returnDest = null;
   }
-  showReturnSetupScreen(_outboundLog);
+  showReturnSetupScreen(_lastArrivalLog);
 }
 
 // Page B — "Who is returning in this vehicle?" + destination details + begin trip
 // (step 3 · Passengers — resumes the normal pre-departure flow)
 async function showReturnSetupScreen(log){
   setStepBar(3);
+  startSetupGPS();
   const content = document.getElementById('trip-content');
 
-  // Load full passenger list for this job
-  // Priority: 1) this vehicle's passengers 2) other vehicles' passengers 3) timesheet only
-  const {data:allJobPassengers} = await getSupabase()
+  // "This vehicle's" passengers = whoever was on the leg that just completed
+  // (works for outbound, job-to-job, or custom legs alike).
+  const {data:myPaxRaw} = await getSupabase()
+    .from('travel_passengers')
+    .select('profile_id, full_name, role, travel_log_id, worker_type, external_name')
+    .eq('travel_log_id', log.id);
+
+  // "Other vehicles" = passengers on other vehicles' outbound legs for this job.
+  const {data:otherPaxRaw} = await getSupabase()
     .from('travel_passengers')
     .select('profile_id, full_name, role, travel_log_id, worker_type, external_name')
     .in('travel_log_id', await _getSiblingLogIds(log.timesheet_id));
 
   // Categorize passengers
-  const myPax    = (allJobPassengers||[]).filter(p=>p.travel_log_id === log.id);
-  const otherPax = (allJobPassengers||[]).filter(p=>p.travel_log_id !== log.id);
+  const myPax    = myPaxRaw||[];
+  const otherPax = (otherPaxRaw||[]).filter(p=>p.travel_log_id !== log.id);
 
   // Initialize return passenger selection — pre-check this vehicle's passengers.
   // Each passenger gets a unique _key, prefixed by section ("my_" vs "other_")
@@ -2957,7 +3138,7 @@ async function showReturnSetupScreen(log){
 
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
-      <button class="btn btn-ghost btn-sm" style="margin-bottom:1rem" onclick="showArrivalSummaryScreen(_outboundLog)">
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:1rem" onclick="showArrivalSummaryScreen(_lastArrivalLog)">
         <i class="ti ti-arrow-left"></i> Back to "What's next?"
       </button>
 
@@ -3141,9 +3322,10 @@ function showAddExternalPassenger(){
 }
 
 async function confirmReleaseDriver(){
+  const releaseLog = _lastArrivalLog || _outboundLog;
   const ok = confirm(
     'Release driver status?\n\n' +
-    'You drove TO this job as the driver of '+(_outboundLog?.vehicle_plate||'this vehicle')+'.' +
+    'You drove TO this stop as the driver of '+(releaseLog?.vehicle_plate||'this vehicle')+'.' +
     '\nYou will NOT be driving back.\n\n' +
     'This will:\n' +
     '• Mark you as a passenger for the return trip\n' +
@@ -3152,18 +3334,56 @@ async function confirmReleaseDriver(){
     'Confirm — I am not driving back?'
   );
   if(!ok) return;
-  if(_outboundLog?.id){
+  if(releaseLog?.id){
     await getSupabase().from('travel_logs').update({
       driver_released:true, driver_released_at:new Date().toISOString()
-    }).eq('id',_outboundLog.id);
+    }).eq('id', releaseLog.id);
   }
+  stopSetupGPS();
+  _setupPingBuffer = [];
+  _releaseDriverAndResetTripState();
   showToast('Driver status released — you will return as a passenger','success');
   setTimeout(()=>{ showScreen('home'); loadMyTrips(); }, 1200);
 }
 
+// "Complete travel for today" — chosen from a custom-destination "What's
+// next?" screen. Marks this leg's destination as the day's end point and
+// concludes the job without starting another leg (same release/reset as a
+// return-leg arrival).
+async function completeTravelForToday(){
+  const log = _lastArrivalLog;
+  if(!log?.id){ showToast('Nothing to complete','error'); return; }
+
+  const ok = confirm(
+    'Complete travel for today?\n\n' +
+    'This marks "'+(log.dest_address||'this location')+'" as your end point for the day.\n\n' +
+    'This will:\n' +
+    '• Close out this travel log\n' +
+    '• Release the vehicle\n' +
+    '• Keep all your trip data intact\n\n' +
+    'Confirm — no more driving today?'
+  );
+  if(!ok) return;
+
+  try{
+    await getSupabase().from('travel_logs')
+      .update({is_end_point:true}).eq('id', log.id);
+  } catch(e){
+    console.warn('[completeTravelForToday]', e.message);
+  }
+
+  stopSetupGPS();
+  _setupPingBuffer = [];
+  const finalLog = {...log, is_end_point:true};
+  _releaseDriverAndResetTripState();
+
+  showToast('Travel complete for today — you have been released from this vehicle','success');
+  setTimeout(()=>{ showTripSummary(finalLog); loadMyTrips(); }, 800);
+}
+
 function onPostStartMilesInput(val){
   const miles  = parseInt(val||'0');
-  const minVal = _outboundLog?.miles_end || 0;
+  const minVal = _lastArrivalLog?.miles_end || 0;
   const err    = document.getElementById('post-miles-err');
   const block  = document.getElementById('post-miles-block');
   const label  = document.getElementById('post-miles-label');
@@ -3257,6 +3477,7 @@ async function beginReturnLeg(){
   // Without this, the return leg would navigate back to the STORE, not the meet spot.
   _activeJob = {
     ..._activeJob,
+    id:           _returnDest.type === 'job' ? (_returnDest.to_job_id||_activeJob?.id) : _activeJob?.id,
     dest_lat:     _returnDest.lat,
     dest_lng:     _returnDest.lng,
     dest_address: _returnDest.address,
@@ -3264,6 +3485,8 @@ async function beginReturnLeg(){
                 : _returnDest.type === 'job'    ? (_returnDest.client_name||'Next Job')
                 : (_returnDest.address || 'Destination'),
     store_number: _returnDest.type === 'job' ? _returnDest.store_number : null,
+    city:         _returnDest.type === 'job' ? (_returnDest.city||null) : null,
+    state:        _returnDest.type === 'job' ? (_returnDest.state||null) : null,
   };
 
   console.log('[beginReturnLeg] _activeJob dest updated:',
@@ -3275,8 +3498,14 @@ async function beginReturnLeg(){
   });
   _passengers = selectedPax.length ? selectedPax : [];
 
+  // Anyone who arrived in THIS vehicle on the just-completed leg ("my_" keys)
+  // but is NOT continuing on this new leg is getting off here.
+  const alightedPax = (window._returnPaxData||[]).filter(p=>{
+    return p._key?.startsWith('my_') && !window._returnPaxSelected?.has(p._key);
+  });
+
   console.log('[beginReturnLeg] leg:', _legType, 'returnDest:', _returnDest, 'pax:', _passengers.length);
-  await _beginNewLeg(_legType||'return');
+  await _beginNewLeg(_legType||'return', alightedPax);
 }
 
 // Populate the destination-specific panel on the passenger/setup screen (Page B)
@@ -3388,24 +3617,43 @@ async function loadNextJobOptions(){
     return;
   }
 
-  listEl.innerHTML = data.map(ts=>`
-    <div class="dest-option" id="j2j-${ts.id}" onclick="selectNextJob('${ts.id}', ${ts.dest_lat||null}, ${ts.dest_lng||null}, '${(ts.dest_address||[ts.client_name,ts.city,ts.state].filter(Boolean).join(', ')).replace(/'/g,"\'")}')">
+  // Stash full records by id so selectNextJob can pull client_name/store_number
+  // without fragile inline-onclick string escaping (addresses/names can contain
+  // quotes or apostrophes).
+  window._nextJobOptions = {};
+  listEl.innerHTML = data.map(ts=>{
+    window._nextJobOptions[ts.id] = ts;
+    return `<div class="dest-option" id="j2j-${ts.id}" onclick="selectNextJob('${ts.id}')">
       <div class="dest-option-title">${ts.client_name||'Job'}</div>
       <div class="dest-option-sub">${[ts.store_number?'Store '+ts.store_number:'',ts.city,ts.state].filter(Boolean).join(' · ')}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function selectNextJob(tsId, lat, lng, address){
+function selectNextJob(tsId){
+  const ts = window._nextJobOptions?.[tsId];
+  if(!ts) return;
   document.querySelectorAll('[id^="j2j-"]').forEach(el=>el.classList.remove('selected'));
   document.getElementById('j2j-'+tsId)?.classList.add('selected');
-  _returnDest = {lat, lng, address, type:'job', to_job_id: tsId};
+  _returnDest = {
+    lat: ts.dest_lat||null,
+    lng: ts.dest_lng||null,
+    address: ts.dest_address || [ts.client_name, ts.city, ts.state].filter(Boolean).join(', '),
+    type: 'job',
+    to_job_id: tsId,
+    client_name: ts.client_name || 'Next Job',
+    store_number: ts.store_number || null,
+    city: ts.city || null,
+    state: ts.state || null,
+  };
   _updateDestDebugCard();
 }
 
 // ── Start return trip ─────────────────────────────────────────────────────────
 // startReturnTrip and startJobToJobTrip replaced by beginReturnLeg
 
-async function _beginNewLeg(legType){
+async function _beginNewLeg(legType, alightedPax){
+  alightedPax = alightedPax || [];
   const btn = document.getElementById('begin-return-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Starting...'; }
 
@@ -3478,6 +3726,13 @@ async function _beginNewLeg(legType){
     // fresh empty input regardless, so no global reset is needed.
     clearTripState();
 
+    // Pre-trip GPS tracking is no longer needed — flush its buffered pings now
+    // that this leg has a travel_log_id, then record "board"/"alight" pings
+    // (at this leg's origin fix) for everyone whose status changed at this stop.
+    stopSetupGPS();
+    await _flushSetupPingBuffer(newLog, legType);
+    await _recordPaxBoardAlight(newLog, legType, _passengers, alightedPax);
+
     showToast(legType==='return'?'Return trip started':'Job-to-job trip started','success');
     showTripActive(newLog);
 
@@ -3491,6 +3746,18 @@ async function _beginNewLeg(legType){
 // ── Return trip needs starting mileage ───────────────────────────────────────
 // Override showTripActive for return legs to prompt for starting mileage first
 function _isReturnLeg(log){ return ['return','job_to_job'].includes(log?.leg_type); }
+
+// Leg-type badge — used on the active-trip, arrival-summary, and trip-summary
+// screens so the "what's next?" choice made for this leg stays visible on
+// every subsequent screen.
+function legTypeBadge(legType){
+  switch(legType){
+    case 'return':     return '<span class="leg-badge leg-return">Return</span>';
+    case 'job_to_job': return '<span class="leg-badge leg-jobtojob">Job to Job</span>';
+    case 'custom':     return '<span class="leg-badge" style="background:rgba(30,95,174,.2);color:#90b8f0">Custom</span>';
+    default:           return '<span class="leg-badge leg-outbound">Outbound</span>';
+  }
+}
 
 async function pushTravelBlocksToTimesheet(){
   if(!_activeTrip?.timesheet_id) return;
