@@ -74,8 +74,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .time-block.paid{border-left:3px solid #1D9E75}
 .time-block.brk{border-left:3px solid #BA7517}
 .time-block.variance{border-left:3px solid #378ADD}
+.time-block[data-card-color]{border-left-width:3px;border-left-style:solid}
 .time-block-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
 .block-badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px}
+.sup-tag-btn{position:fixed;bottom:14px;right:14px;width:10px;height:10px;border-radius:50%;background:transparent;border:0.5px solid var(--border);cursor:pointer;opacity:0.15;z-index:50}
+.sup-tag-btn:hover{opacity:0.5}
+.pin-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center}
+.pin-modal{background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:300px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.25)}
+.pin-modal h3{font-size:15px;font-weight:700;color:var(--text);margin:0 0 .5rem}
+.pin-modal-sub{font-size:12px;color:var(--text3);margin-bottom:1rem}
+.pin-input-row{display:flex;gap:8px;margin-bottom:.75rem}
+.pin-input-row input{flex:1;font-size:18px;padding:10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:monospace;letter-spacing:.2em;text-align:center}
+.pin-err{font-size:12px;color:var(--danger-text);min-height:16px;margin-bottom:.75rem}
+.adhoc-card-list{display:flex;flex-direction:column;gap:6px;margin-bottom:1rem}
+.adhoc-card-btn{padding:10px 14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);cursor:pointer;font-size:13px;font-weight:600;color:var(--text);text-align:left;display:flex;align-items:center;gap:10px}
+.adhoc-card-btn:hover{background:var(--bg3,var(--bg2));border-color:var(--border)}
+.adhoc-swatch{display:inline-block;width:10px;height:10px;border-radius:50%}
+.emp-select-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:1rem}
+.emp-select-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;border-radius:var(--radius);cursor:pointer}
+.emp-select-item:hover{background:var(--bg2)}
+.pin-modal-btns{display:flex;gap:8px;justify-content:flex-end}
 .bb-paid{background:#E1F5EE;color:#0F6E56}
 .bb-brk{background:#FAEEDA;color:#854F0B}
 .bb-var{background:#E6F1FB;color:#185FA5}
@@ -1251,7 +1269,7 @@ function startTimesheetSubscription(){
 }
 
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.8';
+const APP_VERSION = 'v1.0.27';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1363,9 +1381,6 @@ function completeSignIn(){
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
   document.getElementById('user-bar-role').textContent = _pendingRoleLabel || profile?.role || 'Supervisor';
 
-  // Show address input (for geocode accuracy) and dev debug panel for the test/debug account.
-  // NOTE: the read-only lat/lng/geocoded-address row (ji-coords-row) stays hidden —
-  // that info now lives in the dev debug panel instead.
   const _testEmails  = ['supervisor@datascan.com'];
   const _debugEmails = ['supervisor@datascan.com'];
   const _userEmail   = (currentProfile?.email||currentUser?.email||'').toLowerCase();
@@ -1381,16 +1396,32 @@ function completeSignIn(){
   checkSubmitReady();
   switchTab('status');
 
-  // UAT feedback — shown only for users flagged for UAT testing
+  // UAT feedback
   const uatEnabled = !!profile?.permissions_override?.qa_config?.uat_enabled;
   const fbBtn = document.getElementById('uat-feedback-btn');
   if(fbBtn) fbBtn.style.display = uatEnabled ? 'inline-flex' : 'none';
-  if(uatEnabled){
-    refreshFeedbackBadge();
-    startFeedbackSubscription();
-  }
+  if(uatEnabled){ refreshFeedbackBadge(); startFeedbackSubscription(); }
+
+  // Load dynamic card types and supervisor PIN
+  loadCardTypesAndPin();
 
   startTimesheetSubscription();
+}
+
+async function loadCardTypesAndPin(){
+  const [tcResult, pinResult] = await Promise.all([
+    getSupabase().from('time_card_types').select('*').eq('is_active',true).order('sort_order'),
+    getSupabase().from('app_config').select('value').eq('key','supervisor_pin').maybeSingle()
+  ]);
+  _cardTypes    = tcResult.data || [];
+  _supervisorPin= pinResult.data?.value || null;
+  // Re-render any existing employee rows with the freshly loaded card types
+  if(_cardTypes.length && empCount > 0){
+    document.querySelectorAll('.emp-card').forEach(card=>{
+      const empId = parseInt(card.dataset.empId);
+      renderAddBlockRow(empId);
+    });
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1551,8 +1582,10 @@ function checkSubmitReady(){
   const hasSig=sigHasData('emp');
   const hasScan=scans.length>0;
   const jiOk=jobInfoComplete();
-  // Supervisor card must always have clock in/out
-  // Any card with a first name entered must also have clock in/out complete
+  // Supervisor card must always have clock in/out.
+  // Any card with a first name entered must also have clock in/out complete.
+  // Any block where exactly one of In/Out is filled is incomplete — block submit.
+  // (Both empty = unused/optional block, which is fine.)
   let allHaveTimes=true;
   document.querySelectorAll('.emp-card').forEach(card=>{
     const eid=card.dataset.empId;
@@ -1561,9 +1594,15 @@ function checkSubmitReady(){
     const isSupervisor=card.classList.contains('role-supervisor');
     const fnameEl=document.getElementById('fname-'+eid);
     const hasName=fnameEl&&fnameEl.value.trim().length>0;
-    // Supervisor always required; others only if name filled
     if(isSupervisor||hasName){
-      if(!primary||!primary.inVal||!primary.outVal)allHaveTimes=false;
+      // Primary block must be fully filled
+      if(!primary||!primary.inVal||!primary.outVal) allHaveTimes=false;
+      // Every block: if one of In/Out is filled, the other must be too
+      blocks.forEach(b=>{
+        const hasIn  = !!(b.inVal  && b.inVal.trim());
+        const hasOut = !!(b.outVal && b.outVal.trim());
+        if(hasIn !== hasOut) allHaveTimes=false; // exactly one filled = incomplete
+      });
     }
   });
   const ready=noEmpErrors&&hasSig&&hasScan&&allHaveTimes&&jiOk;
@@ -1622,6 +1661,9 @@ function checkSubmitReady(){
 
 // ── Time block engine ─────────────────────────────────────────
 let empCount=0,blockCounter=0,empDisplayCount=0;
+let _cardTypes = [];        // loaded from time_card_types on sign-in
+let _supervisorPin = null;  // loaded from app_config on sign-in
+let _pinVerified = false;   // true after supervisor enters correct PIN this session
 const empBlocks={};
 
 
@@ -1635,9 +1677,8 @@ function setInp(id,state,msg){
 }
 
 function getPaidSegs(empId,excludeId){
-  return(empBlocks[empId]||[]).filter(b=>b.type!=='brk'&&b.blockId!==excludeId).map(b=>{
+  return(empBlocks[empId]||[]).filter(b=>_ctIsPaid(b.type)&&b.blockId!==excludeId).map(b=>{
     let inM=toMins(b.inVal), outM=toMins(b.outVal);
-    // If both are plain HH:MM epoch minutes and out < in, it's a next-day punch — add 1440
     if(inM!==null&&outM!==null&&outM<inM&&!(b.inVal||'').includes('T')) outM+=1440;
     return {in:inM, out:outM};
   }).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in);
@@ -1649,128 +1690,326 @@ function getMergedPaid(empId,excludeId){
 function withinPaid(st,en,empId,excludeId){return getMergedPaid(empId,excludeId).some(s=>st>=s.in&&en<=s.out);}
 function overlapsAnyPaid(st,en,empId,excludeId){return getPaidSegs(empId,excludeId).some(s=>st<s.out&&en>s.in);}
 
+// ════════════════════════════════════════════════════════════
+// SUPERVISOR PIN FLOW & AD-HOC CARD MENU
+// ════════════════════════════════════════════════════════════
+let _supFlowStep = 'pin';   // 'pin' | 'pick' | 'scope'
+let _supPickedCt = null;    // chosen card type object
+
+function openSupTagFlow(){
+  _supFlowStep = 'pin';
+  _supPickedCt = null;
+  _pinVerified = false;
+  showPinModal('Supervisor access', 'Enter supervisor PIN to access ad-hoc cards.', 'pin');
+}
+
+function showPinModal(title, sub, step){
+  document.getElementById('pin-modal-title').textContent = title;
+  document.getElementById('pin-modal-sub').textContent   = sub;
+  document.getElementById('pin-err').textContent = '';
+  const entry = document.getElementById('pin-entry');
+  if(step==='pin'){
+    document.getElementById('pin-modal-body').innerHTML = `
+      <div class="pin-input-row">
+        <input type="password" id="pin-entry" inputmode="numeric" maxlength="8" placeholder="\u00b7 \u00b7 \u00b7 \u00b7" onkeydown="if(event.key==='Enter')verifyPin()"/>
+      </div>
+      <div class="pin-err" id="pin-err"></div>
+      <div class="pin-modal-btns">
+        <button class="wiz-btn secondary" onclick="closePinModal()">Cancel</button>
+        <button class="wiz-btn primary" onclick="verifyPin()"><i class="ti ti-shield-check"></i> Verify</button>
+      </div>`;
+    setTimeout(()=>document.getElementById('pin-entry')?.focus(),80);
+  }
+  document.getElementById('pin-modal-overlay').style.display='flex';
+}
+
+function closePinModal(){
+  document.getElementById('pin-modal-overlay').style.display='none';
+  _supPickedCt=null;
+}
+
+function verifyPin(){
+  const entered = (document.getElementById('pin-entry')?.value||'').trim();
+  const errEl   = document.getElementById('pin-err');
+  if(!_supervisorPin){
+    // PIN not yet loaded from DB — try re-loading
+    errEl.textContent = 'PIN not loaded yet. Please wait a moment and try again.';
+    loadCardTypesAndPin(); return;
+  }
+  if(entered !== String(_supervisorPin)){
+    errEl.textContent = 'Incorrect PIN. Try again.';
+    document.getElementById('pin-entry').value='';
+    document.getElementById('pin-entry').focus(); return;
+  }
+  _pinVerified = true;
+  showAdHocCardPicker();
+}
+
+function showAdHocCardPicker(){
+  const adhocTypes = _cardTypes.filter(ct=>ct.is_adhoc&&ct.is_active);
+  if(!adhocTypes.length){
+    document.getElementById('pin-modal-title').textContent = 'No ad-hoc cards';
+    document.getElementById('pin-modal-sub').textContent   = '';
+    document.getElementById('pin-modal-body').innerHTML = `
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">No ad-hoc card types are configured. Add some in the Setup Wizard under Time Cards.</p>
+      <div class="pin-modal-btns"><button class="wiz-btn secondary" onclick="closePinModal()">Close</button></div>`;
+    return;
+  }
+  document.getElementById('pin-modal-title').textContent = 'Select card to add';
+  document.getElementById('pin-modal-sub').textContent   = 'Choose the card type to add to employee rows.';
+  document.getElementById('pin-modal-body').innerHTML = `
+    <div class="adhoc-card-list">
+      ${adhocTypes.map(ct=>`
+        <button class="adhoc-card-btn" onclick="onAdHocCardPicked('${ct.id}')">
+          <span class="adhoc-swatch" style="background:${ct.color_hex||'#888'}"></span>
+          ${ct.label}
+          ${ct.description?`<span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:auto">${ct.description}</span>`:''}
+        </button>`).join('')}
+    </div>
+    <div class="pin-modal-btns"><button class="wiz-btn secondary" onclick="closePinModal()">Cancel</button></div>`;
+}
+
+function onAdHocCardPicked(ctId){
+  _supPickedCt = _cardTypes.find(c=>c.id===ctId);
+  if(!_supPickedCt) return;
+  document.getElementById('pin-modal-title').textContent = 'Apply '+_supPickedCt.label;
+  document.getElementById('pin-modal-sub').textContent   = 'Add this card to which employees?';
+  const empCards = document.querySelectorAll('.emp-card');
+  document.getElementById('pin-modal-body').innerHTML = `
+    <div class="adhoc-card-list" style="margin-bottom:.75rem">
+      <button class="adhoc-card-btn" onclick="applyAdHocCard('all')" style="border-color:var(--success-text,#6abf3a)">
+        <i class="ti ti-users" style="color:var(--success-text,#6abf3a)"></i>
+        All employees (${empCards.length})
+      </button>
+      <button class="adhoc-card-btn" onclick="showEmpSelector()">
+        <i class="ti ti-user-check"></i> Select specific employees
+      </button>
+    </div>
+    <div class="pin-modal-btns"><button class="wiz-btn secondary" onclick="closePinModal()">Cancel</button></div>`;
+}
+
+function showEmpSelector(){
+  const empCards = document.querySelectorAll('.emp-card');
+  document.getElementById('pin-modal-body').innerHTML = `
+    <div class="emp-select-list" id="emp-select-list">
+      ${Array.from(empCards).map(card=>{
+        const empId=card.dataset.empId;
+        const fname=card.querySelector('[id^="fname-"]')?.value||'';
+        const lname=card.querySelector('input[placeholder="Last"]')?.value||'';
+        const name=(fname+' '+lname).trim()||'Employee #'+empId;
+        return `<label class="emp-select-item">
+          <input type="checkbox" value="${empId}" style="accent-color:#6abf3a;width:15px;height:15px"/>
+          <span>${name}</span>
+        </label>`;
+      }).join('')}
+    </div>
+    <div class="pin-modal-btns">
+      <button class="wiz-btn secondary" onclick="closePinModal()">Cancel</button>
+      <button class="wiz-btn primary" onclick="applyAdHocCard('selected')"><i class="ti ti-check"></i> Apply to selected</button>
+    </div>`;
+}
+
+function applyAdHocCard(scope){
+  if(!_supPickedCt) return;
+  let targets = [];
+  if(scope==='all'){
+    document.querySelectorAll('.emp-card').forEach(c=>targets.push(parseInt(c.dataset.empId)));
+  } else {
+    document.querySelectorAll('#emp-select-list input[type="checkbox"]:checked').forEach(cb=>targets.push(parseInt(cb.value)));
+    if(!targets.length){ alert('Select at least one employee.'); return; }
+  }
+  targets.forEach(empId=>{
+    const bid=++blockCounter;
+    const blk={blockId:bid,type:_supPickedCt.key,isPrimary:false,isDefault:false,inVal:'',outVal:''};
+    if(!empBlocks[empId])empBlocks[empId]=[];
+    empBlocks[empId].push(blk);
+    document.getElementById('blocks-'+empId)?.appendChild(makeBlockEl(empId,blk,empBlocks[empId]));
+    validateEmployee(empId);
+  });
+  closePinModal();
+}
+
+// ════════════════════════════════════════════════════════════
+// VALIDATION ENGINE — rule-driven from card type nesting_rule
+// ════════════════════════════════════════════════════════════
 function validateEmployee(empId){
-  const blocks=empBlocks[empId]||[];let empValid=true;
+  const blocks=empBlocks[empId]||[]; let empValid=true;
+
+  // Clear all error states first
   blocks.forEach(b=>{
     const em=document.getElementById('berr-'+b.blockId);
     if(em){em.textContent='';em.classList.remove('show');}
-    setInp('bin-'+b.blockId,'neutral','');setInp('bout-'+b.blockId,'neutral','');
+    setInp('bin-'+b.blockId,'neutral',''); setInp('bout-'+b.blockId,'neutral','');
   });
+
+  // ── Helper: get all paid segments for this employee (excluding a block) ──
+  const paidSegs = (excludeId=null) => blocks
+    .filter(b=>_ctIsPaid(b.type)&&b.blockId!==excludeId)
+    .map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)}))
+    .filter(s=>s.in!==null&&s.out!==null&&s.out>s.in);
+
   blocks.forEach(b=>{
-    const st=toMins(b.inVal),en=toMins(b.outVal);
-    const em=document.getElementById('berr-'+b.blockId);let bOk=true;
+    const st=toMins(b.inVal), en=toMins(b.outVal);
+    const em=document.getElementById('berr-'+b.blockId);
+    const nesting = _ctNesting(b.type);
+    const isPaid  = _ctIsPaid(b.type);
+    const ct      = _ct(b.type);
+    const typeLabel = ct ? ct.label : b.type;
+
+    // ── 1. Basic In < Out ────────────────────────────────────────
     if(st!==null&&en!==null){
-      if(en<=st){setInp('bout-'+b.blockId,'err','');if(em){em.textContent='Out must be after in';em.classList.add('show');}bOk=false;empValid=false;}
-      else{setInp('bin-'+b.blockId,'ok','');setInp('bout-'+b.blockId,'ok','');}
+      if(en<=st){
+        setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent='Out must be after in'; em.classList.add('show');}
+        empValid=false; return;
+      }
+      setInp('bin-'+b.blockId,'ok',''); setInp('bout-'+b.blockId,'ok','');
     } else {
-      if(st!==null)setInp('bin-'+b.blockId,'ok','');
-      if(en!==null&&st===null){setInp('bout-'+b.blockId,'err','');if(em){em.textContent='Enter in time first';em.classList.add('show');}bOk=false;empValid=false;}
-    }
-    if(!bOk||st===null||en===null){
-      // Even with partial data, check break-specific partial entry rules
-      if(b.type==='brk'){
-        const primary=blocks.find(x=>x.isPrimary);
-        const ci=primary?toMins(primary.inVal):null;
-        const co=primary?toMins(primary.outVal):null;
-        // Break in entered but break out missing after clock out is set
-        if(st!==null&&en===null&&co!==null){
-          setInp('bout-'+b.blockId,'err','');
-          if(em){em.textContent='Break out required — clock out is already set';em.classList.add('show');}
-          empValid=false;
-        }
-        // Break in is outside clock in/out range
-        if(st!==null&&ci!==null&&co!==null&&(st<=ci||st>=co)){
-          setInp('bin-'+b.blockId,'err','');
-          if(em){em.textContent='Break in must be between '+fmtEpochMins(ci)+' and '+fmtEpochMins(co);em.classList.add('show');}
-          empValid=false;
-        }
+      if(st!==null) setInp('bin-'+b.blockId,'ok','');
+      if(en!==null&&st===null){
+        setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent='Enter in time first'; em.classList.add('show');}
+        empValid=false; return;
       }
-      return;
+      if(st===null||en===null) return; // partial entry — skip nesting checks
     }
-    if(b.type==='variance'){
-      const primary=blocks.find(x=>x.isPrimary);
-      const pIn=primary?toMins(primary.inVal):null;
-      const pOut=primary?toMins(primary.outVal):null;
-      const primaryHasCountTime=pIn!==null||pOut!==null;
-      if(primaryHasCountTime){
-        // Count in/out present — variance in must match count out
-        if(pOut===null){setInp('bin-'+b.blockId,'err','');if(em){em.textContent='Enter count out first';em.classList.add('show');}empValid=false;}
-        else if(st!==pOut){setInp('bin-'+b.blockId,'err','');if(em){
-  // Show time portion only in error message
-  em.textContent='Variance in must match count out ('+fmtEpochMins(pOut)+')';em.classList.add('show');}empValid=false;}
+
+    // ── 2. top_level: no overlap with other paid blocks ───────────
+    if(nesting==='top_level'&&isPaid){
+      const overlap = paidSegs(b.blockId).some(s=>st<s.out&&en>s.in);
+      if(overlap){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent=typeLabel+' overlaps with another paid period'; em.classList.add('show');}
+        empValid=false;
       }
-      // If no count in/out, variance in is free-entry — just ensure out > in (already checked above)
     }
-    if(b.type==='paid'&&!b.isPrimary){
-      if(overlapsAnyPaid(st,en,empId,b.blockId)){setInp('bin-'+b.blockId,'err','');setInp('bout-'+b.blockId,'err','');if(em){em.textContent='Overlaps with another paid period';em.classList.add('show');}empValid=false;}
-    }
-    if(b.type==='brk'){
-      // Check break in is within clock in/out bounds
-      const bPrimary=blocks.find(x=>x.isPrimary);
-      const bCi=bPrimary?toMins(bPrimary.inVal):null;
-      const bCo=bPrimary?toMins(bPrimary.outVal):null;
-      if(bCi!==null&&bCo!==null&&(st<=bCi||st>=bCo)){
+
+    // ── 2b. Sequential abutment: non-primary top_level blocks ─────
+    // Variance, Setup, Verifier etc. must connect to the Out of whatever
+    // block immediately precedes them (Count out, Lunch out, etc.).
+    // The preceding block can be ANY card type — paid or unpaid.
+    if(nesting==='top_level'&&!b.isPrimary&&isPaid&&st!==null){
+      // Build a flat list of all other blocks that have a complete Out time
+      const allOuts = blocks
+        .filter(x=>x.blockId!==b.blockId&&x.outVal)
+        .map(x=>({blockId:x.blockId, out:toMins(x.outVal), type:x.type}))
+        .filter(x=>x.out!==null);
+      // Find the block whose Out is closest to (and ≤) this block's In
+      const preceding = allOuts
+        .filter(x=>x.out<=st)
+        .sort((a,b2)=>b2.out-a.out)[0];
+      if(preceding&&preceding.out!==st){
+        // There is a preceding block but its Out doesn't match our In — gap or overlap
+        const precCt = _ct(preceding.type);
+        const precLabel = precCt ? precCt.label : preceding.type;
         setInp('bin-'+b.blockId,'err','');
-        if(em){em.textContent='Break in must be between '+fmtEpochMins(bCi)+' and '+fmtEpochMins(bCo);em.classList.add('show');}
-        empValid=false;
-      } else if(!withinPaid(st,en,empId,b.blockId)){
-        setInp('bin-'+b.blockId,'err','');setInp('bout-'+b.blockId,'err','');
-        if(em){em.textContent='Break must fall within a paid period';em.classList.add('show');}
+        if(em){
+          em.textContent=typeLabel+' in ('+fmtEpochMins(st)+') must match '+precLabel+' out ('+fmtEpochMins(preceding.out)+') — no gaps allowed';
+          em.classList.add('show');
+        }
         empValid=false;
       }
-      const ob=blocks.filter(x=>x.type==='brk'&&x.blockId!==b.blockId).map(x=>({in:toMins(x.inVal),out:toMins(x.outVal)})).filter(x=>x.in!==null&&x.out!==null);
-      if(ob.some(x=>st<x.out&&en>x.in)){setInp('bin-'+b.blockId,'err','');setInp('bout-'+b.blockId,'err','');if(em){em.textContent='Overlaps with another break';em.classList.add('show');}empValid=false;}
+      // If no preceding block exists at all, this block is standalone — OK (primary-style free entry)
+    }
+
+    // ── 3. inside_paid: In/Out must be inside any paid block ──────
+    if(nesting==='inside_paid'){
+      const paid=paidSegs(b.blockId);
+      const enclosed=paid.some(s=>st>=s.in&&en<=s.out);
+      if(!enclosed){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent=typeLabel+' must fall entirely within a paid period'; em.classList.add('show');}
+        empValid=false;
+      }
+      // No overlap with other blocks of the same type
+      const sameType=blocks.filter(x=>x.type===b.type&&x.blockId!==b.blockId)
+        .map(x=>({in:toMins(x.inVal),out:toMins(x.outVal)})).filter(x=>x.in!==null&&x.out!==null);
+      if(sameType.some(x=>st<x.out&&en>x.in)){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent='Overlaps with another '+typeLabel.toLowerCase(); em.classList.add('show');}
+        empValid=false;
+      }
+    }
+
+    // ── 4. between_paid + requires_abut: Lunch rule ───────────────
+    if(nesting==='between_paid'){
+      // Must NOT overlap any paid block (only checks complete blocks)
+      const paid=paidSegs(b.blockId);
+      if(paid.some(s=>st<s.out&&en>s.in)){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent=typeLabel+' must not overlap a paid period'; em.classList.add('show');}
+        empValid=false;
+      }
+      if(ct&&ct.requires_abut){
+        // Preceding: find any paid block whose Out equals this block's In
+        // (must be fully entered — no Out means it can't have ended before Lunch started)
+        const prevPaid=paid.find(s=>s.out===st);
+        if(!prevPaid){
+          setInp('bin-'+b.blockId,'err','');
+          if(em){em.textContent=typeLabel+' in must equal the out time of the preceding paid block'; em.classList.add('show');}
+          empValid=false;
+        }
+        // Following: find any paid block whose In equals this block's Out.
+        // Only requires inVal — the following block may not have its Out filled yet.
+        const allPaidIns = blocks
+          .filter(x=>_ctIsPaid(x.type)&&x.blockId!==b.blockId&&x.inVal)
+          .map(x=>toMins(x.inVal))
+          .filter(x=>x!==null);
+        const nextPaid = en!==null && allPaidIns.some(x=>x===en);
+        if(!nextPaid){
+          setInp('bout-'+b.blockId,'err','');
+          if(em){em.textContent=typeLabel+' out must equal the in time of the following paid block'; em.classList.add('show');}
+          empValid=false;
+        }
+      }
     }
   });
+
+  // ── Totals & badges ───────────────────────────────────────────
   const paidMins=getPaidSegs(empId,null).reduce((s,p)=>s+(p.out-p.in),0);
-  const badge=document.getElementById('badge-'+empId);if(badge)badge.textContent=(paidMins/60).toFixed(1)+' hrs';
-  // Refresh per-block hours badges
+  const badge=document.getElementById('badge-'+empId);
+  if(badge) badge.textContent=(paidMins/60).toFixed(1)+' hrs';
   (empBlocks[empId]||[]).forEach(b=>{
     const bel=document.getElementById('bhrs-'+b.blockId);
     if(bel) bel.innerHTML=blockHrsBadge(empId,b);
   });
-  // No-break card highlight + "No Break" label on the break block
-  const noBreak = hasNoBreakWarning(empId);
+
+  // ── No-break warning ──────────────────────────────────────────
+  const noBreak=hasNoBreakWarning(empId);
   const empCard=document.querySelector('.emp-card[data-emp-id="'+empId+'"]');
-  if(empCard) empCard.classList.toggle('no-break-warn', noBreak);
-  // Show/hide "No Break" in red inside the default break block
-  const brkBlock = (empBlocks[empId]||[]).find(b=>b.type==='brk'&&b.isDefault);
+  if(empCard) empCard.classList.toggle('no-break-warn',noBreak);
+  const brkBlock=(empBlocks[empId]||[]).find(b=>_ctNesting(b.type)==='inside_paid'&&b.isDefault);
   if(brkBlock){
-    const brkErr = document.getElementById('berr-'+brkBlock.blockId);
+    const brkErr=document.getElementById('berr-'+brkBlock.blockId);
     if(brkErr){
-      if(noBreak && !brkBlock.inVal && !brkBlock.outVal){
+      if(noBreak&&!brkBlock.inVal&&!brkBlock.outVal){
         brkErr.innerHTML='<span style="color:var(--danger-text);font-weight:700"><i class="ti ti-alert-circle" style="margin-right:3px"></i>No Break</span>';
         brkErr.classList.add('show');
       } else if(brkErr.innerHTML.includes('No Break')){
-        brkErr.innerHTML='';
-        brkErr.classList.remove('show');
+        brkErr.innerHTML=''; brkErr.classList.remove('show');
       }
     }
   }
 
-  // >12 hour check — runs after all time is entered, not while typing
-  (empBlocks[empId]||[]).filter(b=>b.type!=='brk').forEach(b=>{
+  // ── >12h warning ──────────────────────────────────────────────
+  blocks.filter(b=>_ctNesting(b.type)!=='inside_paid').forEach(b=>{
     if(!b.inVal||!b.outVal) return;
-    let inM=toMins(b.inVal), outM=toMins(b.outVal);
+    let inM=toMins(b.inVal),outM=toMins(b.outVal);
     if(inM===null||outM===null) return;
     if(outM<inM) outM+=1440;
+    const el=document.getElementById('berr-'+b.blockId);
+    if(!el) return;
     if((outM-inM)>720){
       const hrs=((outM-inM)/60).toFixed(1);
-      const typeLabel=b.isPrimary?'count':(b.type==='variance'?'variance':'paid');
-      const el=document.getElementById('berr-'+b.blockId);
-      if(el){
-        el.innerHTML=`<span style="color:var(--warn-text,#F4A93A);font-weight:600"><i class="ti ti-alert-triangle" style="margin-right:3px"></i>${hrs}h span — confirm this is correct</span>`;
-        el.classList.add('show');
-      }
-    } else {
-      // Clear any previous >12h warning (don't clear other errors)
-      const el=document.getElementById('berr-'+b.blockId);
-      if(el && el.innerHTML.includes('span — confirm')) { el.innerHTML=''; el.classList.remove('show'); }
+      el.innerHTML=`<span style="color:var(--warn-text,#F4A93A);font-weight:600"><i class="ti ti-alert-triangle" style="margin-right:3px"></i>${hrs}h span \u2014 confirm this is correct</span>`;
+      el.classList.add('show');
+    } else if(el.innerHTML.includes('span \u2014 confirm')){
+      el.innerHTML=''; el.classList.remove('show');
     }
   });
 
-  const card=document.querySelector('.emp-card[data-emp-id="'+empId+'"]');if(card)card.classList.toggle('has-errors',!empValid);
-  calcTotals();checkSubmitReady();
+  if(empCard) empCard.classList.toggle('has-errors',!empValid);
+  calcTotals(); checkSubmitReady();
   return{empValid};
 }
 
@@ -1785,16 +2024,8 @@ function onBlockChange(empId,blockId,field,val){
 function onVarianceOutChange(empId,blockId,val){
   const b=(empBlocks[empId]||[]).find(x=>x.blockId===blockId);if(!b)return;
   b.outVal=val;
-  const inEl=document.getElementById('bin-'+blockId);
-  if(val){
-    const primary=(empBlocks[empId]||[]).find(x=>x.isPrimary);
-    const coVal=primary?primary.outVal:'';
-    b.inVal=coVal;
-    if(inEl)inEl.value=coVal;
-  } else {
-    b.inVal='';
-    if(inEl)inEl.value='';
-  }
+  // Variance In is now freely editable — do not overwrite it.
+  // The validation engine checks abutment on blur.
   validateEmployee(empId);
   onFormChange();
 }
@@ -1802,13 +2033,6 @@ function onVarianceOutChange(empId,blockId,val){
 function onClockOutChange(empId,blockId,val){
   const b=(empBlocks[empId]||[]).find(x=>x.blockId===blockId);if(!b)return;
   b.outVal=val;
-  const vb=(empBlocks[empId]||[]).find(x=>x.type==='variance'&&x.isDefault);
-  if(vb&&vb.outVal){
-    vb.inVal=val;
-    const el=document.getElementById('bin-'+vb.blockId);if(el)el.value=val; // val is already datetime-local from parent
-  }
-  // Update variance in readonly state based on whether count in/out now has a value
-  refreshVarianceInState(empId);
   validateEmployee(empId);
   onFormChange();
 }
@@ -1817,39 +2041,13 @@ function onClockOutChange(empId,blockId,val){
 function onClockInChange(empId,blockId,val){
   const b=(empBlocks[empId]||[]).find(x=>x.blockId===blockId);if(!b)return;
   b.inVal=val;
-  refreshVarianceInState(empId);
   validateEmployee(empId);
   onFormChange();
 }
 
 function refreshVarianceInState(empId){
-  const blocks=empBlocks[empId]||[];
-  const primary=blocks.find(x=>x.isPrimary);
-  const hasTime=primary&&(primary.inVal||primary.outVal);
-  const vb=blocks.find(x=>x.type==='variance'&&x.isDefault);
-  if(!vb) return;
-  const inEl=document.getElementById('bin-'+vb.blockId);
-  if(!inEl) return;
-  if(hasTime){
-    // Lock variance in — auto-fill from count out if available
-    inEl.readOnly=true;
-    inEl.tabIndex=-1;
-    inEl.style.cssText='background:#f0f0f0;color:#888;cursor:default;border-style:dashed';
-    if(primary.outVal&&vb.outVal){
-      inEl.value=primary.outVal;
-      vb.inVal=primary.outVal;
-    }
-  } else {
-    // Unlock variance in — user can type freely
-    inEl.readOnly=false;
-    inEl.tabIndex=0;
-    inEl.style.cssText='';
-    // Clear auto-filled value if count times were cleared
-    if(!primary||(!primary.inVal&&!primary.outVal)){
-      inEl.value='';
-      vb.inVal='';
-    }
-  }
+  // No-op: variance In is now a free editable field.
+  // The validation engine enforces sequential abutment on blur.
 }
 
 function calcTotals(){
@@ -1862,7 +2060,7 @@ function calcTotals(){
     const hasClockIn=primary&&primary.inVal;
     if(hasName&&hasClockIn){
       tp+=getPaidSegs(eid,null).reduce((s,p)=>s+(p.out-p.in),0);
-      tb+=blocks.filter(b=>b.type==='brk').map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in).reduce((s,b)=>s+(b.out-b.in),0);
+      tb+=blocks.filter(b=>_ctNesting(b.type)==='inside_paid').map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in).reduce((s,b)=>s+(b.out-b.in),0);
       cnt++;
     }
   });
@@ -1956,9 +2154,9 @@ function hasNoBreakWarning(empId){
   const longSpans = merged.filter(s => (s.out - s.in) >= 480);
   if(!longSpans.length) return false;
 
-  // Check if any break falls within a long span
+  // Check if any break (inside_paid nesting) falls within a long span
   const brkSegs = blocks
-    .filter(b => b.type === 'brk' && b.inVal && b.outVal)
+    .filter(b => _ctNesting(b.type)==='inside_paid' && b.inVal && b.outVal)
     .map(b => { let i=toMins(b.inVal), o=toMins(b.outVal); if(o<i) o+=1440; return {in:i, out:o}; })
     .filter(b => b.in!==null && b.out!==null);
 
@@ -1970,42 +2168,77 @@ function hasNoBreakWarning(empId){
   return false;
 }
 
+// ── helpers: resolve card type metadata from DB catalog ──────────
+function _ct(typeKey){
+  // Look up from loaded _cardTypes; fall back to legacy hardcoded keys
+  return _cardTypes.find(c=>c.key===typeKey) || null;
+}
+function _ctColor(typeKey){
+  const t=_ct(typeKey);
+  if(t) return t.color_hex||'#888';
+  const legacy={count:'#185FA5',paid:'#1D9E75',brk:'#BA7517',variance:'#378ADD',lunch:'#EF9F27'};
+  return legacy[typeKey]||'#888';
+}
+function _ctIsPaid(typeKey){
+  const t=_ct(typeKey); if(t) return !!t.is_paid;
+  return typeKey!=='brk'&&typeKey!=='lunch';
+}
+function _ctNesting(typeKey){
+  const t=_ct(typeKey); if(t) return t.nesting_rule||'top_level';
+  if(typeKey==='brk') return 'inside_paid';
+  if(typeKey==='lunch') return 'between_paid';
+  return 'top_level';
+}
+
+// ── makeBlockEl — driven by card type catalog ─────────────────────
 function makeBlockEl(empId,block,blocks){
   const{blockId,type,isPrimary,isDefault}=block;
   const canRemove=!isPrimary&&!isDefault;
-  const label=isPrimary?'Count in / out':isDefault&&type==='brk'?'Break':isDefault&&type==='variance'?'Variance':type==='travel'?'Travel':type==='brk'?'Additional break':type==='variance'?'Additional variance':'Additional paid';
-  const badgeCls=type==='brk'?'bb-brk':type==='variance'?'bb-var':type==='travel'?'bb-var':'bb-paid';
-  const cardCls=type==='brk'?'brk':type==='variance'?'variance':type==='travel'?'variance':'paid';
-  const inLbl=type==='variance'?'Variance in':isPrimary?'Count in':type==='travel'?'Travel in':'In';
-  const outLbl=type==='variance'?'Variance out':isPrimary?'Count out':type==='travel'?'Travel out':'Out';
+  const ct = _ct(type);
+  const color = _ctColor(type);
+  const nesting = _ctNesting(type);
+  const isPaid = _ctIsPaid(type);
+
+  // Label
+  const typeLabel = ct ? ct.label : (type==='brk'?'Break':type==='variance'?'Variance':type==='lunch'?'Lunch':type.charAt(0).toUpperCase()+type.slice(1));
+  const label = isPrimary ? typeLabel+' in / out' : isDefault ? typeLabel : 'Additional '+typeLabel.toLowerCase();
+  const inLbl  = isPrimary ? typeLabel+' in'  : nesting==='between_paid' ? typeLabel+' in'  : 'In';
+  const outLbl = isPrimary ? typeLabel+' out' : nesting==='between_paid' ? typeLabel+' out' : 'Out';
+
+  // Hint text based on nesting rule
   let hint='';
-  if(type==='variance')hint='<div class="hint" style="color:#378ADD">Auto-filled from clock out when variance out is entered</div>';
-  else if(type==='brk')hint='<div class="hint">Must fall within a paid period</div>';
-  else if(type==='travel')hint='<div class="hint" style="color:#378ADD">Travel Only — count punches are locked for this employee</div>';
-  else if(!isPrimary&&!isDefault&&type==='paid')hint='<div class="hint">Cannot overlap other paid periods</div>';
-  const isVarIn=type==='variance';
-  // Variance in: editable only when primary has no count in/out; locked once count in or out is set
-  const primaryBlock=blocks ? blocks.find(x=>x.isPrimary) : null;
-  const primaryHasTime=primaryBlock&&(primaryBlock.inVal||primaryBlock.outVal);
-  const inAttrs=isVarIn
-    ? (primaryHasTime
-        ? 'readonly tabindex="-1" style="background:#f0f0f0;color:#888;cursor:default;border-style:dashed"'
-        : '')
-    : '';
-  const inHandler=isPrimary
-    ?`onClockInChange('${empId}',${blockId},this.value)`
-    :`onBlockChange('${empId}',${blockId},'in',this.value)`;
-  const outHandler=isPrimary
-    ?`onClockOutChange('${empId}',${blockId},this.value)`
-    :type==='variance'
-      ?`onVarianceOutChange('${empId}',${blockId},this.value)`
-      :`onBlockChange('${empId}',${blockId},'out',this.value)`;
+  if(nesting==='inside_paid')   hint=`<div class="hint">Must fall entirely within a paid period</div>`;
+  else if(nesting==='between_paid') hint=`<div class="hint">Must abut a paid block on each side \u2014 no gaps allowed at the joins</div>`;
+  else if(!isPrimary&&isPaid)   hint=`<div class="hint">In must align with the out of the preceding block (Count, Lunch, etc.) \u2014 no gaps</div>`;
+  if(type==='variance') hint='<div class="hint" style="color:#378ADD">In must align with the out of whichever block precedes it (Count out or Lunch out)</div>';
+
+  // Variance in locking logic (keep existing behaviour)
+  // Variance In is now always editable — validation enforces abutment on blur
+  const isVarIn = false;
+  const primaryBlock = null;
+  const primaryHasTime = false;
+  const inAttrs = '';
+
+  const inHandler  = isPrimary
+    ? `onClockInChange('${empId}',${blockId},this.value)`
+    : `onBlockChange('${empId}',${blockId},'in',this.value)`;
+  const outHandler = isPrimary
+    ? `onClockOutChange('${empId}',${blockId},this.value)`
+    : type==='variance'
+      ? `onVarianceOutChange('${empId}',${blockId},this.value)`
+      : `onBlockChange('${empId}',${blockId},'out',this.value)`;
+
   const div=document.createElement('div');
-  div.className='time-block '+cardCls;div.id='block-'+blockId;
+  div.className='time-block';
+  div.id='block-'+blockId;
+  div.dataset.cardType = type;
+  div.dataset.nesting  = nesting;
+  div.style.borderLeft = `3px solid ${color}`;
+
   const hrsBadge = blockHrsBadge(empId, block);
   div.innerHTML=`
     <div class="time-block-header">
-      <span class="block-badge ${badgeCls}">${label}</span>
+      <span class="block-badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${label}</span>
       <div style="display:flex;align-items:center;gap:6px">
         <span class="block-hrs-display" id="bhrs-${blockId}">${hrsBadge}</span>
         ${canRemove?`<button class="block-remove" onclick="removeBlock('${empId}',${blockId})"><i class="ti ti-x"></i></button>`:''}
@@ -2020,18 +2253,40 @@ function makeBlockEl(empId,block,blocks){
   return div;
 }
 
-function addBlock(empId,type){
+// ── addBlock — add a secondary card block ─────────────────────────
+function addBlock(empId,typeKey){
   const blockId=++blockCounter;
-  const block={blockId,type,isPrimary:false,isDefault:false,inVal:'',outVal:''};
-  if(type==='variance'){const primary=(empBlocks[empId]||[]).find(b=>b.isPrimary);if(primary&&primary.outVal)block.inVal=primary.outVal;}
+  const block={blockId,type:typeKey,isPrimary:false,isDefault:false,inVal:'',outVal:''};
   if(!empBlocks[empId])empBlocks[empId]=[];
   empBlocks[empId].push(block);
   document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,block,empBlocks[empId]));
   validateEmployee(empId);
 }
 
+// ── renderAddBlockRow — build +card buttons from DB catalog ────────
+function renderAddBlockRow(empId){
+  const row = document.getElementById('add-block-row-'+empId);
+  if(!row) return;
+  // Non-adhoc, non-primary cards only (primary Count is auto-added)
+  const addable = _cardTypes.length
+    ? _cardTypes.filter(ct=>ct.is_active&&!ct.is_adhoc)
+    : [
+        {key:'count',label:'Count',color_hex:'#185FA5'},
+        {key:'brk',label:'Break',color_hex:'#BA7517'},
+        {key:'variance',label:'Variance',color_hex:'#378ADD'}
+      ];
+  const cols = Math.max(2, Math.min(addable.length, 4));
+  row.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  row.innerHTML = addable.map(ct=>`
+    <button class="abb" style="border-color:${ct.color_hex};color:${ct.color_hex}"
+      onclick="addBlock(${empId},'${ct.key}')">
+      <i class="ti ti-plus"></i> ${ct.label}
+    </button>`).join('');
+}
+
+// ── addEmployee — dynamic, driven by card catalog ──────────────────
 function addEmployee(role,loginOverride){
-  const empId=++empCount;empBlocks[empId]=[];
+  const empId=++empCount; empBlocks[empId]=[];
   const c=document.getElementById('emp-container');
   const div=document.createElement('div');
   div.className='emp-card'+(role?' role-'+role:'');
@@ -2055,12 +2310,7 @@ function addEmployee(role,loginOverride){
       <div class="field-group"><label>Login / ID</label><input type="text" value="${loginDefault}" placeholder="Login"/></div>
     </div>
     <div id="blocks-${empId}"></div>
-    <div class="add-block-row" id="add-block-row-${empId}" style="grid-template-columns:1fr 1fr 1fr 1fr">
-      <button class="abb paid" id="abb-paid-${empId}" onclick="addBlock(${empId},'paid')"><i class="ti ti-plus"></i> Paid</button>
-      <button class="abb brk" onclick="addBlock(${empId},'brk')"><i class="ti ti-plus"></i> Break</button>
-      <button class="abb var" onclick="addBlock(${empId},'variance')"><i class="ti ti-plus"></i> Variance</button>
-      <button class="abb" style="border-color:#378ADD;color:#185FA5" onclick="addBlock(${empId},'travel')"><i class="ti ti-plus"></i> Travel</button>
-    </div>
+    <div class="add-block-row" id="add-block-row-${empId}"></div>
     <div class="emp-checks">
       <label class="emp-check-label dnr">
         <input type="checkbox" id="dnr-${empId}" onchange="onEmpCheckChange('dnr','preferred','${empId}')"/>
@@ -2079,15 +2329,30 @@ function addEmployee(role,loginOverride){
         <span>Travel Only</span>
       </label>
     </div>
-    <div class="field-group" style="margin-top:8px"><label>Notes</label><input type="text" placeholder="Optional notes…" style="font-size:14px"/></div>`;
+    <div class="field-group" style="margin-top:8px"><label>Notes</label><input type="text" placeholder="Optional notes\u2026" style="font-size:14px"/></div>`;
   c.appendChild(div);
-  const pid=++blockCounter;const primary={blockId:pid,type:'paid',isPrimary:true,isDefault:false,inVal:'',outVal:''};
-  empBlocks[empId].push(primary);document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,primary,empBlocks[empId]));
-  const bid=++blockCounter;const brk={blockId:bid,type:'brk',isPrimary:false,isDefault:true,inVal:'',outVal:''};
-  empBlocks[empId].push(brk);document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,brk,empBlocks[empId]));
-  const vid=++blockCounter;const variance={blockId:vid,type:'variance',isPrimary:false,isDefault:true,inVal:'',outVal:''};
-  empBlocks[empId].push(variance);document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,variance,empBlocks[empId]));
-  calcTotals();checkSubmitReady();
+
+  // Add the primary Count block (always first, always 'count' key)
+  const primaryKey = (_cardTypes.find(ct=>ct.key==='count')||{key:'count'}).key;
+  const pid=++blockCounter;
+  const primary={blockId:pid,type:primaryKey,isPrimary:true,isDefault:false,inVal:'',outVal:''};
+  empBlocks[empId].push(primary);
+  document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,primary,empBlocks[empId]));
+
+  // Add default non-adhoc secondary blocks (break + any others marked is_adhoc=false, except count)
+  const defaults = _cardTypes.length
+    ? _cardTypes.filter(ct=>ct.is_active&&!ct.is_adhoc&&ct.key!=='count')
+    : [{key:'brk'},{key:'variance'}];
+  defaults.forEach(ct=>{
+    const bid=++blockCounter;
+    const blk={blockId:bid,type:ct.key,isPrimary:false,isDefault:true,inVal:'',outVal:''};
+    empBlocks[empId].push(blk);
+    document.getElementById('blocks-'+empId).appendChild(makeBlockEl(empId,blk,empBlocks[empId]));
+  });
+
+  // Build the +card buttons row
+  renderAddBlockRow(empId);
+  calcTotals(); checkSubmitReady();
 }
 
 function removeEmployee(empId){
@@ -3657,6 +3922,7 @@ async function _confirmJobInfo(){
 }
 
 function _openFormScreen(d){
+  console.log('[_openFormScreen] called with:', JSON.stringify(d));
   _formLocked = false;
   document.getElementById('main-wrap').style.display = '';
   document.getElementById('status-screen').classList.remove('active');
@@ -3664,33 +3930,43 @@ function _openFormScreen(d){
   document.getElementById('tab-form')?.classList.add('active');
   document.getElementById('tab-status')?.classList.remove('active');
   document.getElementById('tab-mgr')?.classList.remove('active');
-  // Preserve the ID across clearForm() which resets it to null
   const _savedId = currentTimesheetId;
   clearForm();
-  currentTimesheetId = _savedId; // restore after clearForm
-  console.log('[_openFormScreen] currentTimesheetId restored to:', currentTimesheetId);
+  currentTimesheetId = _savedId;
+  console.log('[_openFormScreen] tsId restored:', currentTimesheetId);
   initDefaultEmployees();
 
   // Pre-populate all job info fields
-  const sv=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
-  sv('ji-supervisor',d.supervisor);
-  sv('job-date',     d.jobDate);
-  sv('ji-customer',  d.customer);
-  sv('ji-store',     d.store);
-  sv('ji-city',      d.city);
-  sv('ji-state',     d.state);
-  sv('ji-address',   d.address||'');
-  if(d.destLat)     sv('ji-dest-lat',  d.destLat);
-  if(d.destLng)     sv('ji-dest-lng',  d.destLng);
-  if(d.destAddress) sv('ji-dest-addr', d.destAddress);
+  const sv = (id, val) => {
+    const el = document.getElementById(id);
+    if(el){ el.value = val||''; console.log('[_openFormScreen] set', id, '=', JSON.stringify(val||'')); }
+    else console.warn('[_openFormScreen] element NOT FOUND:', id);
+  };
+  sv('ji-supervisor', d.supervisor);
+  sv('job-date',      d.jobDate);
+  sv('ji-customer',   d.customer);
+  sv('ji-store',      d.store);
+  sv('ji-city',       d.city);
+  sv('ji-state',      d.state);
+  sv('ji-address',    d.address||'');
+  if(d.destLat)      sv('ji-dest-lat',  String(d.destLat));
+  if(d.destLng)      sv('ji-dest-lng',  String(d.destLng));
+  if(d.destAddress)  sv('ji-dest-addr', d.destAddress);
 
-  setAutosaveStatus('saved','Job info saved — add employee times below');
-  setTimeout(()=>setAutosaveStatus('idle',''),4000);
+  // Clear red borders now that fields are populated
+  checkSubmitReady();
+  console.log('[_openFormScreen] complete');
+
+  setAutosaveStatus('saved', 'Job info saved — add employee times below');
+  setTimeout(()=>setAutosaveStatus('idle',''), 4000);
   startSupabaseAutoSave();
   refreshDebugPanel();
 }
 
+
 async function loadDraftTimesheet(tsId){
+  console.log('[loadDraft] START tsId=', tsId);
+  try{
   stopSupabaseAutoSave();
   // ── 1. Fetch all data first, before touching the DOM ──────
   const {data:ts, error:tsErr} = await getSupabase()
@@ -3709,6 +3985,7 @@ async function loadDraftTimesheet(tsId){
   if(empsErr)   console.error('[loadDraft] employees error:', empsErr);
   if(blocksErr) console.error('[loadDraft] blocks error:',    blocksErr);
 
+  console.log('[loadDraft] step 2 — showing form screen');
   // ── 2. Show form screen ────────────────────────────────────
   _formLocked = false;
   document.getElementById('main-wrap').style.display   = '';
@@ -3719,10 +3996,22 @@ async function loadDraftTimesheet(tsId){
   document.getElementById('tab-mgr')?.classList.remove('active');
 
   // ── 3. Clear form (no default employees) ──────────────────
-  stopSupabaseAutoSave(); // stop any running timer before clearing form — prevents stale save
+  console.log('[loadDraft] step 3 — clearing form');
+  stopSupabaseAutoSave();
   clearForm();
+  console.log('[loadDraft] step 3 — clearForm done, tsId=', tsId);
   currentTimesheetId = tsId;
 
+  // ── 3b. Ensure card types are loaded before rebuilding employee rows ──
+  console.log('[loadDraft] step 3b — cardTypes count before check:', _cardTypes.length);
+  if(!_cardTypes.length){
+    console.log('[loadDraft] card types not yet loaded — fetching now...');
+    await loadCardTypesAndPin();
+    console.log('[loadDraft] card types loaded:', _cardTypes.length);
+  }
+  console.log('[loadDraft] step 3b done — cardTypes:', _cardTypes.length, '_supervisorPin:', !!_supervisorPin);
+
+  console.log('[loadDraft] step 4 — restoring job info');
   // ── 4. Restore job info ───────────────────────────────────
   const s = (id,val)=>{ const el=document.getElementById(id); if(el) el.value=val||''; };
   s('ji-supervisor', ts.supervisor_name || currentProfile?.full_name || '');
@@ -3741,7 +4030,9 @@ async function loadDraftTimesheet(tsId){
   const custEl = document.getElementById('ji-customer');
   if(custEl){ custEl.value = ts.client_name||''; custEl.dataset.clientCode = ts.client_code||''; }
 
+  console.log('[loadDraft] step 5 — rebuilding employees, count:', emps?.length);
   // ── 5. Rebuild employees ──────────────────────────────────
+  try{
   if(emps && emps.length){
     for(const emp of emps){
       const role    = emp.role_type==='supervisor' ? 'supervisor'
@@ -3800,7 +4091,11 @@ async function loadDraftTimesheet(tsId){
       };
 
       dbBlocks.forEach((db) => {
-        const dbType = db.block_type || db.type;
+        // Normalize legacy block types from DB (old 'paid' → new 'count')
+        const RAW = db.block_type || db.type || '';
+        const TYPE_MAP = { paid: 'count', brk: 'brk', variance: 'variance',
+                           lunch: 'lunch', travel: 'travel', setup: 'setup', count: 'count' };
+        const dbType = TYPE_MAP[RAW] || RAW;
         const dbPrimary = db.is_primary === true || db.is_primary === 'true';
 
         // Match: exact type + primary flag, not already used
@@ -3834,31 +4129,45 @@ async function loadDraftTimesheet(tsId){
         if(outEl) outEl.value = blk.outVal;
       });
     }
+  } // end emps loop
+  } catch(empRestoreErr){
+    console.error('[loadDraft] employee/block restore error:', empRestoreErr);
   }
 
+  console.log('[loadDraft] step 7 — loading scans');
   // ── 7. Restore saved scans ───────────────────────────────
-  const {data:savedScans} = await getSupabase()
+  const {data:savedScans, error:scansErr} = await getSupabase()
     .from('scan_attachments')
     .select('id, file_name, mime_type, storage_path')
     .eq('timesheet_id', tsId)
     .order('created_at');
 
+  console.log('[loadDraft] scan_attachments query — count:', savedScans?.length, 'err:', scansErr?.message||null);
+
   if(savedScans && savedScans.length){
     for(const sc of savedScans){
       try{
-        const {data:urlData} = await getSupabase()
+        const {data:urlData, error:urlErr} = await getSupabase()
           .storage.from('timesheet-scans')
           .createSignedUrl(sc.storage_path, 3600);
-        if(!urlData?.signedUrl) continue;
-        // Fetch as blob then convert to dataUrl for the form viewer
-        const resp = await fetch(urlData.signedUrl);
-        const blob = await resp.blob();
-        const dataUrl = await new Promise(res=>{
-          const r = new FileReader();
-          r.onload = ()=>res(r.result);
-          r.readAsDataURL(blob);
-        });
+        if(urlErr||!urlData?.signedUrl){
+          console.warn('[loadDraft] signed URL failed for', sc.file_name, urlErr?.message);
+          continue;
+        }
+        const signedUrl = urlData.signedUrl;
         const isPdf = sc.mime_type==='application/pdf';
+        let dataUrl = null;
+        // Try fetching as blob (may be blocked in Safari file:// context)
+        try{
+          const resp = await fetch(signedUrl);
+          if(!resp.ok) throw new Error('HTTP '+resp.status);
+          const blob = await resp.blob();
+          dataUrl = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(blob); });
+        } catch(fetchErr){
+          console.warn('[loadDraft] blob fetch blocked, using signed URL directly:', fetchErr.message);
+          // Fall back to signed URL directly — works for display, won't re-upload on next save
+          dataUrl = signedUrl;
+        }
         scans.push({
           scanId:      ++scanCounter,
           name:        sc.file_name,
@@ -3868,7 +4177,8 @@ async function loadDraftTimesheet(tsId){
           storagePath: sc.storage_path,
           orientation: 'unknown'
         });
-      } catch(e){ console.warn('[loadDraft] scan restore failed:', e); }
+        console.log('[loadDraft] scan restored:', sc.file_name);
+      } catch(e){ console.warn('[loadDraft] scan restore failed for', sc.file_name, e.message); }
     }
     renderScans();
     checkSubmitReady();
@@ -3888,6 +4198,7 @@ async function loadDraftTimesheet(tsId){
   setAutosaveStatus('saved', 'Draft loaded');
   startSupabaseAutoSave();
   refreshDebugPanel();
+} catch(topErr){ console.error('[loadDraft] UNCAUGHT ERROR:', topErr?.message, topErr); }
 }
 
 
@@ -3964,18 +4275,21 @@ async function uploadScans(timesheetId){
         continue;
       }
       console.log('Upload success:', uploadData);
-      const { error: dbErr } = await getSupabase().from('scan_attachments').insert({
+      const { data: insertData, error: dbErr } = await getSupabase().from('scan_attachments').insert({
         timesheet_id: timesheetId,
         file_name:    scan.name,
         storage_path: path,
         mime_type:    blob.type,
         file_size:    blob.size
-      });
+      }).select('id').single();
       if(dbErr){
         console.error('scan_attachments insert error:', JSON.stringify(dbErr));
       } else {
+        // Mark the in-memory scan as saved so subsequent auto-saves skip it
+        scan.dbId        = insertData.id;
+        scan.storagePath = path;
         paths.push(path);
-        console.log('Scan attachment record saved.');
+        console.log('Scan attachment record saved, dbId=', scan.dbId);
       }
     } catch(e){
       console.error('uploadScans exception:', e);
@@ -4154,11 +4468,13 @@ async function saveTimesheet(statusVal, silent=false){
       }
     }
 
-    // Upload scans — only on real submit, not on silent auto-save draft
-    if(!silent){
-      showSaving('Uploading scan attachments...');
+    // Upload scans — always, but skip if all scans already have a dbId (already saved)
+    // This ensures scans are saved even on auto-save, not just on manual save/submit
+    const newScans = scans.filter(s=>!s.dbId);
+    if(newScans.length){
+      if(!silent) showSaving('Uploading scan attachments...');
       await uploadScans(timesheetId);
-      hideSaving();
+      if(!silent) hideSaving();
     }
     clearLocalDraft(); // Clear local backup on successful save
     _supabaseDirty = false; // Mark Supabase as up to date
@@ -4171,6 +4487,7 @@ async function saveTimesheet(statusVal, silent=false){
       setSubmissionStatus('pending');
       updateStatus('submitted');
       lockFormAfterSubmit();
+      if(!silent) hideSaving();
       switchTab('status');
     } else if(!silent){
       if(_resubmittingRejected){
@@ -4614,5 +4931,25 @@ function scanPage(dir){
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Supervisor tag — hidden dot, bottom-right -->
+<button class="sup-tag-btn" id="sup-tag-btn" onclick="openSupTagFlow()" title="" aria-label="Supervisor menu"></button>
+
+<!-- Supervisor PIN/ad-hoc modal -->
+<div id="pin-modal-overlay" class="pin-modal-overlay" style="display:none" onclick="if(event.target===this)closePinModal()">
+  <div class="pin-modal">
+    <h3 id="pin-modal-title">Supervisor access</h3>
+    <div class="pin-modal-sub" id="pin-modal-sub">Enter supervisor PIN to continue.</div>
+    <div id="pin-modal-body">
+      <div class="pin-input-row">
+        <input type="password" id="pin-entry" inputmode="numeric" maxlength="8" placeholder="· · · ·" onkeydown="if(event.key==='Enter')verifyPin()"/>
+      </div>
+      <div class="pin-err" id="pin-err"></div>
+      <div class="pin-modal-btns">
+        <button class="wiz-btn secondary" onclick="closePinModal()">Cancel</button>
+        <button class="wiz-btn primary" onclick="verifyPin()"><i class="ti ti-shield-check"></i> Verify</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
