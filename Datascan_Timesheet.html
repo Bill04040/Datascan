@@ -283,6 +283,9 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 /* ── Login screen ────────────────────────────────────────── */
 #login-screen{position:fixed;inset:0;z-index:9999;background:#1a2e4a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
 #login-screen.hidden{display:none}
+#force-pw-screen{position:fixed;inset:0;z-index:9999;background:#1a2e4a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
+#force-pw-screen.hidden{display:none}
+.force-pw-link{display:block;text-align:center;font-size:12px;color:var(--text2);margin-top:1rem;cursor:pointer;text-decoration:underline}
 .login-version{font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:.1em;margin-top:16px;text-align:center;font-family:monospace}
 .login-box{background:var(--bg);border-radius:var(--radius-lg);padding:2rem 1.75rem;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.35)}
 .login-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:1rem}
@@ -771,6 +774,25 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   </div>
 </div>
 
+<!-- Forced password-change screen — shown after sign-in when must_change_password is set -->
+<div id="force-pw-screen" class="hidden">
+  <div class="login-box">
+    <div class="login-sub" style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:.5rem">Set a new password</div>
+    <p style="font-size:13px;color:var(--text2);text-align:center;margin:0 0 1.25rem">For your security, please create a new password before continuing.</p>
+    <div class="login-field">
+      <label>New password</label>
+      <input type="password" id="fpw-new" placeholder="Min 8 characters" autocomplete="new-password"/>
+    </div>
+    <div class="login-field">
+      <label>Confirm new password</label>
+      <input type="password" id="fpw-confirm" placeholder="Re-enter password" autocomplete="new-password"/>
+    </div>
+    <button class="login-btn" id="fpw-btn" onclick="submitNewPassword()">Set password &amp; continue</button>
+    <div class="login-err" id="fpw-err"></div>
+    <span class="force-pw-link" onclick="doLogout()">Sign out instead</span>
+  </div>
+</div>
+
 <div id="nav-tabs" style="display:none">
   <div class="nav-tabs">
     <button class="nav-tab active" id="tab-status" onclick="switchTab('status')">
@@ -1080,6 +1102,7 @@ let currentUser = null;
 let currentProfile = null;
 let _userPermissions = {};    // loaded on login from role_definitions + overrides
 let _userScopeType   = 'own'; // 'none'|'region'|'district'|'area'|'own'
+let _pendingRoleLabel = '';   // role_label resolved during sign-in, applied in completeSignIn
 let _testRoleKey      = null; // QA role-switcher hook (test harness removed in this split)
 let _timesheetChannel = null;
 
@@ -1228,7 +1251,7 @@ function startTimesheetSubscription(){
 }
 
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.7';
+const APP_VERSION = 'v1.0.8';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1265,6 +1288,7 @@ async function onSignedIn(user){
   const userOverrides = profile?.permissions_override || {};
   _userPermissions    = {...rolePerms, ...userOverrides};
   _userScopeType      = roleDef?.scope_type || 'own';
+  _pendingRoleLabel   = roleDef?.role_label || profile?.role || 'Supervisor';
 
   if(!isFieldRole()){
     await getSupabase().auth.signOut();
@@ -1274,11 +1298,70 @@ async function onSignedIn(user){
     return;
   }
 
+  if(profile?.must_change_password){
+    showForcePasswordScreen();
+    return;
+  }
+
+  completeSignIn();
+}
+
+function showForcePasswordScreen(){
   document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('force-pw-screen').classList.remove('hidden');
+  const newEl = document.getElementById('fpw-new');
+  const confEl = document.getElementById('fpw-confirm');
+  const errEl = document.getElementById('fpw-err');
+  const btnEl = document.getElementById('fpw-btn');
+  if(newEl) newEl.value = '';
+  if(confEl) confEl.value = '';
+  if(errEl) errEl.textContent = '';
+  if(btnEl){ btnEl.disabled = false; btnEl.textContent = 'Set password & continue'; }
+  if(newEl) newEl.focus();
+}
+
+async function submitNewPassword(){
+  const pw1 = document.getElementById('fpw-new')?.value || '';
+  const pw2 = document.getElementById('fpw-confirm')?.value || '';
+  const err = document.getElementById('fpw-err');
+  const btn = document.getElementById('fpw-btn');
+  err.textContent = '';
+  if(!pw1 || !pw2){ err.textContent = 'Please fill in both fields.'; return; }
+  if(pw1.length < 8){ err.textContent = 'Password must be at least 8 characters.'; return; }
+  if(pw1 !== pw2){ err.textContent = 'Passwords do not match.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const {error: pwError} = await getSupabase().auth.updateUser({ password: pw1 });
+  if(pwError){
+    err.textContent = pwError.message;
+    btn.disabled = false; btn.textContent = 'Set password & continue';
+    return;
+  }
+
+  const {error: profError} = await getSupabase()
+    .rpc('clear_must_change_password');
+  if(profError){
+    console.warn('[submitNewPassword] failed to clear must_change_password flag:', profError.message);
+  } else if(currentProfile){
+    currentProfile.must_change_password = false;
+  }
+
+  btn.disabled = false; btn.textContent = 'Set password & continue';
+  document.getElementById('force-pw-screen').classList.add('hidden');
+  completeSignIn();
+}
+
+function completeSignIn(){
+  const user = currentUser;
+  const profile = currentProfile;
+
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('force-pw-screen').classList.add('hidden');
   document.getElementById('user-bar').style.display = 'flex';
   document.getElementById('nav-tabs').style.display  = 'block';
   document.getElementById('user-bar-name').textContent = profile?.full_name || user.email;
-  document.getElementById('user-bar-role').textContent = roleDef?.role_label || profile?.role || 'Supervisor';
+  document.getElementById('user-bar-role').textContent = _pendingRoleLabel || profile?.role || 'Supervisor';
 
   // Show address input (for geocode accuracy) and dev debug panel for the test/debug account.
   // NOTE: the read-only lat/lng/geocoded-address row (ji-coords-row) stays hidden —
