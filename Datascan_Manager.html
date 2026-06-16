@@ -494,6 +494,44 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .tsv-grid tr:hover td{background:var(--bg2)}
 .tsv-grid tr.tsv-continuation-row td{background:var(--bg2);border-top:none}
 .tsv-grid tr.tsv-continuation-row:hover td{background:var(--bg3)}
+
+/* ── Timeline Grid ──────────────────────────────────────────── */
+.tl-wrap{overflow-x:auto;overflow-y:visible;width:100%;-webkit-overflow-scrolling:touch}
+.tl-table{border-collapse:collapse;font-size:11px;white-space:nowrap}
+.tl-table th.tl-sticky,
+.tl-table td.tl-sticky{position:sticky;left:0;z-index:3;background:var(--bg);min-width:128px;max-width:128px;width:128px;text-align:left;box-shadow:2px 0 4px rgba(0,0,0,0.06)}
+.tl-table thead th.tl-sticky{background:var(--bg3);z-index:5}
+.tl-table tr:hover td.tl-sticky{background:var(--bg2)}
+.tl-table thead{position:sticky;top:0;z-index:4}
+.tl-table th{background:var(--bg3);color:var(--text2);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:5px 6px;text-align:center;border-bottom:1px solid var(--border2);border-right:0.5px solid var(--border);white-space:nowrap}
+.tl-table th.tl-type-hdr{font-size:10px;font-weight:800;letter-spacing:.03em;padding:6px 8px}
+.tl-table th.tl-in-out{width:80px;min-width:80px;font-size:9px;font-weight:600;padding:4px 5px}
+.tl-table td{padding:5px 4px;border-bottom:0.5px solid var(--border);border-right:0.5px solid var(--border);vertical-align:middle;text-align:center;color:var(--text)}
+.tl-table td.tl-sticky{padding:5px 8px;font-weight:600;font-size:12px;border-right:1.5px solid var(--border2)}
+.tl-table td.tl-cell-in{min-width:80px;width:80px}
+.tl-table td.tl-cell-out{min-width:80px;width:80px}
+.tl-table td.tl-hrs{min-width:52px;width:52px;font-weight:700;font-size:11px}
+.tl-table td.tl-empty{color:var(--text3);font-size:13px}
+.tl-table th.tl-group-sep,.tl-table td.tl-group-sep{border-left:2px solid var(--border2)!important}
+.tl-date-row td{background:var(--bg2);color:var(--text2);font-size:10px;font-weight:700;text-align:left;padding:4px 8px;letter-spacing:.04em;border-bottom:1px solid var(--border2);text-transform:uppercase}
+.tl-table td.tl-unpaid{background:rgba(244,169,58,0.05)}
+.tl-table th.tl-unpaid-hdr{background:rgba(244,169,58,0.1);color:#854f0b}
+@media(prefers-color-scheme:dark){
+  .tl-table td.tl-unpaid{background:rgba(244,169,58,0.04)}
+  .tl-table th.tl-unpaid-hdr{background:rgba(244,169,58,0.08);color:#fac775}
+}
+.tl-totals-row td{background:var(--bg2);font-weight:700;border-top:1.5px solid var(--border2);font-size:11px;padding:6px 4px}
+.tl-totals-row td.tl-sticky{font-size:12px;background:var(--bg2)}
+.tl-time-val{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3}
+.tl-time-date{font-size:9px;color:var(--text2);font-weight:500;line-height:1.2}
+.tl-hrs-labor{color:var(--info-text)}
+.tl-hrs-travel{color:#3b6d11}
+@media(prefers-color-scheme:dark){.tl-hrs-travel{color:#97c459}}
+.tl-mod-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--warn-text);margin-left:3px;vertical-align:middle;flex-shrink:0}
+.tl-emp-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle}
+.tl-emp-badge.sup{background:#185fa5;color:#fff}
+.tl-emp-badge.asst{background:#854f0b;color:#fff}
+
 /* DNR / Preferred badges */
 .tsv-flag-dnr{font-size:9px;font-weight:700;color:var(--danger-text);background:var(--danger-bg);padding:1px 4px;border-radius:3px}
 .tsv-flag-pref{font-size:9px;font-weight:700;color:var(--success-text);background:var(--success-bg);padding:1px 4px;border-radius:3px}
@@ -3466,8 +3504,8 @@ function populateTopbarInfo(ts, empCount, totalPaidMins, totalBrkMins, avgHrs, s
     {l:'Submitted', v:submitted,                                                        cls:'narrow-datetime'},
     {l:'Updated',   v:updated,                                                          cls:'narrow-datetime'},
     {l:'Employees', v:String(empCount),                                                 cls:'narrow'},
-    {l:'Paid hrs',  v:(totalPaidMins/60).toFixed(2)+'h',                               cls:'narrow'},
-    {l:'Break hrs', v:(totalBrkMins/60).toFixed(2)+'h',                                cls:'narrow'},
+    {l:'Labor hrs', v:(totalPaidMins/60).toFixed(2)+'h',                               cls:'narrow'},
+    {l:'Travel hrs',v:(totalBrkMins/60).toFixed(2)+'h',                                cls:'narrow'},
   ];
   grid.innerHTML = cells.map(c=>`
     <div class="topbar-info-cell ${c.cls}">
@@ -3479,14 +3517,13 @@ function populateTopbarInfo(ts, empCount, totalPaidMins, totalBrkMins, avgHrs, s
 
 async function openDetailScreen(ts, isManager=false){
   _currentDetailTs = ts;
-  // Remember which tab we came from
   _previousTab = 'mgr';
   _scanRotation=0; _scanScale=1; _scanCurrentIdx=0; _scanPdfDoc=null; _scanPdfPage=1;
 
-  const screen = document.getElementById('detail-screen');
-  const title  = document.getElementById('detail-topbar-title');
-  const statusEl = document.getElementById('detail-topbar-status');
-  const body   = document.getElementById('detail-body');
+  const screen  = document.getElementById('detail-screen');
+  const title   = document.getElementById('detail-topbar-title');
+  const statusEl= document.getElementById('detail-topbar-status');
+  const body    = document.getElementById('detail-body');
 
   const statusMap={
     draft:     {cls:'ts-pill-draft',    label:'Draft',          icon:'ti-device-floppy'},
@@ -3495,49 +3532,39 @@ async function openDetailScreen(ts, isManager=false){
     rejected:  {cls:'ts-pill-rejected', label:'Rejected',       icon:'ti-circle-x'},
   };
   const s=statusMap[ts.status]||{cls:'ts-pill-draft',label:ts.status,icon:'ti-clock'};
-
   if(title) title.textContent = ts.client_name||'Timesheet';
-  statusEl.innerHTML = `<span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>`;
+  statusEl.innerHTML=`<span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>`;
   body.innerHTML='<div class="ts-loading" style="text-align:center;padding:2rem;color:var(--text2)"><i class="ti ti-loader-2" style="font-size:24px;animation:spin 1s linear infinite;display:block;margin:0 auto .5rem"></i>Loading...</div>';
-
   screen.classList.add('active');
   document.body.style.overflow='hidden';
 
-  // Load scans + data in parallel
+  // ── Fetch all data in parallel ────────────────────────────
   const [
-    {data:scansData, error:scansErr},
-    {data:emps,      error:empsErr},
-    {data:blocks,    error:blocksErr},
-    {data:adjs,      error:adjsErr}
+    {data:scansData},
+    {data:emps,    error:empsErr},
+    {data:blocks},
+    {data:adjs},
+    {data:cardTypes}
   ] = await Promise.all([
     getSupabase().from('scan_attachments').select('id,file_name,mime_type,storage_path,created_at').eq('timesheet_id',ts.id).order('created_at'),
     getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).order('display_order'),
     getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).order('display_order'),
     getSupabase().from('pay_adjustments').select('*').eq('timesheet_id',ts.id).order('created_at'),
+    getSupabase().from('time_card_types').select('*').eq('is_active',true).order('sort_order'),
   ]);
-  console.log('[detail] ts.id=',ts.id,'emps=',emps?.length,'empsErr=',empsErr,'blocks=',blocks?.length,'blocksErr=',blocksErr,'scansErr=',scansErr);
   if(empsErr) console.error('[detail] employees query failed:',empsErr);
 
-  // ── Scan viewer ───────────────────────────────────────────
   _detailScans = scansData||[];
   await renderScanViewer();
 
-  // ── Timesheet detail body ─────────────────────────────────
-  const blocksByEmp={};
-  (blocks||[]).forEach(b=>{ if(!blocksByEmp[b.employee_id])blocksByEmp[b.employee_id]=[]; blocksByEmp[b.employee_id].push(b); });
-
-  const validEmps=(emps||[]).filter(e=>e.first_name||e.last_name);
-  let totalPaidMins=0,totalBrkMins=0,empCount=0;
-
+  // ── Helper: block duration in minutes ────────────────────
   function bMins(b){
     if(!b||!b.time_in||!b.time_out) return 0;
-    // Full datetime — handles cross-day correctly
     if(b.time_in.includes('T')&&b.time_out.includes('T')){
       const d1=new Date(b.time_in),d2=new Date(b.time_out);
       if(!isNaN(d1)&&!isNaN(d2)) return Math.max(0,Math.round((d2-d1)/60000));
     }
-    // Plain HH:MM — add 1440 if next-day punch
-    const tin =b.time_in.includes('T') ?b.time_in.split('T')[1] :b.time_in;
+    const tin =b.time_in.includes('T') ?b.time_in.split('T')[1]:b.time_in;
     const tout=b.time_out.includes('T')?b.time_out.split('T')[1]:b.time_out;
     const[hi,mi]=tin.split(':').map(Number);
     const[ho,mo]=tout.split(':').map(Number);
@@ -3546,74 +3573,229 @@ async function openDetailScreen(ts, isManager=false){
     return Math.max(0,diff);
   }
 
-  const gridRows=validEmps.map(e=>{
-    const eBlocks=blocksByEmp[e.id]||[];
-    // Group blocks by type, preserving display_order within each type
-    const primary=eBlocks.find(b=>b.is_primary);
-    const paidBlocks=eBlocks.filter(b=>b.block_type==='paid'&&!b.is_primary);
-    const brkBlocks=eBlocks.filter(b=>b.block_type==='brk');
-    const varBlocks=eBlocks.filter(b=>b.block_type==='variance');
-    const trvBlocks=eBlocks.filter(b=>b.block_type==='travel');
-    const setupBlocks=eBlocks.filter(b=>b.block_type==='setup');
-    // How many rows does this employee need?
-    const extraPaid=paidBlocks.length;
-    const rowCount=Math.max(1,extraPaid,brkBlocks.length,varBlocks.length,trvBlocks.length,setupBlocks.length);
-    let empPaid=0,empBrk=0;
-    eBlocks.forEach(b=>{ const m=bMins(b); if(b.block_type==='brk')empBrk+=m; else empPaid+=m; });
-    if(empPaid>0||empBrk>0){totalPaidMins+=empPaid;totalBrkMins+=empBrk;empCount++;}
-    const rolePillCls=e.role_type==='supervisor'?'tsv-role-sup':e.role_type==='assistant'?'tsv-role-asst':'tsv-role-emp';
-    const roleLbl=e.role_type==='supervisor'?'SUP':e.role_type==='assistant'?'ASST':'EMP';
-    const fullName=[e.first_name,e.last_name].filter(Boolean).join(' ');
-    const isTravelOnly=e.travel_only===true||e.travel_only==='true';
-    const travelOnlyBadge=isTravelOnly?'<span style="font-size:9px;font-weight:700;background:#E6F1FB;color:#185FA5;padding:1px 5px;border-radius:3px;margin-left:4px">TRAVEL ONLY</span>':'';
-    const hrsDisplay=empPaid>0?`<span class="tsv-hrs-badge">${(empPaid/60).toFixed(2)}h</span>`:'<span class="tsv-flag-empty">—</span>';
-    const isDnr=e.dnr===true||e.dnr==='true';
-    const isPref=e.preferred===true||e.preferred==='true';
-    const tc=b=>b&&b.time_in?fmt12WithDate(b.time_in):'<span class="tsv-flag-empty">—</span>';
-    const tc2=b=>b&&b.time_out?fmt12WithDate(b.time_out):'<span class="tsv-flag-empty">—</span>';
-    const storedVal=(b,f)=>b?(f==='in'?(b.time_in||''):(b.time_out||'')):'';
-    const modBadge=b=>b&&b.modified_at?'<span class="tsv-modified-badge">MOD</span>':'';
-    const empty='<span class="tsv-flag-empty">—</span>';
-    // Build rows — first row gets rowspan cells for name/role/hrs/flags/notes
-    const rows=[];
-    for(let i=0;i<rowCount;i++){
-      // Count column: row 0 = primary, subsequent rows = additional paid blocks
-      const countBlock = i===0 ? primary : paidBlocks[i-1];
-      const brk=brkBlocks[i]||null;
-      const vari=varBlocks[i]||null;
-      const trv=trvBlocks[i]||null;
-      const setup=setupBlocks[i]||null;
-      const isFirst=i===0;
-      // continuation row label
-      const contLabel=!isFirst?`<span style="font-size:9px;color:var(--text3);font-weight:600;white-space:nowrap">+${i}</span>`:'';
-      rows.push(`<tr class="${!isFirst?'tsv-continuation-row':''}">
-        ${isFirst?`<td class="col-role" rowspan="${rowCount}"><span class="tsv-role-pill ${rolePillCls}">${roleLbl}</span></td>`:''}
-        ${isFirst?`<td class="col-name" rowspan="${rowCount}">${fullName}${travelOnlyBadge}</td>`:''}
-        <td class="col-time group-start" data-block-id="${countBlock?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(countBlock,'in')}">${tc(countBlock)}${modBadge(countBlock)}${contLabel}</td>
-        <td class="col-time" data-block-id="${countBlock?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(countBlock,'out')}">${tc2(countBlock)}${modBadge(countBlock)}</td>
-        <td class="col-time group-start" data-block-id="${brk?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(brk,'in')}">${tc(brk)}</td>
-        <td class="col-time" data-block-id="${brk?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(brk,'out')}">${tc2(brk)}</td>
-        <td class="col-time group-start" data-block-id="${vari?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(vari,'in')}">${tc(vari)}</td>
-        <td class="col-time" data-block-id="${vari?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(vari,'out')}">${tc2(vari)}</td>
-        <td class="col-time group-start" data-block-id="${trv?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(trv,'in')}">${tc(trv)}</td>
-        <td class="col-time" data-block-id="${trv?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(trv,'out')}">${tc2(trv)}</td>
-        <td class="col-time group-start" data-block-id="${setup?.id||''}" data-field="in" data-emp-id="${e.id}" data-stored-val="${storedVal(setup,'in')}">${tc(setup)}</td>
-        <td class="col-time" data-block-id="${setup?.id||''}" data-field="out" data-emp-id="${e.id}" data-stored-val="${storedVal(setup,'out')}">${tc2(setup)}</td>
-        ${isFirst?`<td class="col-hrs group-start" data-hrs-emp="${e.id}" rowspan="${rowCount}">${hrsDisplay}</td>`:''}
-        ${isFirst?`<td class="col-flag group-start" rowspan="${rowCount}">${isDnr?'<span class="tsv-flag-dnr">DNR</span>':empty}</td>`:''}
-        ${isFirst?`<td class="col-flag" rowspan="${rowCount}">${isPref?'<span class="tsv-flag-pref">PREF</span>':empty}</td>`:''}
-        ${isFirst?`<td class="tsv-notes-cell" rowspan="${rowCount}">${e.notes&&e.notes.trim()?e.notes.trim():'—'}</td>`:''}
-      </tr>`);
-    }
-    return rows.join('');
-  }).join('');
+  function fmtMins(m){
+    if(!m||m<=0) return '—';
+    const h=Math.floor(m/60), mn=m%60;
+    return mn>0 ? `${h}:${String(mn).padStart(2,'0')}h` : `${h}h`;
+  }
 
-  const avgHrs=empCount>0?(totalPaidMins/60/empCount).toFixed(1):'—';
+  // Format time for cell — time on line 1, date on line 2
+  function tlFmt(t){
+    if(!t) return '<span class="tl-empty">—</span>';
+    let dateStr='', timeStr=t;
+    if(t.includes('T')){ const p=t.split('T'); dateStr=p[0]; timeStr=p[1]; }
+    const[h,m]=timeStr.split(':').map(Number);
+    const ampm=h<12?'AM':'PM';
+    const hr=h%12===0?12:h%12;
+    const timeLabel=hr+':'+String(m).padStart(2,'0')+' '+ampm;
+    if(!dateStr) return `<span class="tl-time-val">${timeLabel}</span>`;
+    const d=new Date(dateStr+'T00:00:00');
+    const dateLbl=(d.getMonth()+1)+'/'+(d.getDate())+'/'+String(d.getFullYear()).slice(2);
+    return `<div><div class="tl-time-val">${timeLabel}</div><div class="tl-time-date">${dateLbl}</div></div>`;
+  }
+
+  // Get date string from block time_in for grouping
+  function blockDate(b){
+    if(!b||!b.time_in) return '';
+    return b.time_in.includes('T') ? b.time_in.split('T')[0] : '';
+  }
+
+  // ── Build card type catalog ───────────────────────────────
+  // nesting_rule: 'inside_paid' = break (unpaid, inside count)
+  //               'between_paid' = lunch (unpaid, separator)
+  //               'top_level' = paid work column
+  const ctMap = {};
+  (cardTypes||[]).forEach(ct=>{ ctMap[ct.key]=ct; });
+
+  function ctOf(key){ return ctMap[key]||{key,label:key,is_paid:true,nesting_rule:'top_level',sort_order:99,color_hex:'#888'}; }
+  function isUnpaid(key){ const ct=ctOf(key); return !ct.is_paid || ct.nesting_rule==='inside_paid' || ct.nesting_rule==='between_paid'; }
+  function isTravel(key){ return key==='travel'; }
+
+  // ── Determine which block types actually appear in this timesheet ──
+  // Only show columns for types that at least one employee used
+  const allBlocks = blocks||[];
+  const usedKeys  = [...new Set(allBlocks.map(b=>b.block_type).filter(Boolean))];
+  // Sort by card type sort_order; unknown types go last
+  usedKeys.sort((a,b)=>(ctOf(a).sort_order||99)-(ctOf(b).sort_order||99));
+
+  // For each type, find the max occurrence count across all employees+days
+  // so we know how many "Count 1 / Count 2" columns are needed
+  const typeOccurrences = {}; // key -> max occurrences in any single emp+day
+  const blocksByEmp = {};
+  allBlocks.forEach(b=>{
+    if(!blocksByEmp[b.employee_id]) blocksByEmp[b.employee_id]=[];
+    blocksByEmp[b.employee_id].push(b);
+  });
+  const validEmps = (emps||[]).filter(e=>e.first_name||e.last_name);
+  validEmps.forEach(e=>{
+    const eBlocks = blocksByEmp[e.id]||[];
+    // Group by date then count occurrences per type
+    const dateGroups = {};
+    eBlocks.forEach(b=>{
+      const d=blockDate(b)||'nodate';
+      if(!dateGroups[d]) dateGroups[d]={};
+      if(!dateGroups[d][b.block_type]) dateGroups[d][b.block_type]=0;
+      dateGroups[d][b.block_type]++;
+    });
+    Object.values(dateGroups).forEach(dayMap=>{
+      Object.entries(dayMap).forEach(([key,cnt])=>{
+        typeOccurrences[key]=Math.max(typeOccurrences[key]||0, cnt);
+      });
+    });
+  });
+
+  // Build flat column definitions: [{key, label, occurrence, isUnpaid, isTravel, color}]
+  const cols = [];
+  usedKeys.forEach(key=>{
+    const ct = ctOf(key);
+    const maxOcc = typeOccurrences[key]||1;
+    for(let i=0;i<maxOcc;i++){
+      cols.push({
+        key,
+        label: ct.label||key,
+        occurrence: i,         // 0-based; "Count 1" = 0, "Count 2" = 1
+        occTotal: maxOcc,      // total slots for this type
+        unpaid: isUnpaid(key),
+        travel: isTravel(key),
+        color: ct.color_hex||'#888',
+      });
+    }
+  });
+
+  // ── Totals accumulators ───────────────────────────────────
+  let grandLaborMins=0, grandTravelMins=0, grandEmpCount=0;
+
+  // ── Build table rows ──────────────────────────────────────
+  function buildEmpRows(e){
+    const eBlocks = (blocksByEmp[e.id]||[]).slice().sort((a,b)=>(a.display_order||0)-(b.display_order||0));
+    const fullName = [e.first_name,e.last_name].filter(Boolean).join(' ');
+    const roleBadge= e.role_type==='supervisor'?'<span class="tl-emp-badge sup">SUP</span>':
+                     e.role_type==='assistant' ?'<span class="tl-emp-badge asst">AST</span>':'';
+    const isDnr    = e.dnr===true||e.dnr==='true';
+    const isPref   = e.preferred===true||e.preferred==='true';
+    const flags    = (isDnr?'<span class="tsv-flag-dnr" style="margin-right:2px">DNR</span>':'')+(isPref?'<span class="tsv-flag-pref">PREF</span>':'');
+
+    // Group blocks by date (YYYY-MM-DD), preserving sort within each date
+    const datesOrdered = [];
+    const blocksByDate = {};
+    eBlocks.forEach(b=>{
+      const d = blockDate(b)||'nodate';
+      if(!blocksByDate[d]){ blocksByDate[d]=[]; datesOrdered.push(d); }
+      blocksByDate[d].push(b);
+    });
+    if(!datesOrdered.length) datesOrdered.push('nodate');
+
+    let laborMins=0, travelMins=0;
+    const dayRows = [];
+
+    datesOrdered.forEach((dateKey,dIdx)=>{
+      const dayBlocks = blocksByDate[dateKey]||[];
+
+      // For this day, map each block to its column slot
+      // Track occurrence index per type
+      const typeIdx={};
+      const slotMap={}; // "key_occIdx" -> block
+      dayBlocks.forEach(b=>{
+        const k=b.block_type;
+        if(!typeIdx[k]) typeIdx[k]=0;
+        const occ=typeIdx[k]++;
+        slotMap[k+'_'+occ]=b;
+      });
+
+      // Calculate hours for this day
+      let dayLaborMins=0, dayTravelMins=0;
+      dayBlocks.forEach(b=>{
+        const m=bMins(b);
+        if(isTravel(b.block_type)) dayTravelMins+=m;
+        else if(!isUnpaid(b.block_type)) dayLaborMins+=m;
+      });
+      laborMins+=dayLaborMins; travelMins+=dayTravelMins;
+
+      // Build date label for display
+      let dateLbl='';
+      if(dateKey!=='nodate'){
+        const d=new Date(dateKey+'T00:00:00');
+        dateLbl=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'2-digit'});
+      }
+
+      // Build the data row cells
+      const cells = cols.map((col,cIdx)=>{
+        const b = slotMap[col.key+'_'+col.occurrence]||null;
+        const isFirst=(cIdx===0);
+        const sep=isFirst?'':' tl-group-sep';
+        // Only add group separator at first column of each type group
+        const firstOfGroup = cIdx===0 || cols[cIdx-1].key!==col.key;
+        const groupSep = firstOfGroup && cIdx>0 ? ' tl-group-sep':'';
+        const unpaidCls = col.unpaid?' tl-unpaid':'';
+        const modDot = b&&b.modified_at?'<span class="tl-mod-dot"></span>':'';
+        return `<td class="tl-cell-in${groupSep}${unpaidCls}">${tlFmt(b?.time_in)}${modDot}</td><td class="tl-cell-out${unpaidCls}">${tlFmt(b?.time_out)}</td>`;
+      }).join('');
+
+      // Hours cells for this day row
+      const lHrs=fmtMins(dayLaborMins);
+      const tHrs=fmtMins(dayTravelMins);
+
+      dayRows.push(`<tr>
+        <td class="tl-sticky" style="font-size:11px">
+          <div style="font-weight:700">${fullName}${roleBadge}</div>
+          ${dateLbl?`<div class="tl-time-date" style="margin-top:2px">${dateLbl}</div>`:''}
+          ${flags?`<div style="margin-top:3px">${flags}</div>`:''}
+          ${e.notes&&e.notes.trim()?`<div style="font-size:9px;color:var(--text3);margin-top:2px;white-space:normal;max-width:120px">${e.notes.trim()}</div>`:''}
+        </td>
+        ${cells}
+        <td class="tl-hrs tl-group-sep${dayLaborMins?''  :' tl-empty'}" style="color:var(--info-text)">${lHrs}</td>
+        <td class="tl-hrs${dayTravelMins?'':' tl-empty'}" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--success-text')||'#3b6d11'}">${tHrs}</td>
+      </tr>`);
+    });
+
+    if(laborMins>0||travelMins>0){ grandLaborMins+=laborMins; grandTravelMins+=travelMins; grandEmpCount++; }
+    return dayRows.join('');
+  }
+
+  // ── Build header ──────────────────────────────────────────
+  // Row 1: type group headers (merged colspan=2 per slot)
+  let hdr1='<th class="tl-sticky" rowspan="2" style="text-align:left">Employee</th>';
+  cols.forEach((col,i)=>{
+    const firstOfGroup = i===0||cols[i-1].key!==col.key;
+    const groupSep=firstOfGroup&&i>0?' tl-group-sep':'';
+    const unpaidCls=col.unpaid?' tl-unpaid-hdr':'';
+    const occLabel=col.occTotal>1?` <span style="font-size:8px;opacity:.7">${col.occurrence+1}</span>`:'';
+    const colorDot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col.color};margin-right:4px;flex-shrink:0"></span>`;
+    hdr1+=`<th colspan="2" class="tl-type-hdr${groupSep}${unpaidCls}" style="border-left:2px solid ${col.color}40">${colorDot}${col.label}${occLabel}</th>`;
+  });
+  hdr1+='<th colspan="2" class="tl-group-sep" style="min-width:96px">Hours</th>';
+
+  // Row 2: In / Out sub-headers
+  let hdr2='';
+  cols.forEach((col,i)=>{
+    const firstOfGroup=i===0||cols[i-1].key!==col.key;
+    const groupSep=firstOfGroup&&i>0?' tl-group-sep':'';
+    const unpaidCls=col.unpaid?' tl-unpaid-hdr':'';
+    hdr2+=`<th class="tl-in-out${groupSep}${unpaidCls}">In</th><th class="tl-in-out${unpaidCls}">Out</th>`;
+  });
+  hdr2+='<th class="tl-in-out tl-group-sep" style="color:var(--info-text)">Labor</th><th class="tl-in-out" style="color:#3b6d11">Travel</th>';
+
+  // ── Build all employee rows ───────────────────────────────
+  const bodyRows = validEmps.length
+    ? validEmps.map(e=>buildEmpRows(e)).join('')
+    : `<tr><td class="tl-sticky" style="color:var(--text3);font-weight:400">No employees</td>${cols.map(()=>'<td></td><td></td>').join('')}<td></td><td></td></tr>`;
+
+  // ── Totals row ────────────────────────────────────────────
+  const totalsRow=`<tr class="tl-totals-row">
+    <td class="tl-sticky">Total · ${grandEmpCount} emp</td>
+    ${cols.map(()=>'<td></td><td></td>').join('')}
+    <td class="tl-hrs tl-group-sep" style="color:var(--info-text)">${fmtMins(grandLaborMins)}</td>
+    <td class="tl-hrs" style="color:#3b6d11">${fmtMins(grandTravelMins)}</td>
+  </tr>`;
+
+  // ── Topbar summary ────────────────────────────────────────
+  const avgHrs=grandEmpCount>0?(grandLaborMins/60/grandEmpCount).toFixed(1):'—';
   const jobDate=ts.job_date?new Date(ts.job_date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'}):'—';
   const submitted=new Date(ts.created_at).toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'});
   const updated=new Date(ts.updated_at).toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  populateTopbarInfo(ts, grandEmpCount, grandLaborMins, grandTravelMins, avgHrs, submitted, updated, jobDate);
 
-  // Pay adjustments section
+  // ── Pay adjustments ───────────────────────────────────────
   let adjHtml='';
   if(adjs&&adjs.length){
     const adjRows=(adjs||[]).map(a=>`
@@ -3625,68 +3807,45 @@ async function openDetailScreen(ts, isManager=false){
     adjHtml=`<div class="adj-section"><div class="tsv-section-label"><i class="ti ti-alert-triangle" style="color:var(--warn-text)"></i> Pay Adjustments</div>${adjRows}</div>`;
   }
 
-  populateTopbarInfo(ts, empCount, totalPaidMins, totalBrkMins, avgHrs, submitted, updated, jobDate);
-
+  // ── Render ────────────────────────────────────────────────
   body.innerHTML=`
-    <div class="tsv-section-label"><i class="ti ti-users"></i> Employee Time Entries</div>
-    ${validEmps.length?`
-    <div class="tsv-grid-wrap">
-      <table class="tsv-grid">
+    <div class="tsv-section-label"><i class="ti ti-layout-columns"></i> Employee Time Entries — Timeline View</div>
+    <div class="tl-wrap">
+      <table class="tl-table">
         <thead>
-          <tr>
-            <th class="col-role" rowspan="2"></th>
-            <th class="col-name" rowspan="2" style="text-align:left;border-bottom:1px solid var(--border2)">Name</th>
-            <th colspan="2" class="col-group group-start">Count</th>
-            <th colspan="2" class="col-group group-start">Break</th>
-            <th colspan="2" class="col-group group-start">Variance</th>
-            <th colspan="2" class="col-group group-start">Travel</th>
-            <th colspan="2" class="col-group group-start">Setup</th>
-            <th class="col-hrs col-group group-start" rowspan="2" style="border-bottom:1px solid var(--border2);vertical-align:bottom;padding-bottom:6px">Hrs</th>
-            <th class="col-flag col-group group-start" rowspan="2" style="border-bottom:1px solid var(--border2);vertical-align:bottom;padding-bottom:6px">DNR</th>
-            <th class="col-flag col-group" rowspan="2" style="border-bottom:1px solid var(--border2);vertical-align:bottom;padding-bottom:6px">Pref</th>
-            <th class="col-group" rowspan="2" style="text-align:left;border-bottom:1px solid var(--border2);vertical-align:bottom;padding-bottom:6px">Notes</th>
-          </tr>
-          <tr>
-            <th class="col-time group-start">In</th><th class="col-time">Out</th>
-            <th class="col-time group-start">Out</th><th class="col-time">In</th>
-            <th class="col-time group-start">In</th><th class="col-time">Out</th>
-            <th class="col-time group-start">In</th><th class="col-time">Out</th>
-            <th class="col-time group-start">In</th><th class="col-time">Out</th>
-          </tr>
+          <tr>${hdr1}</tr>
+          <tr>${hdr2}</tr>
         </thead>
-        <tbody>${gridRows}</tbody>
+        <tbody>${bodyRows}${totalsRow}</tbody>
       </table>
     </div>
-    `:'<p style="font-size:13px;color:var(--text3);text-align:center;padding:1rem">No employee entries</p>'}
     ${adjHtml}
     ${ts.manager_comments?`<div class="tsv-section-label" style="margin-top:.75rem;color:var(--danger-text)"><i class="ti ti-message-circle"></i> Manager Comments</div><div class="tsv-comment-box">${ts.manager_comments}</div>`:''}
   `;
 
-  // ── Manager buttons in topbar ────────────────────────────────
-  const topbarBtns = document.getElementById('topbar-mgr-btns');
+  // ── Manager topbar buttons ────────────────────────────────
+  const topbarBtns=document.getElementById('topbar-mgr-btns');
   if(topbarBtns){
     topbarBtns.style.display='flex';
-    const locked = !!ts.locked_at;
+    const locked=!!ts.locked_at;
     if(locked){
       topbarBtns.innerHTML=`
-        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
+        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
         <span class="topbar-locked"><i class="ti ti-lock"></i> Locked ${new Date(ts.locked_at).toLocaleDateString()}</span>
         <button class="topbar-mgr-btn adjust" onclick="openAdjustModal()"><i class="ti ti-plus"></i> Pay Adj</button>`;
     } else if(ts.status==='submitted'){
       topbarBtns.innerHTML=`
-        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
-        ${canApprove() ? `<button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>` : ''}
-        ${canApprove() ? `<button class="topbar-mgr-btn approve" onclick="openApproveModal()"><i class="ti ti-circle-check"></i> Approve</button>` : ''}
-        ${canApprove() ? `<button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>` : ''}`;
+        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
+        ${canApprove()?`<button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>`:''}
+        ${canApprove()?`<button class="topbar-mgr-btn approve" onclick="openApproveModal()"><i class="ti ti-circle-check"></i> Approve</button>`:''}
+        ${canApprove()?`<button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>`:''}`;
     } else if(ts.status==='approved'||ts.status==='rejected'||ts.status==='draft'){
-      // Approved: home + pay adj (approve permission required); Rejected/Draft: home only
-      const isApproved = ts.status==='approved';
+      const isApproved=ts.status==='approved';
       topbarBtns.innerHTML=`
-        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>
-        ${isApproved && canApprove() ? `<button class="topbar-mgr-btn adjust" onclick="openAdjustModal()"><i class="ti ti-plus"></i> Pay Adj</button>` : ''}`;
+        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
+        ${isApproved&&canApprove()?`<button class="topbar-mgr-btn adjust" onclick="openAdjustModal()"><i class="ti ti-plus"></i> Pay Adj</button>`:''}`;
     } else {
-      topbarBtns.innerHTML=`
-        <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back to dashboard">⌂ Home</button>`;
+      topbarBtns.innerHTML=`<button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>`;
     }
   }
 }
