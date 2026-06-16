@@ -467,6 +467,18 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .restore-banner.show{display:block}
 .restore-banner p{font-size:13px;margin-bottom:.6rem}
 .restore-banner p strong{color:#6abf3a}
+
+/* ── UAT Announcement banner ─────────────────────────────── */
+.ann-banner{background:#1a2e4a;color:#fff;padding:.85rem 1.1rem;margin-bottom:.75rem;border-radius:var(--radius-lg);border-left:4px solid #6abf3a;display:none}
+.ann-banner.show{display:block}
+.ann-banner-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:.35rem}
+.ann-banner-tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;background:#6abf3a;color:#1a2e4a;text-transform:uppercase;letter-spacing:.04em}
+.ann-banner-meta{font-size:11px;color:rgba(255,255,255,0.55)}
+.ann-banner-msg{font-size:13px;color:#fff;line-height:1.5;white-space:pre-wrap;margin-bottom:.5rem}
+.ann-banner-dismiss{background:rgba(255,255,255,0.12);border:none;cursor:pointer;color:#fff;font-size:12px;font-weight:600;padding:5px 12px;border-radius:var(--radius);font-family:inherit;display:flex;align-items:center;gap:4px}
+.ann-banner-dismiss:active{opacity:.7}
+.ann-banner-nav{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.ann-banner-counter{font-size:11px;color:rgba(255,255,255,0.55)}
 .rejection-banner{background:var(--danger-bg);border-left:3px solid var(--danger-border);border-radius:0 var(--radius) var(--radius) 0;padding:.7rem .9rem;font-size:13px;color:var(--danger-text);margin-bottom:1rem;line-height:1.5}
 .rejection-banner strong{font-weight:700}
 .restore-btn-row{display:flex;gap:8px}
@@ -831,6 +843,26 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 
 <!-- Timesheet form -->
 <div class="wrap" id="main-wrap" style="display:none">
+
+<!-- UAT Announcement banner -->
+<div class="ann-banner" id="ann-banner">
+  <div class="ann-banner-header">
+    <div style="display:flex;align-items:center;gap:6px">
+      <i class="ti ti-speakerphone" style="font-size:15px;color:#6abf3a"></i>
+      <span id="ann-banner-tag" class="ann-banner-tag" style="display:none"></span>
+      <span class="ann-banner-meta" id="ann-banner-meta"></span>
+    </div>
+    <span class="ann-banner-counter" id="ann-banner-counter"></span>
+  </div>
+  <div class="ann-banner-msg" id="ann-banner-msg"></div>
+  <div class="ann-banner-nav">
+    <div style="display:flex;gap:6px">
+      <button class="ann-banner-dismiss" id="ann-banner-prev" onclick="annBannerNav(-1)" style="display:none"><i class="ti ti-chevron-left"></i> Prev</button>
+      <button class="ann-banner-dismiss" id="ann-banner-next" onclick="annBannerNav(1)" style="display:none"><i class="ti ti-chevron-right"></i> Next</button>
+    </div>
+    <button class="ann-banner-dismiss" onclick="dismissAnnBanner()"><i class="ti ti-check"></i> Got it</button>
+  </div>
+</div>
 
 <!-- Restore banner -->
 <div class="restore-banner" id="restore-banner">
@@ -1201,6 +1233,70 @@ function stopFeedbackSubscription(){
   }
 }
 
+// ── UAT Announcements (banner shown to end users) ────────────────────────────
+let _annQueue = [];    // unseen announcements to display
+let _annIndex  = 0;   // current index in queue
+
+async function loadAndShowAnnouncements(){
+  if(!currentUser) return;
+  try{
+    // Fetch all announcements
+    const {data: allAnns, error} = await getSupabase()
+      .from('uat_announcements')
+      .select('id, message, version_tag, posted_by_name, created_at')
+      .order('created_at', {ascending:false})
+      .limit(20);
+    if(error || !allAnns?.length) return;
+
+    // Fetch which ones this user has already seen
+    const {data: seen} = await getSupabase()
+      .from('uat_announcement_seen')
+      .select('announcement_id')
+      .eq('user_id', currentUser.id);
+    const seenIds = new Set((seen||[]).map(s=>s.announcement_id));
+
+    _annQueue = allAnns.filter(a=>!seenIds.has(a.id));
+    if(!_annQueue.length) return;
+    _annIndex = 0;
+    renderAnnBanner();
+  } catch(e){ console.warn('[announcements] load failed:', e.message); }
+}
+
+function renderAnnBanner(){
+  const banner = document.getElementById('ann-banner');
+  if(!banner || !_annQueue.length) return;
+  const a = _annQueue[_annIndex];
+  const when = a.created_at ? new Date(a.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+  document.getElementById('ann-banner-msg').textContent = a.message || '';
+  const tagEl = document.getElementById('ann-banner-tag');
+  if(a.version_tag){ tagEl.textContent = a.version_tag; tagEl.style.display='inline'; }
+  else { tagEl.style.display='none'; }
+  document.getElementById('ann-banner-meta').textContent = `From ${a.posted_by_name||'Manager'} · ${when}`;
+  const total = _annQueue.length;
+  document.getElementById('ann-banner-counter').textContent = total > 1 ? `${_annIndex+1} of ${total}` : '';
+  document.getElementById('ann-banner-prev').style.display = (_annIndex > 0 && total > 1) ? 'flex' : 'none';
+  document.getElementById('ann-banner-next').style.display = (_annIndex < total-1 && total > 1) ? 'flex' : 'none';
+  banner.classList.add('show');
+}
+
+function annBannerNav(dir){
+  _annIndex = Math.max(0, Math.min(_annQueue.length-1, _annIndex + dir));
+  renderAnnBanner();
+}
+
+async function dismissAnnBanner(){
+  const banner = document.getElementById('ann-banner');
+  if(!banner) return;
+  banner.classList.remove('show');
+  // Mark all queued announcements as seen
+  if(!currentUser || !_annQueue.length) return;
+  try{
+    const rows = _annQueue.map(a=>({ announcement_id: a.id, user_id: currentUser.id }));
+    await getSupabase().from('uat_announcement_seen').upsert(rows, {onConflict:'announcement_id,user_id'});
+    _annQueue = [];
+  } catch(e){ console.warn('[announcements] mark-seen failed:', e.message); }
+}
+
 async function doLogout(){
   await getSupabase().auth.signOut();
   stopTimesheetSubscription();
@@ -1401,6 +1497,9 @@ function completeSignIn(){
   const fbBtn = document.getElementById('uat-feedback-btn');
   if(fbBtn) fbBtn.style.display = uatEnabled ? 'inline-flex' : 'none';
   if(uatEnabled){ refreshFeedbackBadge(); startFeedbackSubscription(); }
+
+  // Load UAT announcements for all users (not just UAT-enabled)
+  setTimeout(loadAndShowAnnouncements, 1200);
 
   // Load dynamic card types and supervisor PIN
   loadCardTypesAndPin();

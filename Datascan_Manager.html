@@ -144,6 +144,87 @@ input[type=file]{display:none}
 .submit-hint{font-size:13px;color:rgba(255,255,255,0.6);text-align:center;margin-top:6px;font-weight:500;min-height:20px}
 input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-style:dashed}
 
+/* ── UAT Feedback Review screen ──────────────────────────── */
+#uat-screen{display:none;max-width:860px;margin:0 auto;padding:.75rem 1rem 2rem}
+#uat-screen.active{display:block}
+.uat-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:1rem;flex-wrap:wrap}
+.uat-title{font-size:18px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.uat-badge-count{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-text)}
+.uat-filter-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.uat-filter-btn{padding:5px 12px;border:0.5px solid var(--border2);border-radius:20px;background:transparent;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text2);-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s}
+.uat-filter-btn.active{background:#1a2e4a;color:#fff;border-color:#1a2e4a}
+.uat-filter-btn:active{opacity:.7}
+.uat-search{flex:1;min-width:160px;max-width:260px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:20px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit}
+.uat-search:focus{outline:none;border-color:var(--info-text);box-shadow:0 0 0 3px rgba(24,95,165,0.15)}
+.uat-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:.85rem 1rem;margin-bottom:.65rem;transition:box-shadow .15s}
+.uat-card:hover{box-shadow:0 2px 10px rgba(0,0,0,0.08)}
+.uat-card.status-new{border-left:3px solid var(--warn-text)}
+.uat-card.status-in_progress{border-left:3px solid var(--info-text)}
+.uat-card.status-resolved,.uat-card.status-fixed{border-left:3px solid var(--success-text)}
+.uat-card.status-wont_fix,.uat-card.status-closed{border-left:3px solid var(--text3)}
+.uat-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:.4rem}
+.uat-card-meta{font-size:11px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.uat-card-reporter{font-weight:700;color:var(--text)}
+.uat-cat-pill{font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border)}
+.uat-status-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em}
+.uat-pill-new{background:var(--warn-bg);color:var(--warn-text)}
+.uat-pill-in_progress{background:var(--info-bg);color:var(--info-text)}
+.uat-pill-resolved,.uat-pill-fixed{background:var(--success-bg);color:var(--success-text)}
+.uat-pill-wont_fix,.uat-pill-closed{background:var(--bg3);color:var(--text3)}
+.uat-card-msg{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:.5rem}
+.uat-card-context{font-size:11px;color:var(--text3);margin-bottom:.5rem}
+.uat-response-box{background:var(--success-bg);border-left:3px solid var(--success-border);border-radius:0 var(--radius) var(--radius) 0;padding:.5rem .75rem;margin-bottom:.5rem;font-size:12px;color:var(--success-text)}
+.uat-response-box strong{display:block;margin-bottom:2px;font-weight:700}
+.uat-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:.5rem}
+.uat-action-btn{padding:5px 11px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text2);display:flex;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent}
+.uat-action-btn:active{opacity:.7}
+.uat-action-btn.primary{background:#1a2e4a;color:#fff;border-color:transparent}
+.uat-action-btn.danger{background:var(--danger-bg);color:var(--danger-text);border-color:var(--danger-border)}
+.uat-action-btn.success{background:var(--success-bg);color:var(--success-text);border-color:var(--success-border)}
+.uat-reply-area{margin-top:.5rem}
+.uat-reply-area textarea{width:100%;font-size:13px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit;resize:vertical;min-height:64px;line-height:1.5}
+.uat-reply-area textarea:focus{outline:none;border-color:var(--info-text);box-shadow:0 0 0 3px rgba(24,95,165,0.15)}
+.uat-reply-row{display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap}
+.uat-reply-status-sel{padding:5px 9px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);flex:1;min-width:130px}
+.uat-empty{text-align:center;padding:2.5rem 1rem;color:var(--text3);font-size:14px}
+.uat-empty i{font-size:40px;display:block;margin:0 auto .75rem;opacity:.3}
+.uat-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem}
+@media(max-width:480px){.uat-stats-row{grid-template-columns:repeat(2,1fr)}}
+.uat-stat-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:.65rem .85rem;text-align:center}
+.uat-stat-num{font-size:22px;font-weight:700;color:var(--text)}
+.uat-stat-lbl{font-size:11px;color:var(--text2);margin-top:2px}
+.uat-announce-box{background:var(--info-bg);border:0.5px solid var(--info-text);border-radius:var(--radius-lg);padding:.85rem 1rem;margin-bottom:1rem}
+.uat-announce-title{font-size:12px;font-weight:700;color:var(--info-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;display:flex;align-items:center;gap:6px}
+.uat-announce-textarea{width:100%;font-size:13px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit;resize:vertical;min-height:52px;line-height:1.5;margin-top:.4rem}
+.uat-announce-textarea:focus{outline:none;border-color:var(--info-text)}
+
+/* ── UAT Tabs (Feedback / Announcements) ───────────────── */
+.uat-tabs{display:flex;background:var(--bg);border-bottom:0.5px solid var(--border);margin-bottom:1rem;border-radius:var(--radius-lg) var(--radius-lg) 0 0;overflow:hidden}
+.uat-tab{flex:1;padding:10px 8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text2);font-family:inherit;border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:6px;-webkit-tap-highlight-color:transparent}
+.uat-tab.active{color:#1a2e4a;border-bottom-color:#6abf3a}
+.uat-tab:active{opacity:.7}
+.uat-tab-panel{display:none}
+.uat-tab-panel.active{display:block}
+
+/* ── Announcement compose card ──────────────────────────── */
+.ann-compose{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;margin-bottom:1rem}
+.ann-compose-title{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.65rem;display:flex;align-items:center;gap:6px}
+.ann-field{margin-bottom:.6rem}
+.ann-field label{font-size:12px;color:var(--text2);display:block;margin-bottom:3px}
+.ann-field input,.ann-field textarea,.ann-field select{width:100%;font-size:13px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit}
+.ann-field input:focus,.ann-field textarea:focus{outline:none;border-color:var(--info-text);box-shadow:0 0 0 3px rgba(24,95,165,0.15)}
+.ann-field textarea{resize:vertical;min-height:72px;line-height:1.5}
+
+/* ── Announcement history cards ─────────────────────────── */
+.ann-card{background:var(--bg);border:0.5px solid var(--border);border-left:3px solid #1a2e4a;border-radius:var(--radius-lg);padding:.85rem 1rem;margin-bottom:.6rem}
+.ann-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:.4rem}
+.ann-card-meta{font-size:11px;color:var(--text2)}
+.ann-card-tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px;background:#1a2e4a;color:#fff;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
+.ann-card-msg{font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap;margin-bottom:.5rem}
+.ann-card-stats{font-size:11px;color:var(--text3);display:flex;gap:10px;align-items:center}
+.ann-delete-btn{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:4px;line-height:1;flex-shrink:0}
+.ann-delete-btn:hover{color:var(--danger-text)}
+
 /* ── QA Test Session Panel (right side) ─────────────────── */
 #qa-session-panel{
   width:0;flex-shrink:0;background:#0d1b2a;
@@ -698,7 +779,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 
 /* ── App shell — sidebar layout ─────────────────────────── */
 body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direction:column}
-.app-shell{display:flex;flex:1;min-height:0;overflow:visible}
+.app-shell{display:flex;flex:1;min-height:0;overflow:hidden}
 /* Sidebar */
 #app-sidebar{
   width:48px;flex-shrink:0;background:#0f1e30;
@@ -744,7 +825,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 .sb-user-name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-user-role-text{font-size:10px;color:rgba(255,255,255,0.4);white-space:nowrap}
 /* Main content area */
-.app-content{flex:1;display:flex;flex-direction:column;min-width:0;overflow:visible}
+.app-content{flex:1;display:flex;flex-direction:column;min-width:0;overflow-y:auto;overflow-x:hidden}
 </style>
 
 <body>
@@ -781,6 +862,12 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <button class="sb-link sb-future" id="sb-scheduling" onclick="sbNavigate('scheduling')" aria-label="Scheduling" title="Coming soon">
       <i class="ti ti-calendar" aria-hidden="true"></i>
       <span class="sb-link-label">Scheduling</span>
+    </button>
+    <div class="sb-divider"></div>
+    <div class="sb-section-label">UAT</div>
+    <button class="sb-link" id="sb-uat" onclick="sbNavigate('uat')" aria-label="UAT Feedback">
+      <i class="ti ti-message-report" aria-hidden="true"></i>
+      <span class="sb-link-label">UAT Feedback <span id="sb-uat-badge" style="display:none;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;background:#e24b4a;color:#fff;margin-left:4px"></span></span>
     </button>
     <div class="sb-divider"></div>
     <div class="sb-section-label">System</div>
@@ -939,7 +1026,79 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <div id="mgr-list"></div>
   </div>
 </div>
-<!-- Full-screen detail view (read-only submission viewer) -->
+
+<!-- ── UAT Feedback Review screen ──────────────────────────── -->
+<div id="uat-screen">
+  <div class="uat-header">
+    <div class="uat-title">
+      <i class="ti ti-message-report" style="color:var(--warn-text)"></i>
+      UAT Hub
+      <span id="uat-new-count" class="uat-badge-count" style="display:none">0 new</span>
+    </div>
+    <div class="uat-filter-row" id="uat-feedback-filters">
+      <input class="uat-search" id="uat-search" type="search" placeholder="Search…" oninput="filterUAT()"/>
+      <button class="uat-filter-btn active" data-filter="open" onclick="setUATFilter('open',this)">Open</button>
+      <button class="uat-filter-btn" data-filter="all" onclick="setUATFilter('all',this)">All</button>
+      <button class="uat-filter-btn" data-filter="new" onclick="setUATFilter('new',this)">New</button>
+      <button class="uat-filter-btn" data-filter="in_progress" onclick="setUATFilter('in_progress',this)">In Progress</button>
+      <button class="uat-filter-btn" data-filter="resolved" onclick="setUATFilter('resolved',this)">Resolved</button>
+    </div>
+  </div>
+
+  <!-- Stats summary -->
+  <div class="uat-stats-row" id="uat-stats-row"></div>
+
+  <!-- Tabs -->
+  <div class="uat-tabs">
+    <button class="uat-tab active" id="utab-feedback" onclick="switchUATTab('feedback',this)">
+      <i class="ti ti-message-report"></i> Feedback
+    </button>
+    <button class="uat-tab" id="utab-announce" onclick="switchUATTab('announce',this)">
+      <i class="ti ti-speakerphone"></i> Announcements
+      <span id="ann-count-badge" style="display:none;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;background:#1a2e4a;color:#fff;margin-left:2px"></span>
+    </button>
+  </div>
+
+  <!-- Feedback tab -->
+  <div class="uat-tab-panel active" id="upanel-feedback">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
+      <button class="uat-action-btn" onclick="loadUATFeedback()" id="uat-refresh-btn"><i class="ti ti-refresh"></i> Refresh</button>
+    </div>
+    <div id="uat-list-wrap">
+      <div class="uat-empty"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>Loading feedback…</div>
+    </div>
+  </div>
+
+  <!-- Announcements tab -->
+  <div class="uat-tab-panel" id="upanel-announce">
+
+    <!-- Compose -->
+    <div class="ann-compose">
+      <div class="ann-compose-title"><i class="ti ti-speakerphone"></i> New Announcement</div>
+      <div class="ann-field">
+        <label>Version / tag <span style="color:var(--text3);font-weight:400">(optional — e.g. "v1.4 Release")</span></label>
+        <input type="text" id="ann-version" placeholder="e.g. v1.4 Release Notes" maxlength="80"/>
+      </div>
+      <div class="ann-field">
+        <label>Message <span style="color:var(--danger-text)">*</span></label>
+        <textarea id="ann-message" rows="4" placeholder="Write your announcement — new features, known issues, release notes…"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="uat-action-btn primary" onclick="postAnnouncement()"><i class="ti ti-send"></i> Send to all UAT users</button>
+        <span id="ann-err" style="font-size:12px;color:var(--danger-text)"></span>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between">
+      <span>Sent Announcements</span>
+      <button class="uat-action-btn" onclick="loadAnnouncements()" style="font-size:11px;padding:3px 9px"><i class="ti ti-refresh"></i> Refresh</button>
+    </div>
+    <div id="ann-history-wrap">
+      <div class="uat-empty"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i><br>Loading…</div>
+    </div>
+  </div>
+</div>
 <div id="detail-screen">
   <div class="detail-topbar">
     <button class="detail-back-btn" onclick="closeDetailScreen()"><i class="ti ti-arrow-left"></i></button>
@@ -1063,12 +1222,13 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   </div>
   <!-- Tabs -->
   <div class="wizard-tabs">
-    <button class="wizard-tab active" id="wtab-users"   onclick="wizardGoto('users')"><i class="ti ti-users"></i> Users</button>
-    <button class="wizard-tab"        id="wtab-org"     onclick="wizardGoto('org')"><i class="ti ti-building-community"></i> Organization</button>
-    <button class="wizard-tab"        id="wtab-roles"   onclick="wizardGoto('roles')"><i class="ti ti-shield-check"></i> Roles &amp; Permissions</button>
-    <button class="wizard-tab"        id="wtab-chain"   onclick="wizardGoto('chain')"><i class="ti ti-git-branch"></i> Approval Chain</button>
-    <button class="wizard-tab"        id="wtab-perdiem" onclick="wizardGoto('perdiem')"><i class="ti ti-cash"></i> Per Diem</button>
-    <button class="wizard-tab"        id="wtab-qa"      onclick="wizardGoto('qa')"><i class="ti ti-test-pipe"></i> QA / UAT</button>
+    <button class="wizard-tab active" id="wtab-users"     onclick="wizardGoto('users')"><i class="ti ti-users"></i> Users</button>
+    <button class="wizard-tab"        id="wtab-org"       onclick="wizardGoto('org')"><i class="ti ti-building-community"></i> Organization</button>
+    <button class="wizard-tab"        id="wtab-timecards" onclick="wizardGoto('timecards')"><i class="ti ti-clock-bolt"></i> Time Cards</button>
+    <button class="wizard-tab"        id="wtab-roles"     onclick="wizardGoto('roles')"><i class="ti ti-shield-check"></i> Roles &amp; Permissions</button>
+    <button class="wizard-tab"        id="wtab-chain"     onclick="wizardGoto('chain')"><i class="ti ti-git-branch"></i> Approval Chain</button>
+    <button class="wizard-tab"        id="wtab-perdiem"   onclick="wizardGoto('perdiem')"><i class="ti ti-cash"></i> Per Diem</button>
+    <button class="wizard-tab"        id="wtab-qa"        onclick="wizardGoto('qa')"><i class="ti ti-test-pipe"></i> QA / UAT</button>
   </div>
   <!-- Body -->
   <div class="wizard-body" id="wizard-body">
@@ -1297,12 +1457,13 @@ function startTimesheetSubscription(){
 }
 
 // ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.4';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 // Client created after SDK loads — see waitForSupabase() below
+
 
 waitForSupabase(()=>{
   window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1410,6 +1571,8 @@ function completeSignIn(){
   switchTab('mgr');
 
   startTimesheetSubscription();
+  // Refresh UAT badge for managers
+  setTimeout(refreshUATBadge, 1500);
 }
 
 
@@ -1511,6 +1674,8 @@ function sbNavigate(page){
   } else if(page === 'employees'){
     openWizard();
     setTimeout(()=>wizardGoto('users'), 50);
+  } else if(page === 'uat'){
+    openUATScreen();
   } else if(page==='scheduling'||page==='payroll'||page==='reports'){
     showComingSoon(page);
   }
@@ -1521,7 +1686,8 @@ function updateSidebarActive(page){
   const map = {
     'mgr':'sb-timesheets','dashboard':'sb-dashboard',
     'timesheets':'sb-timesheets','employees':'sb-employees',
-    'scheduling':'sb-scheduling','payroll':'sb-payroll','reports':'sb-reports'
+    'scheduling':'sb-scheduling','payroll':'sb-payroll','reports':'sb-reports',
+    'uat':'sb-uat'
   };
   const id = map[page||'timesheets'] || 'sb-timesheets';
   document.getElementById(id)?.classList.add('active');
@@ -1540,6 +1706,343 @@ function showComingSoon(page){
     mgrScreen.classList.add('active');
     document.getElementById('status-screen')?.classList.remove('active');
     document.getElementById('main-wrap')?.style && (document.getElementById('main-wrap').style.display='none');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// UAT FEEDBACK REVIEW  (manager-side)
+// ════════════════════════════════════════════════════════════
+let _uatItems = [];
+let _uatFilter = 'open';
+let _uatSearch = '';
+let _uatActiveTab = 'feedback';
+
+function openUATScreen(){
+  document.getElementById('mgr-screen')?.classList.remove('active');
+  document.getElementById('status-screen')?.classList.remove('active');
+  document.getElementById('nav-tabs')?.style && (document.getElementById('nav-tabs').style.display = 'none');
+  if(document.getElementById('main-wrap')) document.getElementById('main-wrap').style.display = 'none';
+
+  const uatScreen = document.getElementById('uat-screen');
+  if(uatScreen){
+    uatScreen.classList.add('active');
+    loadUATFeedback();
+    loadAnnouncements();
+    refreshUATBadge();
+  }
+}
+
+function hideUATScreen(){
+  document.getElementById('uat-screen')?.classList.remove('active');
+}
+
+function switchUATTab(tab, btn){
+  _uatActiveTab = tab;
+  document.querySelectorAll('.uat-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.uat-tab-panel').forEach(p=>p.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('upanel-'+tab)?.classList.add('active');
+  // Show/hide the feedback filter row
+  const filterRow = document.getElementById('uat-feedback-filters');
+  if(filterRow) filterRow.style.display = tab==='feedback' ? '' : 'none';
+}
+
+// ── Feedback tab ─────────────────────────────────────────────
+
+async function loadUATFeedback(){
+  const wrap = document.getElementById('uat-list-wrap');
+  if(wrap) wrap.innerHTML = '<div class="uat-empty"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i><br>Loading…</div>';
+
+  try{
+    const {data, error} = await getSupabase()
+      .from('uat_feedback')
+      .select('*')
+      .order('created_at', {ascending:false})
+      .limit(200);
+    if(error) throw error;
+    _uatItems = data || [];
+  } catch(e){
+    if(wrap) wrap.innerHTML = `<div class="uat-empty"><i class="ti ti-alert-triangle"></i><br>Failed to load: ${e.message}</div>`;
+    return;
+  }
+
+  renderUATStats();
+  filterUAT();
+}
+
+function renderUATStats(){
+  const statsRow = document.getElementById('uat-stats-row');
+  if(!statsRow) return;
+  const all = _uatItems;
+  const total = all.length;
+  const newCount = all.filter(f=>f.status==='new').length;
+  const inProg  = all.filter(f=>f.status==='in_progress').length;
+  const resolved= all.filter(f=>f.status==='resolved'||f.status==='fixed').length;
+  statsRow.innerHTML = `
+    <div class="uat-stat-card"><div class="uat-stat-num">${total}</div><div class="uat-stat-lbl">Total</div></div>
+    <div class="uat-stat-card" style="border-left:3px solid var(--warn-text)"><div class="uat-stat-num" style="color:var(--warn-text)">${newCount}</div><div class="uat-stat-lbl">New</div></div>
+    <div class="uat-stat-card" style="border-left:3px solid var(--info-text)"><div class="uat-stat-num" style="color:var(--info-text)">${inProg}</div><div class="uat-stat-lbl">In Progress</div></div>
+    <div class="uat-stat-card" style="border-left:3px solid var(--success-text)"><div class="uat-stat-num" style="color:var(--success-text)">${resolved}</div><div class="uat-stat-lbl">Resolved</div></div>
+  `;
+  const newBadge = document.getElementById('uat-new-count');
+  if(newBadge){
+    if(newCount > 0){ newBadge.textContent = newCount + ' new'; newBadge.style.display = ''; }
+    else { newBadge.style.display = 'none'; }
+  }
+}
+
+function setUATFilter(f, btn){
+  _uatFilter = f;
+  document.querySelectorAll('.uat-filter-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  filterUAT();
+}
+
+function filterUAT(){
+  _uatSearch = (document.getElementById('uat-search')?.value || '').toLowerCase();
+  const openStatuses = ['new','in_progress'];
+  let items = _uatItems;
+  if(_uatFilter === 'open') items = items.filter(f=>openStatuses.includes(f.status)||!f.status);
+  else if(_uatFilter !== 'all') items = items.filter(f=>f.status===_uatFilter);
+  if(_uatSearch){
+    items = items.filter(f=>
+      (f.message||'').toLowerCase().includes(_uatSearch) ||
+      (f.reporter_name||'').toLowerCase().includes(_uatSearch) ||
+      (f.category||'').toLowerCase().includes(_uatSearch) ||
+      (f.screen_name||'').toLowerCase().includes(_uatSearch)
+    );
+  }
+  renderUATList(items);
+}
+
+function renderUATList(items){
+  const wrap = document.getElementById('uat-list-wrap');
+  if(!wrap) return;
+  if(!items.length){
+    wrap.innerHTML = '<div class="uat-empty"><i class="ti ti-inbox"></i><br>No feedback matches this filter.</div>';
+    return;
+  }
+
+  const statusMap = {
+    new:         {label:'New',         cls:'uat-pill-new'},
+    in_progress: {label:'In Progress', cls:'uat-pill-in_progress'},
+    resolved:    {label:'Resolved',    cls:'uat-pill-resolved'},
+    fixed:       {label:'Fixed',       cls:'uat-pill-fixed'},
+    wont_fix:    {label:"Won't Fix",   cls:'uat-pill-wont_fix'},
+    closed:      {label:'Closed',      cls:'uat-pill-closed'},
+  };
+  const catLabel = c => (c||'other').replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase());
+
+  wrap.innerHTML = items.map(f=>{
+    const s = statusMap[f.status] || {label:'New',cls:'uat-pill-new'};
+    const when = f.created_at ? new Date(f.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+    const statusClass = 'status-'+(f.status||'new');
+    const hasReply = !!f.developer_response;
+    return `
+    <div class="uat-card ${statusClass}" id="uatcard-${f.id}">
+      <div class="uat-card-header">
+        <div>
+          <div class="uat-card-meta">
+            <span class="uat-card-reporter"><i class="ti ti-user" style="font-size:11px"></i> ${f.reporter_name||f.reporter_id||'Unknown'}</span>
+            <span class="uat-cat-pill">${catLabel(f.category)}</span>
+            <span style="color:var(--text3)">${when}</span>
+            ${f.app_name ? `<span style="color:var(--text3);font-style:italic">${f.app_name}${f.screen_name ? ' › '+f.screen_name : ''}</span>` : ''}
+          </div>
+        </div>
+        <span class="uat-status-pill ${s.cls}">${s.label}</span>
+      </div>
+      <div class="uat-card-msg">${f.message||''}</div>
+      ${hasReply ? `<div class="uat-response-box"><strong><i class="ti ti-message-2"></i> ${f.responded_by_name||'Manager'} replied:</strong>${f.developer_response}</div>` : ''}
+      <div class="uat-actions">
+        <button class="uat-action-btn primary" onclick="openUATReply('${f.id}')"><i class="ti ti-message-reply"></i> ${hasReply?'Edit Reply':'Reply'}</button>
+        ${f.status!=='resolved'&&f.status!=='fixed' ? `<button class="uat-action-btn success" onclick="setUATStatus('${f.id}','resolved')"><i class="ti ti-check"></i> Mark Resolved</button>` : ''}
+        ${f.status==='new' ? `<button class="uat-action-btn" onclick="setUATStatus('${f.id}','in_progress')"><i class="ti ti-progress"></i> In Progress</button>` : ''}
+        ${f.status!=='wont_fix' ? `<button class="uat-action-btn" onclick="setUATStatus('${f.id}','wont_fix')"><i class="ti ti-x"></i> Won't Fix</button>` : ''}
+        ${f.status!=='closed' ? `<button class="uat-action-btn danger" style="margin-left:auto" onclick="setUATStatus('${f.id}','closed')"><i class="ti ti-archive"></i> Close</button>` : ''}
+      </div>
+      <div class="uat-reply-area" id="uat-reply-${f.id}" style="display:none">
+        <textarea placeholder="Type your reply to this user…" rows="3" id="uat-reply-text-${f.id}">${f.developer_response||''}</textarea>
+        <div class="uat-reply-row">
+          <select class="uat-reply-status-sel" id="uat-reply-status-${f.id}">
+            <option value="">(keep current status)</option>
+            <option value="in_progress">Set → In Progress</option>
+            <option value="resolved">Set → Resolved</option>
+            <option value="wont_fix">Set → Won't Fix</option>
+            <option value="closed">Set → Closed</option>
+          </select>
+          <button class="uat-action-btn primary" onclick="sendUATReply('${f.id}')"><i class="ti ti-send"></i> Send</button>
+          <button class="uat-action-btn" onclick="document.getElementById('uat-reply-${f.id}').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openUATReply(id){
+  document.querySelectorAll('.uat-reply-area').forEach(el=>{
+    if(el.id !== 'uat-reply-'+id) el.style.display='none';
+  });
+  const box = document.getElementById('uat-reply-'+id);
+  if(box) box.style.display = box.style.display==='none' ? 'block' : 'none';
+  if(box?.style.display==='block') document.getElementById('uat-reply-text-'+id)?.focus();
+}
+
+async function sendUATReply(id){
+  const textEl   = document.getElementById('uat-reply-text-'+id);
+  const statusEl = document.getElementById('uat-reply-status-'+id);
+  const reply    = textEl?.value.trim();
+  if(!reply){ textEl?.focus(); return; }
+
+  const managerName = currentProfile?.full_name || currentUser?.email || 'Manager';
+  const update = {
+    developer_response: reply,
+    responded_by_name:  managerName,
+    responded_at:       new Date().toISOString(),
+    response_seen:      false,
+  };
+  if(statusEl?.value) update.status = statusEl.value;
+
+  try{
+    const {error} = await getSupabase().from('uat_feedback').update(update).eq('id', id);
+    if(error) throw error;
+    const idx = _uatItems.findIndex(f=>f.id===id);
+    if(idx>=0) Object.assign(_uatItems[idx], update);
+    document.getElementById('uat-reply-'+id).style.display='none';
+    filterUAT();
+    renderUATStats();
+    refreshUATBadge();
+  } catch(e){
+    alert('Failed to send reply: ' + e.message);
+  }
+}
+
+async function setUATStatus(id, status){
+  try{
+    const {error} = await getSupabase().from('uat_feedback').update({status}).eq('id', id);
+    if(error) throw error;
+    const idx = _uatItems.findIndex(f=>f.id===id);
+    if(idx>=0) _uatItems[idx].status = status;
+    filterUAT();
+    renderUATStats();
+    refreshUATBadge();
+  } catch(e){
+    alert('Failed to update status: ' + e.message);
+  }
+}
+
+async function refreshUATBadge(){
+  try{
+    const {data} = await getSupabase()
+      .from('uat_feedback').select('id').eq('status','new').limit(99);
+    const count = data?.length || 0;
+    const badge = document.getElementById('sb-uat-badge');
+    if(badge){
+      if(count > 0){ badge.textContent = count; badge.style.display = 'inline'; }
+      else { badge.style.display = 'none'; }
+    }
+  } catch(e){}
+}
+
+// ── Announcements tab ────────────────────────────────────────
+
+let _announcements = [];
+
+async function loadAnnouncements(){
+  const wrap = document.getElementById('ann-history-wrap');
+  if(wrap) wrap.innerHTML = '<div class="uat-empty"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i><br>Loading…</div>';
+
+  try{
+    const {data, error} = await getSupabase()
+      .from('uat_announcements')
+      .select('*')
+      .order('created_at', {ascending:false})
+      .limit(50);
+    if(error) throw error;
+    _announcements = data || [];
+  } catch(e){
+    if(wrap) wrap.innerHTML = `<div class="uat-empty"><i class="ti ti-alert-triangle"></i><br>Failed to load: ${e.message}</div>`;
+    return;
+  }
+
+  renderAnnouncementHistory();
+  const badge = document.getElementById('ann-count-badge');
+  if(badge){
+    if(_announcements.length){ badge.textContent = _announcements.length; badge.style.display='inline'; }
+    else badge.style.display='none';
+  }
+}
+
+function renderAnnouncementHistory(){
+  const wrap = document.getElementById('ann-history-wrap');
+  if(!wrap) return;
+  if(!_announcements.length){
+    wrap.innerHTML = '<div class="uat-empty"><i class="ti ti-speakerphone" style="opacity:.3"></i><br>No announcements sent yet.</div>';
+    return;
+  }
+  wrap.innerHTML = _announcements.map(a=>{
+    const when = a.created_at ? new Date(a.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+    return `
+    <div class="ann-card" id="anncard-${a.id}">
+      <div class="ann-card-header">
+        <div>
+          <div class="ann-card-meta">
+            <i class="ti ti-user" style="font-size:10px"></i> <strong>${a.posted_by_name||'Manager'}</strong> &middot; ${when}
+            ${a.version_tag ? `<span class="ann-card-tag">${a.version_tag}</span>` : ''}
+          </div>
+        </div>
+        <button class="ann-delete-btn" onclick="deleteAnnouncement('${a.id}')" title="Delete announcement"><i class="ti ti-trash"></i></button>
+      </div>
+      <div class="ann-card-msg">${a.message||''}</div>
+      <div class="ann-card-stats"><i class="ti ti-eye" style="font-size:11px"></i> Seen by users who open the Timesheet app</div>
+    </div>`;
+  }).join('');
+}
+
+async function postAnnouncement(){
+  const msgEl  = document.getElementById('ann-message');
+  const verEl  = document.getElementById('ann-version');
+  const errEl  = document.getElementById('ann-err');
+  const msg    = msgEl?.value.trim();
+  const ver    = verEl?.value.trim();
+
+  if(errEl) errEl.textContent = '';
+  if(!msg){ if(errEl) errEl.textContent = 'Message is required.'; msgEl?.focus(); return; }
+
+  const managerName = currentProfile?.full_name || currentUser?.email || 'Manager';
+
+  try{
+    const {error} = await getSupabase().from('uat_announcements').insert({
+      posted_by_id:   currentUser.id,
+      posted_by_name: managerName,
+      message:        msg,
+      version_tag:    ver || null,
+    });
+    if(error) throw error;
+    if(msgEl) msgEl.value = '';
+    if(verEl) verEl.value = '';
+    await loadAnnouncements();
+    // Switch to show the history
+    const histEl = document.getElementById('ann-history-wrap');
+    histEl?.scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e){
+    if(errEl) errEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function deleteAnnouncement(id){
+  if(!confirm('Delete this announcement? Users who haven\'t seen it yet will no longer see it.')) return;
+  try{
+    const {error} = await getSupabase().from('uat_announcements').delete().eq('id', id);
+    if(error) throw error;
+    _announcements = _announcements.filter(a=>a.id!==id);
+    renderAnnouncementHistory();
+    const badge = document.getElementById('ann-count-badge');
+    if(badge){
+      if(_announcements.length){ badge.textContent = _announcements.length; badge.style.display='inline'; }
+      else badge.style.display='none';
+    }
+  } catch(e){
+    alert('Failed to delete: ' + e.message);
   }
 }
 
@@ -1586,17 +2089,18 @@ document.getElementById('wiz-modal-overlay').addEventListener('click', e=>{
 
 function wizardGoto(tab){
   _wizardTab = tab;
-  ['users','org','roles','chain','perdiem','qa'].forEach(t=>{
+  ['users','org','timecards','roles','chain','perdiem','qa'].forEach(t=>{
     document.getElementById('wtab-'+t)?.classList.toggle('active', t===tab);
   });
   const body = document.getElementById('wizard-body');
   body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text2)"><i class="ti ti-loader-2" style="font-size:24px;animation:spin 1s linear infinite;display:block;margin:0 auto .5rem"></i>Loading...</div>';
-  if(tab==='users')   loadWizUsers();
-  if(tab==='org')     loadWizOrg();
-  if(tab==='roles')   loadWizRoles();
-  if(tab==='chain')   loadWizChain();
-  if(tab==='perdiem') loadWizPerDiem();
-  if(tab==='qa')      loadWizQA();
+  if(tab==='users')     loadWizUsers();
+  if(tab==='org')       loadWizOrg();
+  if(tab==='timecards') loadWizTimeCards();
+  if(tab==='roles')     loadWizRoles();
+  if(tab==='chain')     loadWizChain();
+  if(tab==='perdiem')   loadWizPerDiem();
+  if(tab==='qa')        loadWizQA();
 }
 
 // ── First-run detection ──────────────────────────────────────
@@ -1853,6 +2357,178 @@ function loadWizChain(){ _wizComingSoon('Approval Chain'); }
 // TODO (stage 3B-4): Per Diem / QA-UAT tabs
 function loadWizPerDiem(){ _wizComingSoon('Per Diem'); }
 function loadWizQA(){ _wizComingSoon('QA / UAT'); }
+
+// ════════════════════════════════════════════════════════════
+// TIME CARDS WIZARD TAB
+// ════════════════════════════════════════════════════════════
+let _tcTypes = [];
+let _tcEditId = null;
+
+async function loadWizTimeCards(){
+  const body = document.getElementById('wizard-body');
+  const {data:types, error} = await getSupabase()
+    .from('time_card_types').select('*').order('sort_order');
+  if(error){ body.innerHTML=`<div style="color:var(--danger-text);padding:1rem"><i class="ti ti-alert-circle"></i> ${error.message}</div>`; return; }
+  _tcTypes = types || [];
+  const NL = { top_level:'Top-level paid', inside_paid:'Inside paid block', between_paid:'Between paid blocks' };
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Time Card Types</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Define card types available on timesheets and their validation rules.</div>
+      </div>
+      <button class="wiz-btn primary" onclick="openNewTimeCardModal()"><i class="ti ti-plus"></i> New card type</button>
+    </div>
+    <table class="user-table">
+      <thead><tr><th>Label</th><th>Key</th><th>Paid?</th><th>Nesting rule</th><th>Abut?</th><th>Ad-hoc?</th><th>Color</th><th>Order</th><th style="width:90px">Actions</th></tr></thead>
+      <tbody>
+        ${_tcTypes.map(t=>`<tr class="${t.is_active===false?'inactive':''}">
+          <td style="font-weight:600"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${t.color_hex||'#888'};margin-right:6px;vertical-align:middle"></span>${t.label}</td>
+          <td><code style="font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:4px">${t.key}</code></td>
+          <td>${t.is_paid?'<span style="color:var(--success-text,#6abf3a);font-size:12px">&#10003; Paid</span>':'<span style="font-size:12px;color:var(--text3)">Unpaid</span>'}</td>
+          <td style="font-size:12px">${NL[t.nesting_rule]||t.nesting_rule}</td>
+          <td style="text-align:center">${t.requires_abut?'<span style="color:var(--info-text)">&#10003;</span>':'&mdash;'}</td>
+          <td style="text-align:center">${t.is_adhoc?'<span style="color:var(--warn-text)">&#10003;</span>':'&mdash;'}</td>
+          <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${t.color_hex||'#888'};vertical-align:middle"></span></td>
+          <td style="color:var(--text3);font-size:12px">${t.sort_order}</td>
+          <td><div style="display:flex;gap:4px">
+            <button class="wiz-btn secondary" style="padding:4px 8px;font-size:11px" onclick="openEditTimeCardModal('${t.id}')"><i class="ti ti-edit"></i></button>
+            <button class="wiz-btn ${t.is_active===false?'success':'danger'}" style="padding:4px 8px;font-size:11px" onclick="toggleTimeCardActive('${t.id}',${t.is_active!==false})"><i class="ti ti-${t.is_active===false?'circle-check':'circle-minus'}"></i></button>
+          </div></td>
+        </tr>`).join('')}
+        ${_tcTypes.length===0?'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:2rem">No card types yet. Run the SQL migration or add one above.</td></tr>':''}
+      </tbody>
+    </table>
+    <div style="margin-top:2rem;border-top:0.5px solid var(--border2);padding-top:1.25rem">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.4rem"><i class="ti ti-shield-lock" style="color:var(--warn-text)"></i> Supervisor PIN</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">Shared PIN for ad-hoc card access on timesheets. Future state: per-supervisor 4-digit PIN.</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="password" id="tc-pin-input" placeholder="Current PIN" style="width:120px;font-size:14px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit"/>
+        <button class="wiz-btn secondary" onclick="loadCurrentPin(true)"><i class="ti ti-eye"></i> Show</button>
+        <button class="wiz-btn primary" onclick="saveSupervisorPin()"><i class="ti ti-device-floppy"></i> Update PIN</button>
+        <span id="tc-pin-status" style="font-size:12px"></span>
+      </div>
+    </div>`;
+  loadCurrentPin(false);
+}
+
+async function loadCurrentPin(show=true){
+  const {data} = await getSupabase().from('app_config').select('value').eq('key','supervisor_pin').maybeSingle();
+  const el = document.getElementById('tc-pin-input');
+  if(el && data) el.value = show ? data.value : '\u00b7'.repeat((data.value||'').length||4);
+}
+
+async function saveSupervisorPin(){
+  const val = (document.getElementById('tc-pin-input')?.value||'').trim();
+  const status = document.getElementById('tc-pin-status');
+  if(!val||/^\u00b7+$/.test(val)){ if(status){status.textContent='Enter a new PIN first.';status.style.color='var(--danger-text)';} return; }
+  if(!/^\d{4,}$/.test(val)){ if(status){status.textContent='PIN must be at least 4 digits.';status.style.color='var(--danger-text)';} return; }
+  const {error} = await getSupabase().from('app_config')
+    .upsert({key:'supervisor_pin',value:val,updated_by:currentUser.id,updated_at:new Date().toISOString()},{onConflict:'key'});
+  if(status){
+    if(error){status.textContent='Error: '+error.message;status.style.color='var(--danger-text)';}
+    else{status.textContent='\u2713 PIN updated';status.style.color='var(--success-text,#6abf3a)';setTimeout(()=>{if(status)status.textContent='';},3000);}
+  }
+}
+
+function _nestingHint(rule){
+  if(rule==='top_level')    return '<i class="ti ti-info-circle"></i> <b>Top-level:</b> Cannot overlap any other paid block. Use for Count, Variance, Setup, Verifier.';
+  if(rule==='inside_paid')  return '<i class="ti ti-info-circle"></i> <b>Inside paid:</b> In/Out must fall entirely within a paid block. Use for Break.';
+  if(rule==='between_paid') return '<i class="ti ti-info-circle"></i> <b>Between paid:</b> Must abut a paid block on both sides exactly. Use for Lunch.';
+  return '';
+}
+
+function onNestingChange(){
+  const v = document.getElementById('tc-nesting')?.value;
+  const hint = document.getElementById('tc-nesting-hint');
+  if(hint) hint.innerHTML = _nestingHint(v);
+  if(v==='between_paid'){ const paid=document.getElementById('tc-paid');const abut=document.getElementById('tc-abut');if(paid)paid.checked=false;if(abut)abut.checked=true; }
+  if(v==='inside_paid'){ const paid=document.getElementById('tc-paid');if(paid)paid.checked=false; }
+  if(v==='top_level'){   const paid=document.getElementById('tc-paid');if(paid)paid.checked=true; }
+}
+
+function syncColorHex(val){ const c=document.getElementById('tc-color');if(c&&/^#[0-9a-fA-F]{6}$/.test(val))c.value=val; }
+
+function _tcForm(t={}){
+  return `
+    <div class="wiz-modal-field"><label>Label <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="tc-label" value="${t.label||''}" placeholder="e.g. Count, Break, Lunch"/></div>
+    <div class="wiz-modal-field"><label>Key <span style="color:var(--danger-text)">*</span></label>
+      <input type="text" id="tc-key" value="${t.key||''}" placeholder="e.g. count" ${t.id?'readonly style="background:var(--bg2);color:var(--text3)"':''}/>
+      <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-info-circle"></i> Unique code key. Cannot change after creation.</p></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="wiz-modal-field"><label>Nesting rule <span style="color:var(--danger-text)">*</span></label>
+        <select id="tc-nesting" onchange="onNestingChange()">
+          <option value="top_level"    ${(t.nesting_rule||'top_level')==='top_level'   ?'selected':''}>Top-level paid</option>
+          <option value="inside_paid"  ${t.nesting_rule==='inside_paid'  ?'selected':''}>Inside paid block</option>
+          <option value="between_paid" ${t.nesting_rule==='between_paid' ?'selected':''}>Between paid blocks</option>
+        </select></div>
+      <div class="wiz-modal-field"><label>Sort order</label>
+        <input type="number" id="tc-order" value="${t.sort_order||99}" min="1" max="999"/></div>
+    </div>
+    <div style="font-size:12px;color:var(--info-text);background:var(--info-bg,#EAF3FF);border-radius:var(--radius);padding:8px 10px;margin-bottom:.75rem" id="tc-nesting-hint">
+      ${_nestingHint(t.nesting_rule||'top_level')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="tc-paid" ${t.is_paid!==false?'checked':''} style="accent-color:#6abf3a;width:14px;height:14px"/><span>Paid time block</span></label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="tc-abut" ${t.requires_abut?'checked':''} style="accent-color:#185fa5;width:14px;height:14px"/><span>Requires abutment</span></label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="tc-adhoc" ${t.is_adhoc?'checked':''} style="accent-color:#EF9F27;width:14px;height:14px"/><span>Ad-hoc (PIN required)</span></label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="tc-active" ${t.is_active!==false?'checked':''} style="accent-color:#6abf3a;width:14px;height:14px"/><span>Active</span></label>
+    </div>
+    <div class="wiz-modal-field"><label>Description</label>
+      <input type="text" id="tc-desc" value="${t.description||''}" placeholder="Optional — shown in Setup Wizard only"/></div>
+    <div class="wiz-modal-field"><label>Color</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="color" id="tc-color" value="${t.color_hex||'#6AB34F'}" style="width:44px;height:34px;border:0.5px solid var(--border2);border-radius:var(--radius);cursor:pointer;padding:2px" oninput="document.getElementById('tc-color-hex').value=this.value"/>
+        <input type="text" id="tc-color-hex" value="${t.color_hex||'#6AB34F'}" placeholder="#6AB34F" style="width:90px;font-size:13px;font-family:monospace" oninput="syncColorHex(this.value)"/>
+        <span style="font-size:12px;color:var(--text3)">Pill color in Timesheet app</span>
+      </div></div>`;
+}
+
+function openNewTimeCardModal(){
+  _tcEditId=null;
+  openWizModal('New time card type',_tcForm()+`<div class="wiz-modal-btns"><button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button><button class="wiz-btn primary" onclick="saveTimeCard()"><i class="ti ti-device-floppy"></i> Create</button></div>`);
+}
+
+function openEditTimeCardModal(id){
+  const t=_tcTypes.find(x=>x.id===id);if(!t)return;
+  _tcEditId=id;
+  openWizModal('Edit \u2014 '+t.label,_tcForm(t)+`<div class="wiz-modal-btns"><button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button><button class="wiz-btn primary" onclick="saveTimeCard()"><i class="ti ti-device-floppy"></i> Save changes</button></div>`);
+}
+
+async function saveTimeCard(){
+  const label=document.getElementById('tc-label')?.value?.trim();
+  const key=document.getElementById('tc-key')?.value?.trim().toLowerCase().replace(/\s+/g,'_');
+  const nesting=document.getElementById('tc-nesting')?.value;
+  const is_paid=!!document.getElementById('tc-paid')?.checked;
+  const requires_abut=!!document.getElementById('tc-abut')?.checked;
+  const is_adhoc=!!document.getElementById('tc-adhoc')?.checked;
+  const is_active=!!document.getElementById('tc-active')?.checked;
+  const sort_order=parseInt(document.getElementById('tc-order')?.value||'99');
+  const description=document.getElementById('tc-desc')?.value?.trim()||null;
+  const color_hex=document.getElementById('tc-color-hex')?.value?.trim()||'#6AB34F';
+  if(!label||!key){alert('Label and key are required.');return;}
+  if(!/^[a-z0-9_]+$/.test(key)){alert('Key must be lowercase letters, numbers, or underscores only.');return;}
+  const payload={label,key,nesting_rule:nesting,is_paid,requires_abut,is_adhoc,is_active,sort_order,description,color_hex};
+  let error;
+  if(_tcEditId){
+    const {error:e,data:d}=await getSupabase().from('time_card_types').update(payload).eq('id',_tcEditId).select('id').maybeSingle();
+    error=e;if(!e&&!d){alert('No rows updated \u2014 check your permissions.');return;}
+  } else {
+    const {data:existing}=await getSupabase().from('time_card_types').select('id').eq('key',key).maybeSingle();
+    if(existing){alert(`A card type with key "${key}" already exists.`);return;}
+    const {error:e}=await getSupabase().from('time_card_types').insert(payload);error=e;
+  }
+  if(error){alert('Error: '+error.message);return;}
+  closeWizModal();loadWizTimeCards();
+}
+
+async function toggleTimeCardActive(id,currentlyActive){
+  const {data,error}=await getSupabase().from('time_card_types').update({is_active:!currentlyActive}).eq('id',id).select('id').maybeSingle();
+  if(error){alert('Error: '+error.message);return;}
+  if(!data){alert('No rows updated \u2014 check permissions.');return;}
+  loadWizTimeCards();
+}
 
 
 // ════════════════════════════════════════════════════════════
@@ -2561,6 +3237,11 @@ function switchTab(tab){
   const tabMgr    = document.getElementById('tab-mgr');
   mgrScreen.classList.remove('active');
   tabMgr&&tabMgr.classList.remove('active');
+  // Always hide UAT screen when switching to a tab
+  document.getElementById('uat-screen')?.classList.remove('active');
+  const navTabs = document.getElementById('nav-tabs');
+  if(navTabs) navTabs.style.display = '';
+  if(document.getElementById('main-wrap')) document.getElementById('main-wrap').style.display = '';
 
   if(tab==='mgr'){
     mgrScreen.classList.add('active');
