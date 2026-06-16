@@ -44,6 +44,9 @@ body{background:#0f1e30;color:#f0f4f8}
   padding:2rem;
 }
 #login-screen.hidden{display:none}
+#force-pw-screen{position:fixed;inset:0;z-index:9999;background:#1a2e4a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
+#force-pw-screen.hidden{display:none}
+.force-pw-link{display:block;text-align:center;font-size:12px;color:var(--text2);margin-top:1rem;cursor:pointer;text-decoration:underline}
 .login-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:2rem}
 .login-product{font-size:20px;font-weight:800;color:var(--green);letter-spacing:.12em}
 .login-logo-img{width:150px;height:150px;margin:14px 0;display:block}
@@ -401,6 +404,33 @@ body{background:#0f1e30;color:#f0f4f8}
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- FORCED PASSWORD CHANGE SCREEN                                              -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="force-pw-screen" class="hidden">
+  <div class="login-logo">
+    <div class="login-product">TRAVEL LOG</div>
+  </div>
+  <div class="login-card">
+    <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:.4rem;text-align:center">Set a new password</div>
+    <p style="font-size:13px;color:var(--text2);text-align:center;margin:0 0 1.25rem">For your security, please create a new password before continuing.</p>
+    <div class="login-field">
+      <label class="login-label">New password</label>
+      <input class="login-input" type="password" id="fpw-new" placeholder="Min 8 characters" autocomplete="new-password"/>
+    </div>
+    <div class="login-field">
+      <label class="login-label">Confirm new password</label>
+      <input class="login-input" type="password" id="fpw-confirm" placeholder="Re-enter password" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')submitNewPassword()"/>
+    </div>
+    <button class="login-btn" id="fpw-btn" onclick="submitNewPassword()">
+      <i class="ti ti-lock-check"></i> Set password &amp; continue
+    </button>
+    <div class="login-err" id="fpw-err"></div>
+    <span class="force-pw-link" onclick="doLogout()">Sign out instead</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
 <!-- NOT APPROVED SCREEN                                                        -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <div id="not-approved-screen">
@@ -514,7 +544,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.53';
+const APP_VERSION  = 'v1.0.54';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -611,32 +641,14 @@ async function onSignedIn(user){
     document.getElementById('login-screen').classList.add('hidden');
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
 
-    const isApproved = approval && approval.status === 'approved';
-
-    if(!isApproved){
-      document.getElementById('not-approved-screen').classList.add('active');
-      document.getElementById('app-shell').classList.remove('active');
+    // Gate: if admin has flagged a password change, show the set-password screen
+    // before revealing whether the driver is approved or not
+    if(currentProfile?.must_change_password){
+      showForcePasswordScreen();
       return;
     }
 
-    // Show app shell
-    document.getElementById('not-approved-screen').classList.remove('active');
-    document.getElementById('app-shell').classList.add('active');
-
-    // Populate profile UI
-    const name     = currentProfile.full_name || user.email;
-    const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    document.getElementById('avatar-initials').textContent = initials;
-    document.getElementById('pm-name').textContent  = name;
-    document.getElementById('pm-role').textContent  = 'Approved Driver';
-
-    // Set date subtitle
-    const today = new Date();
-    document.getElementById('home-date-sub').textContent =
-      today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-
-    // Load today's jobs
-    await loadMyTrips();
+    completeSignIn();
 
   } catch(e) {
     console.error('[onSignedIn] unexpected error:', e);
@@ -644,6 +656,83 @@ async function onSignedIn(user){
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
     document.getElementById('login-screen').classList.remove('hidden');
   }
+}
+
+function showForcePasswordScreen(){
+  document.getElementById('force-pw-screen').classList.remove('hidden');
+  const newEl  = document.getElementById('fpw-new');
+  const confEl = document.getElementById('fpw-confirm');
+  const errEl  = document.getElementById('fpw-err');
+  const btnEl  = document.getElementById('fpw-btn');
+  if(newEl)  newEl.value  = '';
+  if(confEl) confEl.value = '';
+  if(errEl)  errEl.textContent = '';
+  if(btnEl){ btnEl.disabled=false; btnEl.innerHTML='<i class="ti ti-lock-check"></i> Set password & continue'; }
+  if(newEl)  newEl.focus();
+}
+
+async function submitNewPassword(){
+  const pw1 = document.getElementById('fpw-new')?.value    || '';
+  const pw2 = document.getElementById('fpw-confirm')?.value || '';
+  const err = document.getElementById('fpw-err');
+  const btn = document.getElementById('fpw-btn');
+  err.textContent = '';
+  if(!pw1 || !pw2){ err.textContent = 'Please fill in both fields.'; return; }
+  if(pw1.length < 8){ err.textContent = 'Password must be at least 8 characters.'; return; }
+  if(pw1 !== pw2){ err.textContent = 'Passwords do not match.'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2"></i> Saving…';
+
+  const {error: pwError} = await getSupabase().auth.updateUser({ password: pw1 });
+  if(pwError){
+    err.textContent = pwError.message;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-lock-check"></i> Set password & continue';
+    return;
+  }
+
+  // Clear the flag via secure RPC (SECURITY DEFINER — no broad self-update policy needed)
+  const {error: profError} = await getSupabase().rpc('clear_must_change_password');
+  if(profError){
+    console.warn('[submitNewPassword] failed to clear must_change_password flag:', profError.message);
+  } else if(currentProfile){
+    currentProfile.must_change_password = false;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-lock-check"></i> Set password & continue';
+  document.getElementById('force-pw-screen').classList.add('hidden');
+  completeSignIn();
+}
+
+function completeSignIn(){
+  const isApproved = driverApproval && driverApproval.status === 'approved';
+
+  if(!isApproved){
+    document.getElementById('not-approved-screen').classList.add('active');
+    document.getElementById('app-shell').classList.remove('active');
+    return;
+  }
+
+  // Show app shell
+  document.getElementById('not-approved-screen').classList.remove('active');
+  document.getElementById('app-shell').classList.add('active');
+
+  // Populate profile UI
+  const name     = currentProfile.full_name || currentUser.email;
+  const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('avatar-initials').textContent = initials;
+  document.getElementById('pm-name').textContent  = name;
+  document.getElementById('pm-role').textContent  = 'Approved Driver';
+
+  // Set date subtitle
+  const today = new Date();
+  document.getElementById('home-date-sub').textContent =
+    today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+  // Load today's jobs
+  loadMyTrips();
 }
 
 // ── Load today's jobs (today's timesheets for this supervisor) ─────────────────
