@@ -16,54 +16,64 @@ html,body{min-height:100%;font-family:Arial,sans-serif;background:#0b1929;color:
   --text2:rgba(232,240,248,.6);--text3:rgba(232,240,248,.35);
   --radius:10px;--radius-sm:7px;
 }
-.page{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem}
+.page{max-width:900px;margin:0 auto;padding:1.5rem 1rem 4rem}
 h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
-.subtitle{font-size:12px;color:var(--text3);margin-bottom:1.5rem}
+.sub{font-size:12px;color:var(--text3);margin-bottom:1.5rem}
 .card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.2rem;margin-bottom:1rem}
 .card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:.85rem}
 .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
-@media(max-width:560px){.addr-grid{grid-template-columns:1fr}}
+@media(max-width:580px){.addr-grid{grid-template-columns:1fr}}
 .field label{display:block;font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
 .field input{width:100%;padding:10px 12px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;color:#fff;font-family:inherit}
 .field input:focus{outline:none;border-color:var(--blue)}
 .run-btn{width:100%;margin-top:.75rem;padding:13px;background:var(--blue);border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
 .run-btn:hover{background:#2572cc}
 .run-btn:disabled{opacity:.5;cursor:not-allowed}
-/* Status */
+
+/* SDK bar */
+.sdk-bar{padding:.55rem .85rem;border-radius:var(--radius-sm);font-size:12px;font-weight:600;margin-bottom:1rem;border:1px solid var(--border)}
+
+/* Status bar */
 .status-bar{display:none;align-items:center;gap:8px;padding:.65rem 1rem;border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:1rem}
 .status-bar.show{display:flex}
 .status-bar.pending{background:rgba(244,169,58,.1);border:1px solid rgba(244,169,58,.3);color:var(--amber)}
 .status-bar.ok{background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.3);color:var(--green)}
 .status-bar.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red)}
-/* SDK status */
-.sdk-bar{padding:.5rem .85rem;border-radius:var(--radius-sm);font-size:12px;font-weight:600;margin-bottom:1rem;border:1px solid var(--border)}
-/* Results */
-.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem}
-@media(max-width:560px){.results-grid{grid-template-columns:1fr}}
-.result-card{background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.85rem 1rem}
-.result-card-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.6rem}
-.result-card-title.geo{color:#7eb8f7}
-.result-card-title.dir{color:var(--green)}
-.result-row{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
-.result-row:last-child{border-bottom:none}
-.result-label{font-size:11px;color:var(--text3);flex-shrink:0}
-.result-val{font-size:12px;color:#fff;font-weight:500;text-align:right;word-break:break-all;max-width:200px}
-.result-val.good{color:var(--green)}
-.result-val.bad{color:var(--red)}
-.result-val.warn{color:var(--amber)}
-.dir-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1rem}
-.dir-stat{background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem 1rem;text-align:center}
-.dir-stat-num{font-size:22px;font-weight:800;color:var(--green);line-height:1}
-.dir-stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:4px}
-.step-item{display:flex;gap:10px;padding:.5rem 0;border-bottom:1px solid var(--border);align-items:flex-start}
-.step-item:last-child{border-bottom:none}
-.step-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
-.step-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
-.step-dist{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
-#map{height:320px;border-radius:var(--radius-sm);overflow:hidden;background:var(--bg4);margin-bottom:1rem}
-.json-toggle{background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:5px 12px;font-size:11px;font-weight:700;color:var(--text3);cursor:pointer;font-family:inherit;margin-bottom:.5rem}
-.json-box{background:#0b1929;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.85rem 1rem;font-family:monospace;font-size:11px;color:#7eb8f7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;display:none;line-height:1.6}
-.json-box.show{display:block}
+
+/* Step section */
+.step-section{margin-bottom:1.25rem}
+.step-header{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:.6rem;display:flex;align-items:center;gap:8px}
+.step-badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:var(--blue);color:#fff}
+.step-badge.ok{background:#1a5c2a;color:#6AB34F}
+.step-badge.err{background:#5c1a1a;color:var(--red)}
+
+/* Two-col layout for request/response */
+.rr-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.5rem}
+@media(max-width:640px){.rr-grid{grid-template-columns:1fr}}
+.rr-box{background:#070f1c;border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
+.rr-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;padding:5px 10px;border-bottom:1px solid var(--border2)}
+.rr-label.req{color:#7eb8f7;background:rgba(30,95,174,.12)}
+.rr-label.res-ok{color:var(--green);background:rgba(106,179,79,.08)}
+.rr-label.res-err{color:var(--red);background:rgba(248,113,113,.08)}
+.rr-json{font-family:monospace;font-size:11px;color:#c8dff8;white-space:pre-wrap;word-break:break-all;padding:.75rem .85rem;max-height:320px;overflow-y:auto;line-height:1.6;margin:0}
+
+/* Summary fields */
+.sum-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:.75rem}
+@media(max-width:580px){.sum-grid{grid-template-columns:1fr 1fr}}
+.sum-stat{background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem 1rem;text-align:center}
+.sum-num{font-size:22px;font-weight:800;color:var(--green);line-height:1}
+.sum-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:4px}
+
+/* Steps list */
+.turn-item{display:flex;gap:10px;padding:.5rem 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.turn-item:last-child{border-bottom:none}
+.turn-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.turn-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
+.turn-dist{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
+
+/* Map */
+#map{height:320px;border-radius:var(--radius-sm);overflow:hidden;background:var(--bg4);margin:.75rem 0}
+
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 .leaflet-container{background:#0b1929}
@@ -73,13 +83,14 @@ h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
 <div class="page">
 
   <h1>Maps API Test</h1>
-  <div class="subtitle">Geocoding API (fetch) + Directions API (Maps JS SDK). No login required.</div>
+  <div class="sub">Geocoding API (fetch) + Directions API (Maps JS SDK). Shows full request and response for each call.</div>
 
-  <!-- SDK status — shows in real time as SDK loads -->
-  <div class="sdk-bar" id="sdk-bar" style="background:rgba(244,169,58,.08);color:var(--amber)">
-    Maps JS SDK: loading...
+  <!-- SDK status -->
+  <div class="sdk-bar" id="sdk-bar" style="background:rgba(244,169,58,.08);color:var(--amber);border-color:rgba(244,169,58,.3)">
+    ⟳ Maps JS SDK loading…
   </div>
 
+  <!-- Input -->
   <div class="card">
     <div class="card-title">Addresses</div>
     <div class="addr-grid">
@@ -92,157 +103,175 @@ h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
         <input type="text" id="addr2" value="3250 Springhill Ave, Mobile, AL 36607"/>
       </div>
     </div>
-    <button class="run-btn" id="run-btn" onclick="runTest()">Run API Test</button>
+    <button class="run-btn" id="run-btn" onclick="runTest()">
+      ▶ Run API Test
+    </button>
   </div>
 
+  <!-- Status -->
   <div class="status-bar" id="status-bar">
     <div class="spinner" id="status-spinner" style="display:none"></div>
     <span id="status-text"></span>
   </div>
 
+  <!-- Results -->
   <div id="results" style="display:none">
 
+    <!-- Step 1: Geocode Origin -->
     <div class="card">
-      <div class="card-title">Geocoding Results</div>
-      <div class="results-grid">
-        <div class="result-card">
-          <div class="result-card-title geo">Origin</div>
-          <div class="result-row"><div class="result-label">Formatted</div><div class="result-val" id="g1-formatted">—</div></div>
-          <div class="result-row"><div class="result-label">Lat</div><div class="result-val" id="g1-lat">—</div></div>
-          <div class="result-row"><div class="result-label">Lng</div><div class="result-val" id="g1-lng">—</div></div>
-          <div class="result-row"><div class="result-label">Confidence</div><div class="result-val" id="g1-conf">—</div></div>
-          <div class="result-row"><div class="result-label">Status</div><div class="result-val" id="g1-status">—</div></div>
-          <button class="json-toggle" onclick="toggleBox('g1-json')" style="margin-top:.5rem">Show raw JSON</button>
-          <div class="json-box" id="g1-json"></div>
+      <div class="step-header">
+        <span class="step-badge" id="b-geo1">1</span>
+        Geocoding API — Origin
+      </div>
+      <div class="rr-grid">
+        <div class="rr-box">
+          <div class="rr-label req">Request</div>
+          <pre class="rr-json" id="j-geo1-req">—</pre>
         </div>
-        <div class="result-card">
-          <div class="result-card-title geo">Destination</div>
-          <div class="result-row"><div class="result-label">Formatted</div><div class="result-val" id="g2-formatted">—</div></div>
-          <div class="result-row"><div class="result-label">Lat</div><div class="result-val" id="g2-lat">—</div></div>
-          <div class="result-row"><div class="result-label">Lng</div><div class="result-val" id="g2-lng">—</div></div>
-          <div class="result-row"><div class="result-label">Confidence</div><div class="result-val" id="g2-conf">—</div></div>
-          <div class="result-row"><div class="result-label">Status</div><div class="result-val" id="g2-status">—</div></div>
-          <button class="json-toggle" onclick="toggleBox('g2-json')" style="margin-top:.5rem">Show raw JSON</button>
-          <div class="json-box" id="g2-json"></div>
+        <div class="rr-box">
+          <div class="rr-label res-ok" id="l-geo1-res">Response</div>
+          <pre class="rr-json" id="j-geo1-res">—</pre>
         </div>
       </div>
     </div>
 
-    <div class="card" id="dir-card">
-      <div class="card-title">Directions Results</div>
-      <div class="dir-summary">
-        <div class="dir-stat"><div class="dir-stat-num" id="d-miles">—</div><div class="dir-stat-lbl">Miles</div></div>
-        <div class="dir-stat"><div class="dir-stat-num" id="d-duration">—</div><div class="dir-stat-lbl">Est. Time</div></div>
-        <div class="dir-stat"><div class="dir-stat-num" id="d-steps">—</div><div class="dir-stat-lbl">Steps</div></div>
+    <!-- Step 2: Geocode Destination -->
+    <div class="card">
+      <div class="step-header">
+        <span class="step-badge" id="b-geo2">2</span>
+        Geocoding API — Destination
       </div>
-      <div class="results-grid" style="margin-bottom:.75rem">
-        <div class="result-card">
-          <div class="result-card-title dir">API Details</div>
-          <div class="result-row"><div class="result-label">Status</div><div class="result-val" id="d-status">—</div></div>
-          <div class="result-row"><div class="result-label">Distance (m)</div><div class="result-val" id="d-meters">—</div></div>
-          <div class="result-row"><div class="result-label">Duration (s)</div><div class="result-val" id="d-seconds">—</div></div>
-          <div class="result-row"><div class="result-label">Polyline chars</div><div class="result-val" id="d-polylen">—</div></div>
-          <div class="result-row"><div class="result-label">Polyline sample</div><div class="result-val" id="d-polysample" style="font-size:10px;font-family:monospace">—</div></div>
+      <div class="rr-grid">
+        <div class="rr-box">
+          <div class="rr-label req">Request</div>
+          <pre class="rr-json" id="j-geo2-req">—</pre>
         </div>
-        <div class="result-card">
-          <div class="result-card-title dir">Bounds</div>
-          <div class="result-row"><div class="result-label">NE lat</div><div class="result-val" id="d-ne-lat">—</div></div>
-          <div class="result-row"><div class="result-label">NE lng</div><div class="result-val" id="d-ne-lng">—</div></div>
-          <div class="result-row"><div class="result-label">SW lat</div><div class="result-val" id="d-sw-lat">—</div></div>
-          <div class="result-row"><div class="result-label">SW lng</div><div class="result-val" id="d-sw-lng">—</div></div>
+        <div class="rr-box">
+          <div class="rr-label res-ok" id="l-geo2-res">Response</div>
+          <pre class="rr-json" id="j-geo2-res">—</pre>
         </div>
       </div>
-      <div id="map"></div>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:.5rem">Turn-by-turn</div>
-      <div id="steps-wrap"></div>
-      <!-- Directions error detail — shown when API call fails -->
-      <div id="dir-error-wrap" style="display:none;margin-bottom:.75rem">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--red);margin-bottom:.35rem">Directions Error Detail</div>
-        <div class="json-box show" id="dir-error-json" style="border-color:rgba(248,113,113,.3)"></div>
-      </div>
-      <button class="json-toggle" onclick="toggleBox('json-box')" style="margin-top:.75rem">Show raw Directions JSON</button>
-      <div class="json-box" id="json-box"></div>
     </div>
 
-  </div>
+    <!-- Step 3: Directions -->
+    <div class="card">
+      <div class="step-header">
+        <span class="step-badge" id="b-dir">3</span>
+        Directions API — Maps JS SDK
+      </div>
+      <div class="rr-grid">
+        <div class="rr-box">
+          <div class="rr-label req">Request sent to DirectionsService</div>
+          <pre class="rr-json" id="j-dir-req">—</pre>
+        </div>
+        <div class="rr-box">
+          <div class="rr-label res-ok" id="l-dir-res">Response</div>
+          <pre class="rr-json" id="j-dir-res">—</pre>
+        </div>
+      </div>
+
+      <!-- Summary + map + steps only shown on success -->
+      <div id="dir-success" style="display:none">
+        <div class="sum-grid" style="margin-top:.75rem">
+          <div class="sum-stat"><div class="sum-num" id="d-miles">—</div><div class="sum-lbl">Miles</div></div>
+          <div class="sum-stat"><div class="sum-num" id="d-time">—</div><div class="sum-lbl">Est. Time</div></div>
+          <div class="sum-stat"><div class="sum-num" id="d-steps">—</div><div class="sum-lbl">Steps</div></div>
+        </div>
+        <div id="map"></div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:.5rem">Turn-by-turn</div>
+        <div id="turns"></div>
+      </div>
+    </div>
+
+  </div><!-- /results -->
 </div>
 
 <script>
 const GEOCODE_KEY = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
-const MAPS_KEY    = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const MAPS_KEY    = GEOCODE_KEY; // Use same unrestricted key for Maps JS SDK during testing
 
-// ── Load Maps JS SDK and track status visibly ─────────────────────────────────
+// ── Load Maps JS SDK ──────────────────────────────────────────────────────────
 window._mapsReady = false;
 window._mapsQueue = [];
 window._mapsError = null;
 
 window.onMapsReady = function(){
   window._mapsReady = true;
-  setSdkBar('ok', 'Maps JS SDK: loaded and ready');
-  window._mapsQueue.forEach(cb=>cb());
+  sdkBar('ok','✓ Maps JS SDK loaded and ready');
+  window._mapsQueue.forEach(fn=>fn(null));
   window._mapsQueue = [];
 };
-
-// Catch SDK auth errors (ApiTargetBlockedMapError etc)
 window.gm_authFailure = function(){
-  window._mapsError = 'ApiTargetBlockedMapError — key referrer restriction is blocking this domain. Add https://bill04040.github.io/* to the Maps API key allowed referrers in Google Cloud Console.';
-  setSdkBar('err', 'Maps JS SDK: ' + window._mapsError);
+  window._mapsError = 'ApiTargetBlockedMapError — this domain is not in the Maps API key allowed referrers list.';
+  sdkBar('err','✗ '+window._mapsError);
+  window._mapsQueue.forEach(fn=>fn(window._mapsError));
+  window._mapsQueue = [];
 };
-
 (function(){
-  const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key='+MAPS_KEY+'&callback=onMapsReady&loading=async';
-  s.async = true; s.defer = true;
-  s.onerror = function(){
-    window._mapsError = 'Script failed to load — check network connection';
-    setSdkBar('err','Maps JS SDK: failed to load');
+  const s=document.createElement('script');
+  s.src='https://maps.googleapis.com/maps/api/js?key='+MAPS_KEY+'&callback=onMapsReady&loading=async';
+  s.async=true; s.defer=true;
+  s.onerror=function(){
+    window._mapsError='Script failed to load — network error';
+    sdkBar('err','✗ Maps JS SDK failed to load');
   };
   document.head.appendChild(s);
 })();
 
-function whenMapsReady(cb){
-  if(window._mapsReady){ cb(); return; }
-  if(window._mapsError){ cb(window._mapsError); return; }
-  window._mapsQueue.push(cb);
+function sdkBar(state, msg){
+  const b=document.getElementById('sdk-bar');
+  if(!b) return;
+  b.textContent=msg;
+  if(state==='ok') { b.style.background='rgba(106,179,79,.1)'; b.style.color='#6AB34F'; b.style.borderColor='rgba(106,179,79,.3)'; }
+  if(state==='err'){ b.style.background='rgba(248,113,113,.1)'; b.style.color='#f87171'; b.style.borderColor='rgba(248,113,113,.3)'; }
 }
 
-function setSdkBar(state, msg){
-  const bar = document.getElementById('sdk-bar');
-  if(!bar) return;
-  bar.textContent = msg;
-  if(state==='ok')  { bar.style.background='rgba(106,179,79,.1)'; bar.style.color='#6AB34F'; bar.style.border='1px solid rgba(106,179,79,.3)'; }
-  if(state==='err') { bar.style.background='rgba(248,113,113,.1)'; bar.style.color='#f87171'; bar.style.border='1px solid rgba(248,113,113,.3)'; }
-  if(state==='wait'){ bar.style.background='rgba(244,169,58,.08)'; bar.style.color='#F4A93A'; bar.style.border='1px solid rgba(244,169,58,.3)'; }
+function whenMapsReady(){
+  return new Promise((res,rej)=>{
+    if(window._mapsReady) return res();
+    if(window._mapsError) return rej(new Error(window._mapsError));
+    const t=setTimeout(()=>rej(new Error('Maps SDK timeout after 12s')),12000);
+    window._mapsQueue.push(err=>{ clearTimeout(t); err?rej(new Error(err)):res(); });
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-let _map = null;
+let _map=null;
 
-function setStatus(state, msg){
-  const bar = document.getElementById('status-bar');
-  const sp  = document.getElementById('status-spinner');
-  const tx  = document.getElementById('status-text');
-  bar.className = 'status-bar show ' + state;
-  tx.textContent = msg;
-  sp.style.display = state==='pending' ? 'block' : 'none';
+function setStatus(state,msg){
+  const bar=document.getElementById('status-bar');
+  const sp=document.getElementById('status-spinner');
+  bar.className='status-bar show '+state;
+  document.getElementById('status-text').textContent=msg;
+  sp.style.display=state==='pending'?'block':'none';
 }
 
-function sv(id, val, cls=''){
-  const el = document.getElementById(id);
+function jset(id, obj){
+  const el=document.getElementById(id);
   if(!el) return;
-  el.textContent = val;
-  if(cls) el.className = 'result-val '+cls;
+  if(typeof obj === 'string') { el.textContent=obj; return; }
+  el.textContent = obj===undefined||obj===null
+    ? '(no data returned)'
+    : JSON.stringify(obj,null,2);
 }
 
-function fmtMiles(m){ return (m/1609.34).toFixed(2)+' mi'; }
-function fmtDur(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}h ${m}m`:`${m}m`; }
+function badge(id, state){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.className='step-badge '+(state||'');
+  if(state==='ok')  el.textContent='✓';
+  else if(state==='err') el.textContent='✗';
+}
 
-function confLabel(t){
-  return {ROOFTOP:'Rooftop ✓✓✓',RANGE_INTERPOLATED:'Range interpolated ✓✓',GEOMETRIC_CENTER:'Geometric center ✓',APPROXIMATE:'Approximate ~'}[t]||t||'—';
+function resLabel(id, state){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.className='rr-label '+(state==='ok'?'res-ok':'res-err');
+  el.textContent=state==='ok'?'Response — OK':'Response — ERROR';
 }
-function confCls(t){
-  return (t==='ROOFTOP'||t==='RANGE_INTERPOLATED')?'good':(t==='GEOMETRIC_CENTER'?'warn':'warn');
-}
+
+function fmtMi(m){ return (m/1609.34).toFixed(2)+' mi'; }
+function fmtDur(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?h+'h '+m+'m':m+'m'; }
 
 function decodePolyline(enc){
   if(!enc) return [];
@@ -258,376 +287,211 @@ function decodePolyline(enc){
   return pts;
 }
 
-// ── Geocode via fetch ─────────────────────────────────────────────────────────
-async function geocode(address, key){
-  const params = {address, key:'[GEOCODE_KEY]'};
-  const url = 'https://maps.googleapis.com/maps/api/geocode/json'
-    + '?address=' + encodeURIComponent(address) + '&key=' + key;
-  let raw, fetchErr=null;
+// ── Geocode ───────────────────────────────────────────────────────────────────
+async function geocode(address){
+  const url='https://maps.googleapis.com/maps/api/geocode/json'
+    +'?address='+encodeURIComponent(address)+'&key='+GEOCODE_KEY;
+
+  const request={
+    endpoint: 'https://maps.googleapis.com/maps/api/geocode/json',
+    params:{ address, key:'[GEOCODE_KEY — hidden]' },
+    method: 'GET via fetch()',
+  };
+
+  let response;
   try{
-    const resp = await fetch(url);
-    raw = await resp.json();
+    const r=await fetch(url);
+    response=await r.json();
   } catch(e){
-    fetchErr = e.message;
-    raw = {error: 'FETCH_FAILED', message: e.message};
+    response={status:'FETCH_ERROR',error:e.message};
+    return {ok:false,status:'FETCH_ERROR',request,response};
   }
-  const result = raw?.results?.[0];
-  const loc    = result?.geometry?.location;
+
+  const result=response.results?.[0];
+  const loc=result?.geometry?.location;
   return {
-    ok:        !fetchErr && raw?.status==='OK' && !!result,
-    status:    fetchErr ? 'FETCH_ERROR' : (raw?.status||'NO_RESULTS'),
+    ok:      response.status==='OK'&&!!result,
+    status:  response.status||'NO_RESULTS',
     formatted: result?.formatted_address,
-    lat:       loc?.lat,
-    lng:       loc?.lng,
-    locType:   result?.geometry?.location_type,
-    debug: {
-      request:  { url: url.replace(key,'[KEY_HIDDEN]'), params },
-      response: raw,
-    },
+    lat:     loc?.lat,
+    lng:     loc?.lng,
+    locType: result?.geometry?.location_type,
+    request,
+    response,
   };
 }
 
-// ── Directions via Maps JS SDK ────────────────────────────────────────────────
-async function getDirections(originLat, originLng, destLat, destLng){
-  const requestParams = {
-    origin:      {lat:originLat, lng:originLng},
-    destination: {lat:destLat,   lng:destLng},
-    travelMode:  'DRIVING',
-    unitSystem:  'IMPERIAL',
-    sdk:         'google.maps.DirectionsService',
-    key:         '[MAPS_KEY]',
+// ── Directions ────────────────────────────────────────────────────────────────
+async function getDirections(originLat,originLng,destLat,destLng){
+  const request={
+    sdk:     'google.maps.DirectionsService',
+    key:     '[MAPS_KEY — hidden]',
+    origin:  {lat:originLat,lng:originLng},
+    destination:{lat:destLat,lng:destLng},
+    travelMode: 'DRIVING',
+    unitSystem: 'IMPERIAL',
   };
 
-  // Bail immediately if SDK auth already failed
+  // Check auth error
   if(window._mapsError){
-    return {
-      ok:false,
-      status:'SDK_AUTH_ERROR',
-      debug:{
-        request:  requestParams,
-        response: {error: window._mapsError,
-          suggestion:'Add https://bill04040.github.io/* and https://bill04040.github.io/Datascan/* to Maps API key allowed referrers in Google Cloud Console'},
-      },
-    };
+    return{ok:false,status:'SDK_AUTH_ERROR',request,
+      response:{error:window._mapsError,
+        fix:'Add https://bill04040.github.io/* and https://bill04040.github.io/Datascan/* to Maps API key referrer list in Google Cloud Console'}};
   }
 
   // Wait for SDK
-  let sdkErr = null;
-  await new Promise((resolve, reject)=>{
-    if(window._mapsReady) return resolve();
-    const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout after 12s')), 12000);
-    window._mapsQueue.push((err)=>{ clearTimeout(timeout); err?reject(new Error(err)):resolve(); });
-  }).catch(e=>{ sdkErr=e.message; });
+  try{ await whenMapsReady(); }
+  catch(e){ return{ok:false,status:'SDK_ERROR',request,response:{error:e.message}}; }
 
-  if(sdkErr){
-    return {
-      ok:false, status:'SDK_ERROR',
-      debug:{ request:requestParams, response:{error:sdkErr} },
-    };
-  }
-
-  const svc = new google.maps.DirectionsService();
-  let result, dirErr=null;
-  try{
-    result = await svc.route({
-      origin:      {lat:originLat, lng:originLng},
-      destination: {lat:destLat,   lng:destLng},
-      travelMode:  google.maps.TravelMode.DRIVING,
-      unitSystem:  google.maps.UnitSystem.IMPERIAL,
-    });
-  } catch(e){
-    dirErr = e.code||e.message||'DIRECTIONS_ERROR';
-    return {
-      ok:false, status:dirErr,
-      debug:{ request:requestParams,
-        response:{error:dirErr, raw_error:String(e)} },
-    };
-  }
-
-  const route = result.routes[0];
-  const leg   = route.legs[0];
-  const steps = (leg.steps||[]).map(s=>({
-    instruction: (s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
-    distMeters:  s.distance.value,
-    durSecs:     s.duration.value,
-  }));
-  const polyline = route.overview_polyline;
-
-  return {
-    ok:true, status:'OK',
-    distMeters: leg.distance.value,
-    durSecs:    leg.duration.value,
-    polyline,
-    bounds:{
-      ne:{lat:route.bounds.getNorthEast().lat(), lng:route.bounds.getNorthEast().lng()},
-      sw:{lat:route.bounds.getSouthWest().lat(), lng:route.bounds.getSouthWest().lng()},
-    },
-    steps,
-    debug:{
-      request: requestParams,
-      response:{
-        status:         'OK',
-        distance_text:  leg.distance.text,
-        distance_meters:leg.distance.value,
-        duration_text:  leg.duration.text,
-        duration_secs:  leg.duration.value,
-        polyline_length:polyline?.length||0,
-        polyline_sample:polyline?.substring(0,60)+'…',
-        bounds:{
-          northeast:{lat:route.bounds.getNorthEast().lat(), lng:route.bounds.getNorthEast().lng()},
-          southwest:{lat:route.bounds.getSouthWest().lat(), lng:route.bounds.getSouthWest().lng()},
-        },
-        steps_count: steps.length,
-        steps: steps.map(s=>({
-          instruction:    s.instruction,
-          distance_miles: +(s.distMeters/1609.34).toFixed(2),
-          duration_secs:  s.durSecs,
-        })),
-      },
-    },
-  };
-}
-
-// ── Main test runner ──────────────────────────────────────────────────────────
-async function runTest(){
-  const addr1 = document.getElementById('addr1').value.trim();
-  const addr2 = document.getElementById('addr2').value.trim();
-  if(!addr1||!addr2){ setStatus('err','Enter both addresses'); return; }
-
-  const btn = document.getElementById('run-btn');
-  btn.disabled=true; btn.textContent='Running…';
-  document.getElementById('results').style.display='none';
-  document.getElementById('dir-error-wrap').style.display='none';
-
-  try{
-    // ── Step 1: Geocode origin ──────────────────────────────────────────────
-    setStatus('pending','Step 1 of 3 — Geocoding origin…');
-    const geo1 = await geocode(addr1, GEOCODE_KEY);
-    sv('g1-formatted', geo1.ok?geo1.formatted:'Failed', geo1.ok?'good':'bad');
-    sv('g1-lat',       geo1.ok?geo1.lat.toFixed(6):'—',  geo1.ok?'good':'');
-    sv('g1-lng',       geo1.ok?geo1.lng.toFixed(6):'—',  geo1.ok?'good':'');
-    sv('g1-conf',      geo1.ok?confLabel(geo1.locType):'—', geo1.ok?confCls(geo1.locType):'bad');
-    sv('g1-status',    geo1.status, geo1.ok?'good':'bad');
-    setJson('g1-json', geo1.debug);
-    if(!geo1.ok) throw new Error('Geocode failed for origin: '+geo1.status);
-
-    // ── Step 2: Geocode destination ─────────────────────────────────────────
-    setStatus('pending','Step 2 of 3 — Geocoding destination…');
-    const geo2 = await geocode(addr2, GEOCODE_KEY);
-    sv('g2-formatted', geo2.ok?geo2.formatted:'Failed', geo2.ok?'good':'bad');
-    sv('g2-lat',       geo2.ok?geo2.lat.toFixed(6):'—',  geo2.ok?'good':'');
-    sv('g2-lng',       geo2.ok?geo2.lng.toFixed(6):'—',  geo2.ok?'good':'');
-    sv('g2-conf',      geo2.ok?confLabel(geo2.locType):'—', geo2.ok?confCls(geo2.locType):'bad');
-    sv('g2-status',    geo2.status, geo2.ok?'good':'bad');
-    setJson('g2-json', geo2.debug);
-    if(!geo2.ok) throw new Error('Geocode failed for destination: '+geo2.status);
-
-    // Show geocode results now — don't wait for directions
-    document.getElementById('results').style.display='block';
-
-    // ── Step 3: Directions ──────────────────────────────────────────────────
-    setStatus('pending','Step 3 of 3 — Getting directions (Maps JS SDK)…');
-    const dir = await getDirections(geo1.lat, geo1.lng, geo2.lat, geo2.lng);
-
-    sv('d-status',    dir.status, dir.ok?'good':'bad');
-    sv('d-meters',    dir.ok?dir.distMeters.toLocaleString()+' m':'—');
-    sv('d-seconds',   dir.ok?dir.durSecs+' s':'—');
-    sv('d-polylen',   dir.ok?(dir.polyline?.length||0)+' chars':'—', dir.ok?'good':'');
-    sv('d-polysample',dir.ok&&dir.polyline?dir.polyline.substring(0,30)+'…':'—');
-
-    // Always show directions debug JSON — success or failure
-    setJson('json-box', dir.debug);
-
-    if(dir.ok){
-      document.getElementById('d-miles').textContent    = fmtMiles(dir.distMeters);
-      document.getElementById('d-duration').textContent = fmtDur(dir.durSecs);
-      document.getElementById('d-steps').textContent    = dir.steps.length;
-      sv('d-ne-lat', dir.bounds.ne.lat.toFixed(6));
-      sv('d-ne-lng', dir.bounds.ne.lng.toFixed(6));
-      sv('d-sw-lat', dir.bounds.sw.lat.toFixed(6));
-      sv('d-sw-lng', dir.bounds.sw.lng.toFixed(6));
-
-      document.getElementById('steps-wrap').innerHTML = dir.steps.map((s,i)=>`
-        <div class="step-item">
-          <div class="step-num">${i+1}</div>
-          <div>
-            <div class="step-text">${s.instruction}</div>
-            <div class="step-dist">${fmtMiles(s.distMeters)} · ${fmtDur(s.durSecs)}</div>
-          </div>
-        </div>`).join('');
-
-      renderMap(geo1, geo2, dir.polyline);
-      setStatus('ok','All APIs OK — '+fmtMiles(dir.distMeters)+' · '+fmtDur(dir.durSecs));
-    } else {
-      // Show error detail box
-      const errWrap = document.getElementById('dir-error-wrap');
-      const errBox  = document.getElementById('dir-error-json');
-      errBox.textContent = JSON.stringify(dir.debug, null, 2);
-      errWrap.style.display='block';
-      setStatus('err','Directions failed: '+dir.status+' — see error detail below');
-    }
-
-  } catch(e){
-    setStatus('err', e.message);
-    document.getElementById('results').style.display='block';
-  } finally {
-    btn.disabled=false; btn.textContent='Run API Test';
-  }
-}
-
-// ── Directions via Maps JS SDK (only browser-side option — no CORS on JSON endpoint) ──
-async function getDirections(originLat, originLng, destLat, destLng){
-  // Wait up to 12s for SDK, but bail immediately if auth error already fired
-  await new Promise((resolve, reject)=>{
-    if(window._mapsError) return reject(new Error(window._mapsError));
-    if(window._mapsReady) return resolve();
-    const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout — SDK did not load within 12s')), 12000);
-    window._mapsQueue.push((err)=>{ clearTimeout(timeout); err ? reject(new Error(err)) : resolve(); });
-  });
-
-  const svc = new google.maps.DirectionsService();
+  // Call DirectionsService
   let result;
   try{
-    result = await svc.route({
-      origin:      {lat:originLat, lng:originLng},
-      destination: {lat:destLat,   lng:destLng},
-      travelMode:  google.maps.TravelMode.DRIVING,
-      unitSystem:  google.maps.UnitSystem.IMPERIAL,
+    const svc=new google.maps.DirectionsService();
+    result=await svc.route({
+      origin:{lat:originLat,lng:originLng},
+      destination:{lat:destLat,lng:destLng},
+      travelMode:google.maps.TravelMode.DRIVING,
+      unitSystem:google.maps.UnitSystem.IMPERIAL,
     });
   } catch(e){
-    return {ok:false, status:e.code||e.message||'DIRECTIONS_ERROR'};
+    return{ok:false,status:e.code||e.message,request,
+      response:{error:e.code||e.message,raw:String(e)}};
   }
 
-  const route=result.routes[0], leg=route.legs[0];
-  return {
-    ok:true, status:'OK',
-    distMeters: leg.distance.value,
-    durSecs:    leg.duration.value,
-    polyline:   route.overview_polyline,
+  const route=result.routes[0];
+  const leg=route.legs[0];
+  const polyline=route.overview_polyline;
+  const steps=(leg.steps||[]).map(s=>({
+    instruction:(s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+    distMeters:s.distance.value,
+    durSecs:s.duration.value,
+  }));
+
+  const response={
+    status:          'OK',
+    distance_text:   leg.distance.text,
+    distance_miles:  +(leg.distance.value/1609.34).toFixed(2),
+    duration_text:   leg.duration.text,
+    duration_secs:   leg.duration.value,
+    polyline_length: polyline?.length||0,
+    polyline_sample: polyline?.substring(0,80)+'…',
     bounds:{
-      ne:{lat:route.bounds.getNorthEast().lat(), lng:route.bounds.getNorthEast().lng()},
-      sw:{lat:route.bounds.getSouthWest().lat(), lng:route.bounds.getSouthWest().lng()},
+      northeast:{lat:route.bounds.getNorthEast().lat(),lng:route.bounds.getNorthEast().lng()},
+      southwest:{lat:route.bounds.getSouthWest().lat(),lng:route.bounds.getSouthWest().lng()},
     },
-    steps:(leg.steps||[]).map(s=>({
-      instruction:(s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
-      distMeters:s.distance.value, durSecs:s.duration.value,
+    steps_count: steps.length,
+    steps: steps.map(s=>({
+      instruction:    s.instruction,
+      distance_miles: +(s.distMeters/1609.34).toFixed(2),
+      duration_secs:  s.durSecs,
     })),
   };
+
+  return{ok:true,status:'OK',distMeters:leg.distance.value,durSecs:leg.duration.value,
+    polyline,steps,request,response};
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function runTest(){
-  const addr1 = document.getElementById('addr1').value.trim();
-  const addr2 = document.getElementById('addr2').value.trim();
-  if(!addr1||!addr2){ setStatus('err','Enter both addresses'); return; }
+  const addr1=document.getElementById('addr1').value.trim();
+  const addr2=document.getElementById('addr2').value.trim();
+  if(!addr1||!addr2){setStatus('err','Enter both addresses');return;}
 
-  const btn = document.getElementById('run-btn');
+  const btn=document.getElementById('run-btn');
   btn.disabled=true; btn.textContent='Running…';
   document.getElementById('results').style.display='none';
+  document.getElementById('dir-success').style.display='none';
 
   try{
+    // Step 1
     setStatus('pending','Step 1 of 3 — Geocoding origin…');
-    const geo1 = await geocode(addr1);
-    sv('g1-formatted', geo1.ok?geo1.formatted:'Failed', geo1.ok?'good':'bad');
-    sv('g1-lat',       geo1.ok?geo1.lat.toFixed(6):'—', geo1.ok?'good':'');
-    sv('g1-lng',       geo1.ok?geo1.lng.toFixed(6):'—', geo1.ok?'good':'');
-    sv('g1-conf',      geo1.ok?confLabel(geo1.locType):'—', geo1.ok?confCls(geo1.locType):'bad');
-    sv('g1-status',    geo1.status, geo1.ok?'good':'bad');
-    if(!geo1.ok) throw new Error('Geocode failed for origin: '+geo1.status);
+    const geo1=await geocode(addr1);
+    jset('j-geo1-req', geo1.request);
+    jset('j-geo1-res', geo1.response);
+    badge('b-geo1', geo1.ok?'ok':'err');
+    resLabel('l-geo1-res', geo1.ok?'ok':'err');
+    document.getElementById('results').style.display='block';
+    if(!geo1.ok) throw new Error('Geocode origin failed: '+geo1.status);
 
+    // Step 2
     setStatus('pending','Step 2 of 3 — Geocoding destination…');
-    const geo2 = await geocode(addr2);
-    sv('g2-formatted', geo2.ok?geo2.formatted:'Failed', geo2.ok?'good':'bad');
-    sv('g2-lat',       geo2.ok?geo2.lat.toFixed(6):'—', geo2.ok?'good':'');
-    sv('g2-lng',       geo2.ok?geo2.lng.toFixed(6):'—', geo2.ok?'good':'');
-    sv('g2-conf',      geo2.ok?confLabel(geo2.locType):'—', geo2.ok?confCls(geo2.locType):'bad');
-    sv('g2-status',    geo2.status, geo2.ok?'good':'bad');
-    if(!geo2.ok) throw new Error('Geocode failed for destination: '+geo2.status);
+    const geo2=await geocode(addr2);
+    jset('j-geo2-req', geo2.request);
+    jset('j-geo2-res', geo2.response);
+    badge('b-geo2', geo2.ok?'ok':'err');
+    resLabel('l-geo2-res', geo2.ok?'ok':'err');
+    if(!geo2.ok) throw new Error('Geocode destination failed: '+geo2.status);
 
+    // Step 3
     setStatus('pending','Step 3 of 3 — Getting directions (Maps JS SDK)…');
-    const dir = await getDirections(geo1.lat, geo1.lng, geo2.lat, geo2.lng);
 
-    sv('d-status',    dir.status+(dir.errorMsg?' — '+dir.errorMsg:''), dir.ok?'good':'bad');
-    sv('d-meters',    dir.ok?dir.distMeters.toLocaleString()+' m':'—');
-    sv('d-seconds',   dir.ok?dir.durSecs+' s':'—');
-    sv('d-polylen',   dir.ok?(dir.polyline?.length||0)+' chars':'—', dir.ok?'good':'');
-    sv('d-polysample',dir.ok&&dir.polyline?dir.polyline.substring(0,30)+'…':'—');
+    // Pre-populate request immediately so it's never blank
+    jset('j-dir-req',{
+      sdk:     'google.maps.DirectionsService',
+      key:     '[MAPS_KEY — hidden]',
+      origin:  {lat:geo1.lat, lng:geo1.lng},
+      destination:{lat:geo2.lat, lng:geo2.lng},
+      travelMode: 'DRIVING',
+      unitSystem: 'IMPERIAL',
+      sdk_ready:  window._mapsReady,
+      sdk_error:  window._mapsError||null,
+    });
+    jset('j-dir-res','Waiting for DirectionsService…');
+
+    let dir;
+    try{
+      dir=await getDirections(geo1.lat,geo1.lng,geo2.lat,geo2.lng);
+    } catch(e){
+      dir={ok:false,status:'UNEXPECTED_ERROR',
+        request:{note:'see above'},
+        response:{error:e.message, stack:String(e)}};
+    }
+    jset('j-dir-req', dir.request || {note:'request not captured'});
+    jset('j-dir-res', dir.response || {note:'response not captured'});
+    console.log('[test] dir result:', JSON.stringify({
+      ok:dir.ok, status:dir.status,
+      hasRequest:!!dir.request, hasResponse:!!dir.response,
+      sdkReady:window._mapsReady, sdkError:window._mapsError
+    }));
+    badge('b-dir', dir.ok?'ok':'err');
+    resLabel('l-dir-res', dir.ok?'ok':'err');
 
     if(dir.ok){
-      document.getElementById('d-miles').textContent    = fmtMiles(dir.distMeters);
-      document.getElementById('d-duration').textContent = fmtDur(dir.durSecs);
-      document.getElementById('d-steps').textContent    = dir.steps.length;
-      sv('d-ne-lat', dir.bounds.ne.lat.toFixed(6));
-      sv('d-ne-lng', dir.bounds.ne.lng.toFixed(6));
-      sv('d-sw-lat', dir.bounds.sw.lat.toFixed(6));
-      sv('d-sw-lng', dir.bounds.sw.lng.toFixed(6));
-
-      document.getElementById('steps-wrap').innerHTML = dir.steps.map((s,i)=>`
-        <div class="step-item">
-          <div class="step-num">${i+1}</div>
+      document.getElementById('d-miles').textContent = fmtMi(dir.distMeters);
+      document.getElementById('d-time').textContent  = fmtDur(dir.durSecs);
+      document.getElementById('d-steps').textContent = dir.steps.length;
+      document.getElementById('turns').innerHTML = dir.steps.map((s,i)=>`
+        <div class="turn-item">
+          <div class="turn-num">${i+1}</div>
           <div>
-            <div class="step-text">${s.instruction}</div>
-            <div class="step-dist">${fmtMiles(s.distMeters)} · ${fmtDur(s.durSecs)}</div>
+            <div class="turn-text">${s.instruction}</div>
+            <div class="turn-dist">${fmtMi(s.distMeters)} · ${fmtDur(s.durSecs)}</div>
           </div>
         </div>`).join('');
 
-      document.getElementById('json-box').textContent = JSON.stringify({
-        geocode_origin:{formatted:geo1.formatted,lat:geo1.lat,lng:geo1.lng,confidence:geo1.locType},
-        geocode_destination:{formatted:geo2.formatted,lat:geo2.lat,lng:geo2.lng,confidence:geo2.locType},
-        directions:{status:'OK',distance_miles:+(dir.distMeters/1609.34).toFixed(2),
-          duration_text:fmtDur(dir.durSecs),duration_secs:dir.durSecs,
-          polyline:dir.polyline,bounds:dir.bounds,
-          steps:dir.steps.map(s=>({instruction:s.instruction,distance_miles:+(s.distMeters/1609.34).toFixed(2),duration_secs:s.durSecs}))
-        }
-      },null,2);
-
-      renderMap(geo1, geo2, dir.polyline);
-      setStatus('ok', 'All APIs OK — '+fmtMiles(dir.distMeters)+' · '+fmtDur(dir.durSecs));
+      // Map
+      const mapEl=document.getElementById('map');
+      if(_map){_map.remove();_map=null;}
+      const coords=decodePolyline(dir.polyline);
+      if(coords.length){
+        _map=L.map(mapEl,{zoomControl:true,attributionControl:false}).setView(coords[Math.floor(coords.length/2)],12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_map);
+        const line=L.polyline(coords,{color:'#1E5FAE',weight:5,opacity:.85}).addTo(_map);
+        L.circleMarker([geo1.lat,geo1.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#6AB34F',fillOpacity:1}).addTo(_map).bindPopup('<b>Origin</b><br>'+geo1.formatted);
+        L.circleMarker([geo2.lat,geo2.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#f87171',fillOpacity:1}).addTo(_map).bindPopup('<b>Destination</b><br>'+geo2.formatted);
+        _map.fitBounds(line.getBounds(),{padding:[20,20]});
+      }
+      document.getElementById('dir-success').style.display='block';
+      setStatus('ok','All APIs OK — '+fmtMi(dir.distMeters)+' · '+fmtDur(dir.durSecs));
     } else {
-      setStatus('err','Directions failed: '+dir.status);
+      setStatus('err','Directions failed: '+dir.status+' — see response JSON above');
     }
 
-    document.getElementById('results').style.display='block';
-
   } catch(e){
-    setStatus('err', e.message);
-    document.getElementById('results').style.display='block';
+    setStatus('err',e.message);
   } finally {
-    btn.disabled=false; btn.textContent='Run API Test';
+    btn.disabled=false; btn.textContent='▶ Run API Test';
   }
-}
-
-function renderMap(geo1, geo2, polyline){
-  const mapEl = document.getElementById('map');
-  if(_map){ _map.remove(); _map=null; }
-  const coords = decodePolyline(polyline);
-  if(!coords.length) return;
-  _map = L.map(mapEl,{zoomControl:true,attributionControl:false}).setView(coords[Math.floor(coords.length/2)],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_map);
-  const line = L.polyline(coords,{color:'#1E5FAE',weight:5,opacity:.85}).addTo(_map);
-  L.circleMarker([geo1.lat,geo1.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#6AB34F',fillOpacity:1}).addTo(_map).bindPopup('<b>Origin</b><br>'+geo1.formatted);
-  L.circleMarker([geo2.lat,geo2.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#f87171',fillOpacity:1}).addTo(_map).bindPopup('<b>Destination</b><br>'+geo2.formatted);
-  _map.fitBounds(line.getBounds(),{padding:[20,20]});
-}
-
-function setJson(id, data){
-  const el = document.getElementById(id);
-  if(el) el.textContent = JSON.stringify(data, null, 2);
-}
-
-function toggleBox(id){
-  const box = document.getElementById(id);
-  if(!box) return;
-  box.classList.toggle('show');
-  // Update the button label
-  const btn = box.previousElementSibling;
-  if(btn && btn.classList.contains('json-toggle')){
-    btn.textContent = box.classList.contains('show') ? 'Hide JSON' : 'Show raw JSON';
-  }
-}
-
-function toggleJson(){
-  toggleBox('json-box');
 }
 
 document.addEventListener('keydown',e=>{
