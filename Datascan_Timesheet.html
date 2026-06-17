@@ -1607,13 +1607,20 @@ function checkSubmitReady(){
     const fnameEl=document.getElementById('fname-'+eid);
     const hasName=fnameEl&&fnameEl.value.trim().length>0;
     if(isSupervisor||hasName){
-      // Primary block must be fully filled
-      if(!primary||!primary.inVal||!primary.outVal) allHaveTimes=false;
+      // Primary block must be fully filled — UNLESS the employee has at least
+      // one other block with complete In/Out (e.g. supervisor with variance-only hours)
+      const hasOtherCompleteBlock = blocks.some(b=>
+        !b.isPrimary && b.inVal && b.inVal.trim() && b.outVal && b.outVal.trim()
+      );
+      if(!hasOtherCompleteBlock){
+        if(!primary||!primary.inVal||!primary.outVal) allHaveTimes=false;
+      }
       // Every block: if one of In/Out is filled, the other must be too
+      // (Both empty = unused/optional block — OK)
       blocks.forEach(b=>{
         const hasIn  = !!(b.inVal  && b.inVal.trim());
         const hasOut = !!(b.outVal && b.outVal.trim());
-        if(hasIn !== hasOut) allHaveTimes=false; // exactly one filled = incomplete
+        if(hasIn !== hasOut) allHaveTimes=false;
       });
     }
   });
