@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Maps API Test</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;font-family:Arial,sans-serif;background:#0b1929;color:#e8f0f8}
+:root{
+  --blue:#1E5FAE; --green:#6AB34F; --amber:#F4A93A; --red:#f87171;
+  --bg2:#111f33; --bg3:#162840; --bg4:#1c3452;
+  --border:rgba(255,255,255,.09); --border2:rgba(255,255,255,.16);
+  --text2:rgba(232,240,248,.6); --text3:rgba(232,240,248,.35);
+  --radius:10px; --radius-sm:7px;
+}
+
+/* ── Layout ── */
+.page{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem}
+h1{font-size:18px;font-weight:800;color:#fff;letter-spacing:.04em;margin-bottom:4px}
+.subtitle{font-size:12px;color:var(--text3);margin-bottom:1.5rem}
+
+/* ── Cards ── */
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.1rem 1.2rem;margin-bottom:1rem}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text3);margin-bottom:.85rem;display:flex;align-items:center;gap:6px}
+.card-title i{font-size:14px}
+
+/* ── Address inputs ── */
+.addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+@media(max-width:560px){.addr-grid{grid-template-columns:1fr}}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--text3);
+  letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
+.field input{width:100%;padding:10px 12px;background:var(--bg4);
+  border:1px solid var(--border2);border-radius:var(--radius-sm);
+  font-size:14px;color:#fff;font-family:inherit}
+.field input:focus{outline:none;border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(30,95,174,.2)}
+.field input::placeholder{color:var(--text3)}
+
+/* ── Run button ── */
+.run-btn{width:100%;margin-top:.75rem;padding:13px;background:var(--blue);
+  border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;
+  color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;
+  justify-content:center;gap:8px;transition:background .15s}
+.run-btn:hover{background:#2572cc}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── Status bar ── */
+.status-bar{display:flex;align-items:center;gap:8px;padding:.65rem 1rem;
+  border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:1rem;
+  display:none}
+.status-bar.show{display:flex}
+.status-bar.pending{background:rgba(244,169,58,.1);border:1px solid rgba(244,169,58,.3);color:var(--amber)}
+.status-bar.ok{background:rgba(106,179,79,.1);border:1px solid rgba(106,179,79,.3);color:var(--green)}
+.status-bar.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red)}
+
+/* ── Results grid ── */
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem}
+@media(max-width:560px){.results-grid{grid-template-columns:1fr}}
+.result-card{background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.85rem 1rem}
+.result-card-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;margin-bottom:.6rem;display:flex;align-items:center;gap:5px}
+.result-card-title.geocode{color:#7eb8f7}
+.result-card-title.directions{color:var(--green)}
+.result-row{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
+.result-row:last-child{border-bottom:none}
+.result-label{font-size:11px;color:var(--text3);flex-shrink:0}
+.result-val{font-size:12px;color:#fff;font-weight:500;text-align:right;
+  word-break:break-all;max-width:200px}
+.result-val.good{color:var(--green)}
+.result-val.warn{color:var(--amber)}
+.result-val.bad{color:var(--red)}
+
+/* ── Directions summary ── */
+.dir-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;
+  margin-bottom:1rem}
+@media(max-width:560px){.dir-summary{grid-template-columns:1fr 1fr}}
+.dir-stat{background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.75rem 1rem;text-align:center}
+.dir-stat-num{font-size:22px;font-weight:800;color:var(--green);line-height:1}
+.dir-stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--text3);margin-top:4px}
+
+/* ── Steps ── */
+.steps-wrap{margin-bottom:1rem}
+.step-item{display:flex;gap:10px;padding:.5rem 0;
+  border-bottom:1px solid var(--border);align-items:flex-start}
+.step-item:last-child{border-bottom:none}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--blue);
+  color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;margin-top:1px}
+.step-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
+.step-dist{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
+
+/* ── Map ── */
+#map{height:320px;border-radius:var(--radius-sm);overflow:hidden;
+  background:var(--bg4);margin-bottom:1rem}
+
+/* ── Raw JSON ── */
+.json-toggle{background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);
+  padding:5px 12px;font-size:11px;font-weight:700;color:var(--text3);cursor:pointer;
+  font-family:inherit;display:flex;align-items:center;gap:5px;margin-bottom:.5rem}
+.json-toggle:hover{color:#fff;border-color:var(--border2)}
+.json-box{background:#0b1929;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:.85rem 1rem;font-family:monospace;font-size:11px;color:#7eb8f7;
+  white-space:pre-wrap;word-break:break-all;max-height:280px;overflow-y:auto;
+  display:none;line-height:1.6}
+.json-box.show{display:block}
+
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+
+/* ── Leaflet ── */
+.leaflet-container{background:#0b1929}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1><i class="ti ti-map-route" style="color:#6AB34F"></i> Maps API Test</h1>
+  <div class="subtitle">Enter two addresses — tests Geocoding API on each, then Directions API between them.</div>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="card-title"><i class="ti ti-map-pin"></i> Addresses</div>
+    <div class="addr-grid">
+      <div class="field">
+        <label>Address 1 — Origin</label>
+        <input type="text" id="addr1" placeholder="e.g. 1234 Main St, Tulsa OK"
+          value="7855 Moffett Rd, Semmes, AL 36575"/>
+      </div>
+      <div class="field">
+        <label>Address 2 — Destination</label>
+        <input type="text" id="addr2" placeholder="e.g. 5678 Oak Ave, Mobile AL"
+          value="3250 Springhill Ave, Mobile, AL 36607"/>
+      </div>
+    </div>
+    <button class="run-btn" id="run-btn" onclick="runTest()">
+      <i class="ti ti-player-play"></i> Run API Test
+    </button>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="status-bar">
+    <div class="spinner" id="status-spinner" style="display:none"></div>
+    <i class="ti ti-info-circle" id="status-icon"></i>
+    <span id="status-text">Ready</span>
+  </div>
+
+  <!-- Results — hidden until test runs -->
+  <div id="results" style="display:none">
+
+    <!-- Geocode results -->
+    <div class="card">
+      <div class="card-title"><i class="ti ti-building-community"></i> Geocoding Results</div>
+      <div class="results-grid">
+
+        <!-- Address 1 geocode -->
+        <div class="result-card">
+          <div class="result-card-title geocode">
+            <i class="ti ti-map-pin"></i> Origin
+          </div>
+          <div class="result-row">
+            <div class="result-label">Input</div>
+            <div class="result-val" id="g1-input">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Formatted</div>
+            <div class="result-val" id="g1-formatted">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Lat</div>
+            <div class="result-val" id="g1-lat">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Lng</div>
+            <div class="result-val" id="g1-lng">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Confidence</div>
+            <div class="result-val" id="g1-conf">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Status</div>
+            <div class="result-val" id="g1-status">—</div>
+          </div>
+        </div>
+
+        <!-- Address 2 geocode -->
+        <div class="result-card">
+          <div class="result-card-title geocode">
+            <i class="ti ti-map-pin-filled"></i> Destination
+          </div>
+          <div class="result-row">
+            <div class="result-label">Input</div>
+            <div class="result-val" id="g2-input">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Formatted</div>
+            <div class="result-val" id="g2-formatted">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Lat</div>
+            <div class="result-val" id="g2-lat">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Lng</div>
+            <div class="result-val" id="g2-lng">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Confidence</div>
+            <div class="result-val" id="g2-conf">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Status</div>
+            <div class="result-val" id="g2-status">—</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Directions summary -->
+    <div class="card" id="dir-card">
+      <div class="card-title"><i class="ti ti-route"></i> Directions Results</div>
+
+      <div class="dir-summary">
+        <div class="dir-stat">
+          <div class="dir-stat-num" id="d-miles">—</div>
+          <div class="dir-stat-lbl">Miles</div>
+        </div>
+        <div class="dir-stat">
+          <div class="dir-stat-num" id="d-duration">—</div>
+          <div class="dir-stat-lbl">Est. Time</div>
+        </div>
+        <div class="dir-stat">
+          <div class="dir-stat-num" id="d-steps">—</div>
+          <div class="dir-stat-lbl">Steps</div>
+        </div>
+      </div>
+
+      <div class="results-grid" style="margin-bottom:.75rem">
+        <div class="result-card">
+          <div class="result-card-title directions">
+            <i class="ti ti-info-circle"></i> API Details
+          </div>
+          <div class="result-row">
+            <div class="result-label">Status</div>
+            <div class="result-val" id="d-status">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Distance (m)</div>
+            <div class="result-val" id="d-meters">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Duration (s)</div>
+            <div class="result-val" id="d-seconds">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Polyline chars</div>
+            <div class="result-val" id="d-polylen">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Polyline sample</div>
+            <div class="result-val" id="d-polysample" style="font-size:10px;font-family:monospace">—</div>
+          </div>
+        </div>
+        <div class="result-card">
+          <div class="result-card-title directions">
+            <i class="ti ti-bounds"></i> Bounds
+          </div>
+          <div class="result-row">
+            <div class="result-label">NE lat</div>
+            <div class="result-val" id="d-ne-lat">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">NE lng</div>
+            <div class="result-val" id="d-ne-lng">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">SW lat</div>
+            <div class="result-val" id="d-sw-lat">—</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">SW lng</div>
+            <div class="result-val" id="d-sw-lng">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map -->
+      <div id="map"></div>
+      <div style="display:flex;gap:12px;margin-bottom:.75rem">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)">
+          <div style="width:20px;height:3px;background:#1E5FAE;border-radius:2px"></div> Planned route
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)">
+          <div style="width:10px;height:10px;border-radius:50%;background:#6AB34F;border:2px solid #fff"></div> Origin
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)">
+          <div style="width:10px;height:10px;border-radius:50%;background:#f87171;border:2px solid #fff"></div> Destination
+        </div>
+      </div>
+
+      <!-- Turn-by-turn steps -->
+      <div class="card-title" style="margin-bottom:.5rem">
+        <i class="ti ti-list-numbers"></i> Turn-by-turn steps
+      </div>
+      <div class="steps-wrap" id="steps-wrap"></div>
+
+      <!-- Raw JSON toggle -->
+      <button class="json-toggle" onclick="toggleJson()">
+        <i class="ti ti-code"></i> <span id="json-toggle-label">Show raw JSON</span>
+      </button>
+      <div class="json-box" id="json-box"></div>
+
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /page -->
+
+<script>
+const MAPS_KEY     = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+const GEOCODE_KEY  = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
+
+// ── Load Maps JS SDK ──────────────────────────────────────────────────────────
+window._mapsReady = false;
+window._mapsQueue = [];
+window.onMapsReady = function(){
+  window._mapsReady = true;
+  window._mapsQueue.forEach(cb=>cb());
+  window._mapsQueue = [];
+};
+(function(){
+  const s = document.createElement('script');
+  s.src = 'https://maps.googleapis.com/maps/api/js?key='+MAPS_KEY+'&callback=onMapsReady&loading=async';
+  s.async = true; s.defer = true;
+  document.head.appendChild(s);
+})();
+function whenMapsReady(cb){
+  if(window._mapsReady) cb();
+  else window._mapsQueue.push(cb);
+}
+
+// ── Map instance ──────────────────────────────────────────────────────────────
+let _map = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(state, msg){
+  const bar      = document.getElementById('status-bar');
+  const spinner  = document.getElementById('status-spinner');
+  const icon     = document.getElementById('status-icon');
+  const text     = document.getElementById('status-text');
+  bar.className  = 'status-bar show ' + state;
+  text.textContent = msg;
+  spinner.style.display  = state==='pending' ? 'block' : 'none';
+  icon.style.display     = state==='pending' ? 'none'  : 'block';
+  icon.className = state==='ok'  ? 'ti ti-circle-check' :
+                   state==='err' ? 'ti ti-alert-triangle' : 'ti ti-info-circle';
+}
+
+function sv(id, val, cls=''){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = val;
+  if(cls) el.className = 'result-val ' + cls;
+}
+
+function fmtMiles(meters){
+  return (meters/1609.34).toFixed(2) + ' mi';
+}
+function fmtDur(secs){
+  const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function decodePolyline(encoded){
+  if(!encoded) return [];
+  const pts=[]; let idx=0,lat=0,lng=0;
+  while(idx<encoded.length){
+    let b,shift=0,result=0;
+    do{ b=encoded.charCodeAt(idx++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lat+=(result&1)?~(result>>1):(result>>1);
+    shift=0; result=0;
+    do{ b=encoded.charCodeAt(idx++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lng+=(result&1)?~(result>>1):(result>>1);
+    pts.push([lat/1e5,lng/1e5]);
+  }
+  return pts;
+}
+
+function confLabel(locType){
+  const map = {
+    ROOFTOP:'Rooftop ✓✓✓',
+    RANGE_INTERPOLATED:'Range interpolated ✓✓',
+    GEOMETRIC_CENTER:'Geometric center ✓',
+    APPROXIMATE:'Approximate ~',
+  };
+  return map[locType] || locType || '—';
+}
+
+function confClass(locType){
+  if(locType==='ROOFTOP') return 'good';
+  if(locType==='RANGE_INTERPOLATED') return 'good';
+  if(locType==='GEOMETRIC_CENTER') return 'warn';
+  return 'warn';
+}
+
+// ── Main test runner ──────────────────────────────────────────────────────────
+async function runTest(){
+  const addr1 = document.getElementById('addr1').value.trim();
+  const addr2 = document.getElementById('addr2').value.trim();
+  if(!addr1 || !addr2){
+    setStatus('err','Enter both addresses to continue');
+    return;
+  }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Running…';
+  document.getElementById('results').style.display = 'none';
+  setStatus('pending','Step 1 of 3 — Geocoding address 1…');
+
+  try{
+    // ── Step 1: Geocode address 1 ─────────────────────────────────────────────
+    const geo1 = await geocode(addr1);
+    sv('g1-input',     addr1);
+    sv('g1-formatted', geo1.ok ? geo1.formatted : '✗ Failed', geo1.ok?'good':'bad');
+    sv('g1-lat',       geo1.ok ? geo1.lat.toFixed(6) : '—', geo1.ok?'good':'');
+    sv('g1-lng',       geo1.ok ? geo1.lng.toFixed(6) : '—', geo1.ok?'good':'');
+    sv('g1-conf',      geo1.ok ? confLabel(geo1.locType) : '—', geo1.ok?confClass(geo1.locType):'bad');
+    sv('g1-status',    geo1.status, geo1.ok?'good':'bad');
+
+    if(!geo1.ok) throw new Error('Geocoding failed for address 1: '+geo1.status);
+
+    // ── Step 2: Geocode address 2 ─────────────────────────────────────────────
+    setStatus('pending','Step 2 of 3 — Geocoding address 2…');
+    const geo2 = await geocode(addr2);
+    sv('g2-input',     addr2);
+    sv('g2-formatted', geo2.ok ? geo2.formatted : '✗ Failed', geo2.ok?'good':'bad');
+    sv('g2-lat',       geo2.ok ? geo2.lat.toFixed(6) : '—', geo2.ok?'good':'');
+    sv('g2-lng',       geo2.ok ? geo2.lng.toFixed(6) : '—', geo2.ok?'good':'');
+    sv('g2-conf',      geo2.ok ? confLabel(geo2.locType) : '—', geo2.ok?confClass(geo2.locType):'bad');
+    sv('g2-status',    geo2.status, geo2.ok?'good':'bad');
+
+    if(!geo2.ok) throw new Error('Geocoding failed for address 2: '+geo2.status);
+
+    // ── Step 3: Directions ────────────────────────────────────────────────────
+    setStatus('pending','Step 3 of 3 — Fetching directions…');
+    const dir = await getDirections(geo1.lat, geo1.lng, geo2.lat, geo2.lng);
+
+    sv('d-status',    dir.status,                                 dir.ok?'good':'bad');
+    sv('d-miles',     dir.ok ? fmtMiles(dir.distMeters) : '—');
+    sv('d-duration',  dir.ok ? fmtDur(dir.durSecs)      : '—');
+    sv('d-steps',     dir.ok ? dir.steps.length+' steps' : '—');
+    sv('d-meters',    dir.ok ? dir.distMeters.toLocaleString()+' m' : '—');
+    sv('d-seconds',   dir.ok ? dir.durSecs+' s'          : '—');
+    sv('d-polylen',   dir.ok ? (dir.polyline?.length||0)+' chars' : '—', dir.ok?'good':'');
+    sv('d-polysample',dir.ok && dir.polyline ? dir.polyline.substring(0,30)+'…' : '—');
+
+    if(dir.ok){
+      sv('d-ne-lat', dir.bounds.ne.lat.toFixed(6));
+      sv('d-ne-lng', dir.bounds.ne.lng.toFixed(6));
+      sv('d-sw-lat', dir.bounds.sw.lat.toFixed(6));
+      sv('d-sw-lng', dir.bounds.sw.lng.toFixed(6));
+
+      // Update summary stats directly (bigger font)
+      document.getElementById('d-miles').textContent    = fmtMiles(dir.distMeters);
+      document.getElementById('d-duration').textContent = fmtDur(dir.durSecs);
+      document.getElementById('d-steps').textContent    = dir.steps.length;
+
+      // Steps list
+      const stepsWrap = document.getElementById('steps-wrap');
+      stepsWrap.innerHTML = dir.steps.map((s,i)=>`
+        <div class="step-item">
+          <div class="step-num">${i+1}</div>
+          <div>
+            <div class="step-text">${s.instruction}</div>
+            <div class="step-dist">${fmtMiles(s.distMeters)} · ${fmtDur(s.durSecs)}</div>
+          </div>
+        </div>`).join('');
+
+      // Raw JSON
+      document.getElementById('json-box').textContent = JSON.stringify({
+        geocode_origin:      {input:addr1, formatted:geo1.formatted, lat:geo1.lat, lng:geo1.lng, confidence:geo1.locType},
+        geocode_destination: {input:addr2, formatted:geo2.formatted, lat:geo2.lat, lng:geo2.lng, confidence:geo2.locType},
+        directions: {
+          status:         dir.status,
+          distance_miles: +(dir.distMeters/1609.34).toFixed(2),
+          duration_text:  fmtDur(dir.durSecs),
+          duration_secs:  dir.durSecs,
+          polyline:       dir.polyline,
+          bounds:         dir.bounds,
+          steps:          dir.steps.map(s=>({
+            instruction:    s.instruction,
+            distance_miles: +(s.distMeters/1609.34).toFixed(2),
+            duration_secs:  s.durSecs,
+          })),
+        }
+      }, null, 2);
+
+      // Map
+      renderMap(geo1, geo2, dir.polyline);
+    }
+
+    document.getElementById('results').style.display = 'block';
+    setStatus('ok', `✓ All APIs responded — ${fmtMiles(dir.distMeters||0)} · ${fmtDur(dir.durSecs||0)}`);
+
+  } catch(e){
+    setStatus('err', '✗ '+e.message);
+    document.getElementById('results').style.display = 'block';
+    console.error('[test]', e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-player-play"></i> Run API Test';
+  }
+}
+
+// ── Geocode via REST (no CORS issue — Geocoding API allows browser fetch) ────
+async function geocode(address){
+  const url = 'https://maps.googleapis.com/maps/api/geocode/json'
+    + '?address=' + encodeURIComponent(address)
+    + '&key=' + GEOCODE_KEY;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if(data.status !== 'OK' || !data.results?.length){
+    return {ok:false, status:data.status||'NO_RESULTS'};
+  }
+  const r   = data.results[0];
+  const loc = r.geometry.location;
+  return {
+    ok:        true,
+    status:    data.status,
+    formatted: r.formatted_address,
+    lat:       loc.lat,
+    lng:       loc.lng,
+    locType:   r.geometry.location_type,
+  };
+}
+
+// ── Directions via Maps JS SDK DirectionsService (browser-auth, no CORS) ─────
+async function getDirections(originLat, originLng, destLat, destLng){
+  // Wait for Maps SDK
+  await new Promise((resolve, reject)=>{
+    const t = setTimeout(()=>reject(new Error('Maps SDK timeout — check API key and network')), 12000);
+    whenMapsReady(()=>{ clearTimeout(t); resolve(); });
+  });
+
+  const svc = new google.maps.DirectionsService();
+  let result;
+  try{
+    result = await svc.route({
+      origin:      {lat: originLat, lng: originLng},
+      destination: {lat: destLat,   lng: destLng},
+      travelMode:  google.maps.TravelMode.DRIVING,
+      unitSystem:  google.maps.UnitSystem.IMPERIAL,
+    });
+  } catch(e){
+    return {ok:false, status: e.code||e.message||'UNKNOWN_ERROR'};
+  }
+
+  const route = result.routes[0];
+  const leg   = route.legs[0];
+
+  const steps = (leg.steps||[]).map(s=>({
+    instruction: (s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+    distMeters:  s.distance.value,
+    durSecs:     s.duration.value,
+  }));
+
+  return {
+    ok:         true,
+    status:     'OK',
+    distMeters: leg.distance.value,
+    durSecs:    leg.duration.value,
+    polyline:   route.overview_polyline,
+    bounds: {
+      ne: {lat: route.bounds.getNorthEast().lat(), lng: route.bounds.getNorthEast().lng()},
+      sw: {lat: route.bounds.getSouthWest().lat(), lng: route.bounds.getSouthWest().lng()},
+    },
+    steps,
+  };
+}
+
+// ── Render Leaflet map with route polyline ────────────────────────────────────
+function renderMap(geo1, geo2, polyline){
+  const mapEl = document.getElementById('map');
+  if(_map){ _map.remove(); _map=null; }
+
+  const coords = decodePolyline(polyline);
+  if(!coords.length) return;
+
+  const center = coords[Math.floor(coords.length/2)];
+  _map = L.map(mapEl, {zoomControl:true, attributionControl:false}).setView(center, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_map);
+
+  // Route line
+  const line = L.polyline(coords,{color:'#1E5FAE',weight:5,opacity:.85}).addTo(_map);
+
+  // Origin pin (green)
+  L.circleMarker([geo1.lat,geo1.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#6AB34F',fillOpacity:1})
+    .addTo(_map)
+    .bindPopup(`<b>Origin</b><br>${geo1.formatted}`);
+
+  // Destination pin (red)
+  L.circleMarker([geo2.lat,geo2.lng],{radius:9,color:'#fff',weight:2.5,fillColor:'#f87171',fillOpacity:1})
+    .addTo(_map)
+    .bindPopup(`<b>Destination</b><br>${geo2.formatted}`);
+
+  _map.fitBounds(line.getBounds(), {padding:[20,20]});
+  L.control.attribution({position:'bottomright'}).addTo(_map);
+}
+
+// ── JSON toggle ───────────────────────────────────────────────────────────────
+function toggleJson(){
+  const box   = document.getElementById('json-box');
+  const label = document.getElementById('json-toggle-label');
+  const show  = !box.classList.contains('show');
+  box.classList.toggle('show', show);
+  label.textContent = show ? 'Hide raw JSON' : 'Show raw JSON';
+}
+
+// Allow Enter key to trigger test
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && (e.target.id==='addr1'||e.target.id==='addr2')) runTest();
+});
+</script>
+</body>
+</html>
