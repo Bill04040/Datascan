@@ -2257,6 +2257,7 @@ async function confirmPassengers(){
 
     // ── Fetch & store planned route (non-blocking) ────────────────────────────
     // Run in background — don't await so it doesn't delay trip start UI
+    updatePlannedRouteDebug('pending');
     fetchAndStorePlannedRoute(
       log.id,
       originLat, originLng,
@@ -2538,11 +2539,13 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
   try{
     // Wait for Maps SDK to be ready (loaded async in <head>)
     console.log('[plannedRoute] waiting for Maps SDK…');
+    updatePlannedRouteDebug('waiting');
     await new Promise((resolve, reject)=>{
       const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout after 10s')), 10000);
       whenMapsReady(()=>{ clearTimeout(timeout); resolve(); });
     });
     console.log('[plannedRoute] Maps SDK ready — calling DirectionsService');
+    updatePlannedRouteDebug('calling');
 
     const directionsService = new google.maps.DirectionsService();
     const result = await directionsService.route({
@@ -2583,6 +2586,9 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
       steps,
     };
 
+    // Show fetched data in debug panel before DB write
+    updatePlannedRouteDebug('ok', routeObj);
+
     // Persist to DB
     const table = tableCol==='planned_segment' ? 'travel_waypoints' : 'travel_logs';
     const {error} = await getSupabase()
@@ -2590,13 +2596,18 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
       .update({[tableCol]: routeObj})
       .eq('id', logId);
 
-    if(error) console.warn('[plannedRoute] DB update failed:', error.message);
-    else console.log('[plannedRoute] ✓', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'stored for', table, logId);
+    if(error){
+      console.warn('[plannedRoute] DB update failed:', error.message);
+      updatePlannedRouteDebug('db_error', routeObj, error.message);
+    } else {
+      console.log('[plannedRoute] ✓', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'stored for', table, logId);
+    }
 
     return routeObj;
 
   } catch(e){
     console.warn('[plannedRoute] error:', e.message);
+    updatePlannedRouteDebug('error', null, e.message);
     return null;
   }
 }
@@ -2633,6 +2644,63 @@ function _updateGeofenceDebug(distM){
     _fastPingActive ? '10s (fast — inside fence)' : '30s (normal)';
   document.getElementById('gd-accuracy').textContent =
     _currentPos ? '±'+Math.round(_currentPos.accuracy||0)+'m' : '—';
+}
+
+// ── Planned route debug display (dev users only) ──────────────────────────────
+function updatePlannedRouteDebug(state, route, error){
+  const statusEl   = document.getElementById('gd-route-status');
+  const milesEl    = document.getElementById('gd-route-miles');
+  const durEl      = document.getElementById('gd-route-duration');
+  const stepsEl    = document.getElementById('gd-route-steps');
+  const polyEl     = document.getElementById('gd-route-polyline');
+  const storedEl   = document.getElementById('gd-route-stored');
+  if(!statusEl) return; // panel not rendered (non-dev user)
+
+  if(state==='pending'){
+    statusEl.textContent='Pending…'; statusEl.style.color='#f4a93a';
+    milesEl && (milesEl.textContent='—');
+    durEl   && (durEl.textContent='—');
+    stepsEl && (stepsEl.textContent='—');
+    polyEl  && (polyEl.textContent='—');
+    storedEl&& (storedEl.textContent='—');
+  } else if(state==='waiting'){
+    statusEl.textContent='Waiting for Maps SDK…'; statusEl.style.color='#f4a93a';
+  } else if(state==='calling'){
+    statusEl.textContent='Calling DirectionsService…'; statusEl.style.color='#7eb8f7';
+  } else if(state==='ok' && route){
+    statusEl.textContent='✓ OK'; statusEl.style.color='#6AB34F';
+    if(milesEl) milesEl.textContent = route.distance_miles!=null ? route.distance_miles.toFixed(2)+' mi' : '—';
+    if(durEl)   durEl.textContent   = route.duration_text || fmtDuration(route.duration_seconds) || '—';
+    if(stepsEl) stepsEl.textContent = (route.steps?.length||0)+' steps';
+    if(polyEl)  polyEl.textContent  = route.polyline ? route.polyline.substring(0,40)+'…' : '—';
+    if(storedEl) storedEl.textContent = '✓ Written to travel_logs';
+    storedEl.style.color='#6AB34F';
+  } else if(state==='db_error'){
+    statusEl.textContent='✓ Fetched — DB write failed'; statusEl.style.color='#f4a93a';
+    if(storedEl){ storedEl.textContent='✗ '+error; storedEl.style.color='#f87171'; }
+  } else if(state==='error'){
+    statusEl.textContent='✗ '+(error||'Failed'); statusEl.style.color='#f87171';
+    if(storedEl){ storedEl.textContent='—'; }
+  }
+}
+
+// Retry button — lets dev user re-trigger the API call without restarting the trip
+async function retryPlannedRoute(){
+  if(!_activeTrip?.id){
+    updatePlannedRouteDebug('error','No active trip');
+    return;
+  }
+  updatePlannedRouteDebug('pending');
+  const route = await fetchAndStorePlannedRoute(
+    _activeTrip.id,
+    _activeTrip.origin_lat, _activeTrip.origin_lng,
+    _activeJob?.dest_lat,   _activeJob?.dest_lng,
+    'planned_route'
+  );
+  if(route){
+    if(_activeTrip) _activeTrip.planned_route = route;
+    updatePlannedRouteSummary(route);
+  }
 }
 
 function _buildGeofenceDebugPanel(){
@@ -2676,6 +2744,41 @@ function _buildGeofenceDebugPanel(){
     <div class="geo-stat">
       <span class="geo-stat-label">GPS accuracy</span>
       <span class="geo-stat-value" id="gd-accuracy">—</span>
+    </div>
+    <!-- Planned Route debug section -->
+    <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid rgba(255,255,255,.1)">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+        color:rgba(255,255,255,.4);margin-bottom:.35rem">Planned Route API</div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">API status</span>
+        <span class="geo-stat-value" id="gd-route-status" style="color:#f4a93a">Pending…</span>
+      </div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">Distance</span>
+        <span class="geo-stat-value" id="gd-route-miles">—</span>
+      </div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">Est. duration</span>
+        <span class="geo-stat-value" id="gd-route-duration">—</span>
+      </div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">Steps</span>
+        <span class="geo-stat-value" id="gd-route-steps">—</span>
+      </div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">Polyline</span>
+        <span class="geo-stat-value" id="gd-route-polyline" style="font-size:9px;word-break:break-all;max-width:180px">—</span>
+      </div>
+      <div class="geo-stat">
+        <span class="geo-stat-label">Stored to DB</span>
+        <span class="geo-stat-value" id="gd-route-stored">—</span>
+      </div>
+      <button onclick="retryPlannedRoute()" style="margin-top:.35rem;width:100%;padding:5px;
+        background:rgba(30,95,174,.25);border:1px solid rgba(30,95,174,.5);
+        border-radius:4px;color:#7eb8f7;font-size:11px;font-weight:700;cursor:pointer;
+        font-family:inherit">
+        ↺ Retry API call
+      </button>
     </div>
   </div>`;
 }
