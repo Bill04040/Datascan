@@ -320,6 +320,30 @@ body{background:#0f1e30;color:#f0f4f8}
 .ping-popup b{color:#1E5FAE}
 .replay-loading{display:flex;align-items:center;justify-content:center;
   height:280px;color:var(--text3);font-size:13px;gap:8px}
+
+/* ── Planned route summary bar ─────────────────────────────────────────────── */
+.route-summary{display:flex;align-items:center;gap:6px;padding:.6rem .875rem;
+  background:rgba(30,95,174,.12);border:1px solid rgba(30,95,174,.3);
+  border-radius:var(--radius-sm);margin-bottom:.875rem;flex-wrap:wrap}
+.route-summary-item{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#7eb8f7}
+.route-summary-divider{width:1px;height:16px;background:rgba(30,95,174,.3);flex-shrink:0}
+.route-summary-label{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:rgba(126,184,247,.6);margin-right:auto;width:100%}
+/* Comparison table in trip summary */
+.route-compare{width:100%;border-collapse:collapse;font-size:12px;margin-top:.5rem}
+.route-compare th{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--text3);padding:4px 6px;text-align:left;
+  border-bottom:1px solid var(--border)}
+.route-compare td{padding:6px 6px;border-bottom:1px solid rgba(255,255,255,.04);
+  color:var(--text2);vertical-align:middle}
+.route-compare td:first-child{color:var(--text3);font-size:11px}
+.route-compare .val-planned{color:#7eb8f7;font-weight:600}
+.route-compare .val-actual{color:var(--green);font-weight:600}
+.route-compare .val-over{color:#f4a93a;font-weight:600}
+/* Map legend */
+.map-legend{display:flex;gap:12px;padding:.5rem .875rem;flex-wrap:wrap}
+.map-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.map-legend-line{width:24px;height:3px;border-radius:2px;flex-shrink:0}
 /* ── Passenger card ────────────────────────────────────────────────────────── */
 .pax-card{display:flex;align-items:center;gap:12px;padding:.875rem;
   background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
@@ -770,7 +794,7 @@ async function loadMyTrips(){
              vehicle_model, vehicle_year, vehicle_color, vehicle_capacity, vehicle_type,
              miles_start, miles_end, started_at, completed_at,
              origin_lat, origin_lng, dest_lat, dest_lng, dest_address, parent_log_id,
-             from_job_id, to_job_id, driver_name`)
+             from_job_id, to_job_id, driver_name, planned_route`)
     .eq('driver_id', currentUser.id)
     .gte('started_at', localStart.toISOString())
     .lt('started_at', localEnd.toISOString())
@@ -863,7 +887,8 @@ async function loadMyTrips(){
         ${[ts.city,ts.state].filter(Boolean).length ? `<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${[ts.city,ts.state].filter(Boolean).join(', ')}</div>` : ''}
         ${log.vehicle_plate ? `<div class="job-meta-item"><i class="ti ti-car"></i> ${log.vehicle_plate}${log.vehicle_make?' · '+log.vehicle_make:''}</div>` : ''}
         ${started ? `<div class="job-meta-item"><i class="ti ti-clock"></i> Departed ${started}${completed?' · Arrived '+completed:''}</div>` : ''}
-        ${miles ? `<div class="job-meta-item"><i class="ti ti-route"></i> ${miles}</div>` : ''}
+        ${miles ? `<div class="job-meta-item"><i class="ti ti-route"></i> ${miles} actual</div>` : ''}
+        ${log.planned_route?.distance_miles ? `<div class="job-meta-item" style="color:#7eb8f7"><i class="ti ti-map-2"></i> ${fmtMiles(log.planned_route.distance_miles)} planned · ${log.planned_route.duration_text||fmtDuration(log.planned_route.duration_seconds)}</div>` : ''}
       </div>
       <div class="job-divider"></div>
       <div class="job-footer">
@@ -1075,6 +1100,8 @@ async function _resumeActiveTrip(log){
 
   // Resume active trip screen
   showTripActive(log);
+  // Restore planned route summary if already fetched
+  if(log.planned_route) setTimeout(()=>updatePlannedRouteSummary(log.planned_route), 300);
 }
 
 // ── Read-only completed trip summary ─────────────────────────────────────────
@@ -1090,6 +1117,67 @@ const resetSummaryBtn =
   '<button class="btn btn-danger btn-sm" onclick="fullTestCleanup()">' +
   '<i class="ti ti-database-x"></i> Full test cleanup (all my trips)' +
   '</button></div>';
+
+// ── Build planned vs actual comparison table for trip summary ─────────────────
+function _buildRouteCompare(log){
+  const pr = log.planned_route;
+  if(!pr) return ''; // no planned route stored — skip silently
+
+  const plannedMi  = pr.distance_miles;
+  const plannedDur = pr.duration_seconds;
+  const actualMi   = (log.miles_end && log.miles_start)
+    ? (log.miles_end - log.miles_start) : null;
+  const actualDurSec = (log.started_at && log.completed_at)
+    ? Math.round((new Date(log.completed_at)-new Date(log.started_at))/1000) : null;
+
+  // Flag over-mileage: actual > planned by >10%
+  const miOver = actualMi && plannedMi && actualMi > plannedMi * 1.1;
+  const durOver = actualDurSec && plannedDur && actualDurSec > plannedDur * 1.15;
+
+  return `
+    <div style="padding:.75rem 0 .25rem">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+        letter-spacing:.06em;color:var(--text3);margin-bottom:.5rem;
+        display:flex;align-items:center;gap:6px">
+        <i class="ti ti-route" style="font-size:11px"></i>
+        Planned vs Actual
+      </div>
+      <table class="route-compare">
+        <thead>
+          <tr>
+            <th></th>
+            <th><i class="ti ti-map-2" style="color:#7eb8f7;font-size:11px"></i> Google Planned</th>
+            <th><i class="ti ti-gps" style="color:#6AB34F;font-size:11px"></i> Actual</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Distance</td>
+            <td class="val-planned">${fmtMiles(plannedMi)}</td>
+            <td class="${miOver?'val-over':'val-actual'}">${actualMi!=null?fmtMiles(actualMi):'—'}${miOver?' <i class="ti ti-alert-triangle" style="font-size:10px"></i>':''}</td>
+          </tr>
+          <tr>
+            <td>Duration</td>
+            <td class="val-planned">${fmtDuration(plannedDur)}</td>
+            <td class="${durOver?'val-over':'val-actual'}">${actualDurSec?fmtDuration(actualDurSec):'—'}${durOver?' <i class="ti ti-alert-triangle" style="font-size:10px"></i>':''}</td>
+          </tr>
+          <tr>
+            <td>Departed</td>
+            <td class="val-planned">—</td>
+            <td class="val-actual">${log.started_at?new Date(log.started_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</td>
+          </tr>
+          <tr>
+            <td>Arrived</td>
+            <td class="val-planned">—</td>
+            <td class="val-actual">${log.completed_at?new Date(log.completed_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</td>
+          </tr>
+        </tbody>
+      </table>
+      ${miOver||durOver?`<div style="font-size:11px;color:#f4a93a;margin-top:.5rem;display:flex;align-items:center;gap:5px">
+        <i class="ti ti-alert-triangle"></i> Actual exceeded planned — review route
+      </div>`:''}
+    </div>`;
+}
 
 async function showTripSummary(log){
   _activeTrip = log;
@@ -1130,6 +1218,7 @@ async function showTripSummary(log){
           <div class="info-value" style="color:var(--green)">
             <i class="ti ti-flag-filled"></i> ${log.dest_address||'Travel complete for today'}
           </div></div>` : ''}
+        ${_buildRouteCompare(log)}
       </div>
 
       <!-- Driver & Passenger roster -->
@@ -1148,6 +1237,16 @@ async function showTripSummary(log){
         <div class="card-header" style="margin-bottom:.5rem">
           <div class="card-title">Route Replay</div>
           <span id="ping-summary-label" style="font-size:11px;color:var(--text3)">Loading...</span>
+        </div>
+        <div class="map-legend">
+          <div class="map-legend-item">
+            <div class="map-legend-line" style="background:#1E5FAE"></div>
+            Google planned
+          </div>
+          <div class="map-legend-item">
+            <div class="map-legend-line" style="background:#6AB34F"></div>
+            Actual GPS path
+          </div>
         </div>
         <div id="trip-replay-map">
           <div class="replay-loading">
@@ -1170,7 +1269,7 @@ async function showTripSummary(log){
     </div>`;
 
   // Load and render route after DOM is ready
-  await loadTripReplay(log.id);
+  await loadTripReplay(log.id, log);
   await loadTripRoster(log);
 }
 
@@ -1269,7 +1368,7 @@ async function loadTripRoster(log){
 }
 
 // ── Leaflet trip replay ───────────────────────────────────────────────────────
-async function loadTripReplay(logId){
+async function loadTripReplay(logId, log=null){
   const mapEl   = document.getElementById('trip-replay-map');
   const labelEl = document.getElementById('ping-summary-label');
 
@@ -1341,12 +1440,33 @@ async function loadTripReplay(logId){
     attribution: '© OpenStreetMap'
   }).addTo(lmap);
 
-  // Draw route line
+  // Draw actual GPS route (green)
   const routeLine = L.polyline(coords, {
     color:   '#6AB34F',
     weight:  4,
     opacity: .85,
   }).addTo(lmap);
+
+  // Draw planned route (blue) if stored on the log
+  let plannedLine = null;
+  const plannedPolyline = _activeTrip?.planned_route?.polyline || log?.planned_route?.polyline;
+  if(plannedPolyline){
+    const plannedCoords = decodePolyline(plannedPolyline);
+    if(plannedCoords.length > 1){
+      plannedLine = L.polyline(plannedCoords, {
+        color:     '#1E5FAE',
+        weight:    4,
+        opacity:   .7,
+        dashArray: '8 5',
+      }).addTo(lmap);
+      plannedLine.bindPopup(
+        '<div class="ping-popup"><b style="color:#1E5FAE">Google Planned Route</b><br>' +
+        fmtMiles(_activeTrip?.planned_route?.distance_miles || log?.planned_route?.distance_miles) +
+        ' · ' + fmtDuration(_activeTrip?.planned_route?.duration_seconds || log?.planned_route?.duration_seconds) +
+        '</div>'
+      );
+    }
+  }
   // Add destination pin if coords available — shown before fitBounds so it's included
   const _destLat = _activeTrip?.dest_lat || _outboundLog?.dest_lat || _activeJob?.dest_lat;
   const _destLng = _activeTrip?.dest_lng || _outboundLog?.dest_lng || _activeJob?.dest_lng;
@@ -1367,6 +1487,7 @@ async function loadTripReplay(logId){
   });
 
   let allBounds = routeLine.getBounds();
+  if(plannedLine) allBounds = allBounds.extend(plannedLine.getBounds());
 
   if(_destLat && _destLng){
     const destMarker = L.marker([_destLat, _destLng], {icon:destIcon}).addTo(lmap);
@@ -2113,6 +2234,21 @@ async function confirmPassengers(){
 
     if(logErr) throw logErr;
 
+    // ── Fetch & store planned route (non-blocking) ────────────────────────────
+    // Run in background — don't await so it doesn't delay trip start UI
+    fetchAndStorePlannedRoute(
+      log.id,
+      originLat, originLng,
+      _activeJob.dest_lat, _activeJob.dest_lng,
+      'planned_route'
+    ).then(route=>{
+      if(route){
+        // Cache on the active trip object so showTripActive can display it
+        if(_activeTrip) _activeTrip.planned_route = route;
+        updatePlannedRouteSummary(route);
+      }
+    });
+
     // Insert passengers
     const paxPayload = _passengers.map(p=>({
       travel_log_id: log.id,
@@ -2337,6 +2473,121 @@ function formatDist(meters){
   return miles.toFixed(1) + ' mi';
 }
 
+// ── Format miles directly (no meter conversion) ──────────────────────────────
+function fmtMiles(miles){
+  if(miles == null || isNaN(miles)) return '—';
+  return parseFloat(miles).toFixed(1) + ' mi';
+}
+
+// ── Format seconds as "Xh Ym" or "Ym" ───────────────────────────────────────
+function fmtDuration(secs){
+  if(!secs) return '—';
+  const h = Math.floor(secs/3600);
+  const m = Math.floor((secs%3600)/60);
+  if(h>0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// ── Decode Google encoded polyline → [[lat,lng],...] ─────────────────────────
+function decodePolyline(encoded){
+  if(!encoded) return [];
+  const points=[];
+  let index=0, lat=0, lng=0;
+  while(index<encoded.length){
+    let b,shift=0,result=0;
+    do{ b=encoded.charCodeAt(index++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lat+=(result&1)?~(result>>1):(result>>1);
+    shift=0; result=0;
+    do{ b=encoded.charCodeAt(index++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lng+=(result&1)?~(result>>1):(result>>1);
+    points.push([lat/1e5, lng/1e5]);
+  }
+  return points;
+}
+
+// ── Fetch planned route from Directions API and store as jsonb ────────────────
+// Called at trip start (outbound) and at waypoint depart.
+// Returns the route object or null on failure.
+async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, destLng, tableCol='planned_route'){
+  if(!originLat||!originLng||!destLat||!destLng){
+    console.warn('[plannedRoute] missing coords — skipping');
+    return null;
+  }
+  try{
+    const url = `https://maps.googleapis.com/maps/api/directions/json`
+      + `?origin=${originLat},${originLng}`
+      + `&destination=${destLat},${destLng}`
+      + `&mode=driving`
+      + `&units=imperial`
+      + `&key=${MAPS_KEY}`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if(data.status !== 'OK' || !data.routes?.length){
+      console.warn('[plannedRoute] Directions API:', data.status, 'for', originLat, originLng, '→', destLat, destLng);
+      return null;
+    }
+
+    const route  = data.routes[0];
+    const leg    = route.legs[0];
+    const distM  = leg.distance.value;          // metres
+    const distMi = distM / 1609.34;             // miles
+    const durSec = leg.duration.value;          // seconds
+
+    // Build steps array (instruction + per-step distance in miles)
+    const steps = (leg.steps||[]).map(s=>({
+      instruction: s.html_instructions.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+      distance_miles: +(s.distance.value/1609.34).toFixed(2),
+      duration_seconds: s.duration.value,
+    }));
+
+    const routeObj = {
+      fetched_at:        new Date().toISOString(),
+      origin:            {lat: originLat, lng: originLng},
+      destination:       {lat: destLat,  lng: destLng},
+      distance_miles:    +distMi.toFixed(2),
+      duration_seconds:  durSec,
+      duration_text:     fmtDuration(durSec),
+      polyline:          route.overview_polyline.points,
+      bounds: {
+        northeast: route.bounds.northeast,
+        southwest: route.bounds.southwest,
+      },
+      steps,
+    };
+
+    // Persist to DB — tableCol is 'planned_route' (travel_logs)
+    // or 'planned_segment' (travel_waypoints)
+    const table = tableCol === 'planned_segment' ? 'travel_waypoints' : 'travel_logs';
+    const { error } = await getSupabase()
+      .from(table)
+      .update({ [tableCol]: routeObj })
+      .eq('id', logId);
+
+    if(error) console.warn('[plannedRoute] DB update failed:', error.message);
+    else console.log('[plannedRoute] ✓ stored', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'for', table, logId);
+
+    return routeObj;
+
+  } catch(e){
+    console.warn('[plannedRoute] fetch error:', e.message);
+    return null;
+  }
+}
+
+// ── Update planned route summary bar in active trip UI ───────────────────────
+function updatePlannedRouteSummary(route){
+  if(!route) return;
+  const bar = document.getElementById('route-summary-bar');
+  const miEl = document.getElementById('rs-miles');
+  const duEl = document.getElementById('rs-duration');
+  if(!bar) return;
+  if(miEl) miEl.textContent = fmtMiles(route.distance_miles);
+  if(duEl) duEl.textContent = route.duration_text || fmtDuration(route.duration_seconds);
+  bar.style.display = 'flex';
+}
+
 // ── Geofence debug panel (dev users only) ────────────────────────────────────
 function _updateGeofenceDebug(distM){
   const panel = document.getElementById('geofence-debug-panel');
@@ -2482,6 +2733,15 @@ function showTripActive(log){
           Opens in Maps app — return here when you arrive
         </div>
       </div>
+
+      <!-- Planned route summary — populated async after Directions API call -->
+      <div class="route-summary" id="route-summary-bar" style="display:none">
+        <div class="route-summary-label"><i class="ti ti-route" style="font-size:10px"></i> Google planned route</div>
+        <div class="route-summary-item"><i class="ti ti-map-2" style="font-size:14px"></i> <span id="rs-miles">—</span></div>
+        <div class="route-summary-divider"></div>
+        <div class="route-summary-item"><i class="ti ti-clock" style="font-size:14px"></i> <span id="rs-duration">—</span></div>
+      </div>
+
       <div class="trip-stat-row">
         <div class="trip-stat"><div class="trip-stat-val" id="stat-distance">—</div><div class="trip-stat-lbl">Distance</div></div>
         <div class="trip-stat"><div class="trip-stat-val" id="stat-eta">—</div><div class="trip-stat-lbl">ETA</div></div>
