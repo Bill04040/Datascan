@@ -394,6 +394,27 @@ body{background:#0f1e30;color:#f0f4f8}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Load Google Maps JS SDK dynamically so DirectionsService is available
+// Uses a callback so we know exactly when it's ready
+window._mapsApiReady = false;
+window._mapsApiCallbacks = [];
+window.onGoogleMapsReady = function(){
+  window._mapsApiReady = true;
+  window._mapsApiCallbacks.forEach(cb=>cb());
+  window._mapsApiCallbacks=[];
+};
+(function(){
+  const s=document.createElement('script');
+  s.src='https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M&callback=onGoogleMapsReady&loading=async';
+  s.async=true; s.defer=true;
+  document.head.appendChild(s);
+})();
+function whenMapsReady(cb){
+  if(window._mapsApiReady){ cb(); }
+  else { window._mapsApiCallbacks.push(cb); }
+}
+</script>
 </head>
 <body>
 
@@ -2506,72 +2527,71 @@ function decodePolyline(encoded){
 }
 
 // ── Fetch planned route from Directions API and store as jsonb ────────────────
-// Called at trip start (outbound) and at waypoint depart.
-// Returns the route object or null on failure.
+// Uses google.maps.DirectionsService (browser-authorized, no CORS issues).
+// Called at trip start and at waypoint depart.
 async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, destLng, tableCol='planned_route'){
   if(!originLat||!originLng||!destLat||!destLng){
     console.warn('[plannedRoute] missing coords — skipping');
     return null;
   }
   try{
-    const url = `https://maps.googleapis.com/maps/api/directions/json`
-      + `?origin=${originLat},${originLng}`
-      + `&destination=${destLat},${destLng}`
-      + `&mode=driving`
-      + `&units=imperial`
-      + `&key=${MAPS_KEY}`;
+    // Wait for Maps SDK to be ready (loaded async in <head>)
+    await new Promise((resolve, reject)=>{
+      const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout')), 10000);
+      whenMapsReady(()=>{ clearTimeout(timeout); resolve(); });
+    });
 
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const directionsService = new google.maps.DirectionsService();
+    const result = await directionsService.route({
+      origin:      {lat: originLat, lng: originLng},
+      destination: {lat: destLat,   lng: destLng},
+      travelMode:  google.maps.TravelMode.DRIVING,
+      unitSystem:  google.maps.UnitSystem.IMPERIAL,
+    });
 
-    if(data.status !== 'OK' || !data.routes?.length){
-      console.warn('[plannedRoute] Directions API:', data.status, 'for', originLat, originLng, '→', destLat, destLng);
-      return null;
-    }
-
-    const route  = data.routes[0];
+    // result.routes[0] — DirectionsService throws on failure so no status check needed
+    const route  = result.routes[0];
     const leg    = route.legs[0];
-    const distM  = leg.distance.value;          // metres
-    const distMi = distM / 1609.34;             // miles
-    const durSec = leg.duration.value;          // seconds
+    const distM  = leg.distance.value;       // metres
+    const distMi = distM / 1609.34;          // miles
+    const durSec = leg.duration.value;       // seconds
 
-    // Build steps array (instruction + per-step distance in miles)
+    // Build steps (strip HTML tags from instructions)
     const steps = (leg.steps||[]).map(s=>({
-      instruction: s.html_instructions.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
-      distance_miles: +(s.distance.value/1609.34).toFixed(2),
+      instruction:      s.instructions.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+      distance_miles:   +(s.distance.value/1609.34).toFixed(2),
       duration_seconds: s.duration.value,
     }));
 
     const routeObj = {
-      fetched_at:        new Date().toISOString(),
-      origin:            {lat: originLat, lng: originLng},
-      destination:       {lat: destLat,  lng: destLng},
-      distance_miles:    +distMi.toFixed(2),
-      duration_seconds:  durSec,
-      duration_text:     fmtDuration(durSec),
-      polyline:          route.overview_polyline.points,
+      fetched_at:       new Date().toISOString(),
+      origin:           {lat: originLat, lng: originLng},
+      destination:      {lat: destLat,   lng: destLng},
+      distance_miles:   +distMi.toFixed(2),
+      duration_seconds: durSec,
+      duration_text:    fmtDuration(durSec),
+      polyline:         route.overview_polyline,  // already a string in JS SDK
       bounds: {
-        northeast: route.bounds.northeast,
-        southwest: route.bounds.southwest,
+        northeast: {lat: route.bounds.getNorthEast().lat(), lng: route.bounds.getNorthEast().lng()},
+        southwest: {lat: route.bounds.getSouthWest().lat(), lng: route.bounds.getSouthWest().lng()},
       },
       steps,
     };
 
-    // Persist to DB — tableCol is 'planned_route' (travel_logs)
-    // or 'planned_segment' (travel_waypoints)
-    const table = tableCol === 'planned_segment' ? 'travel_waypoints' : 'travel_logs';
-    const { error } = await getSupabase()
+    // Persist to DB
+    const table = tableCol==='planned_segment' ? 'travel_waypoints' : 'travel_logs';
+    const {error} = await getSupabase()
       .from(table)
-      .update({ [tableCol]: routeObj })
+      .update({[tableCol]: routeObj})
       .eq('id', logId);
 
     if(error) console.warn('[plannedRoute] DB update failed:', error.message);
-    else console.log('[plannedRoute] ✓ stored', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'for', table, logId);
+    else console.log('[plannedRoute] ✓', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'stored for', table, logId);
 
     return routeObj;
 
   } catch(e){
-    console.warn('[plannedRoute] fetch error:', e.message);
+    console.warn('[plannedRoute] error:', e.message);
     return null;
   }
 }
