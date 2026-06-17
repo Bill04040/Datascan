@@ -864,11 +864,17 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <div class="field-group"><label>City <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-city" placeholder="City" oninput="checkSubmitReady();onFormChange()"/></div>
     <div class="field-group"><label>State <span style="color:var(--danger-text)">*</span></label><input type="text" id="ji-state" placeholder="AL" maxlength="2" style="text-transform:uppercase" oninput="checkSubmitReady();onFormChange()"/></div>
   </div>
-  <!-- Address + dev coords — visible to test users only -->
-  <div id="ji-address-row" style="display:none">
-    <div class="field-group" style="margin-top:.5rem">
-      <label>Street address <span style="font-size:11px;color:var(--text3);font-weight:400">(improves GPS accuracy)</span></label>
-      <input type="text" id="ji-address" placeholder="e.g. 1234 Main St" oninput="onFormChange()"/>
+  <!-- Address — all users, optional, feeds geocoder for travel log lat/lon -->
+  <div id="ji-address-row">
+    <div class="field-group" style="margin-top:.25rem">
+      <label>
+        Store street address
+        <span style="font-size:11px;color:var(--text3);font-weight:400"> — optional · improves travel log GPS accuracy</span>
+        <span id="ji-geocode-status" style="font-size:10px;font-weight:700;margin-left:8px;display:none"></span>
+      </label>
+      <input type="text" id="ji-address" placeholder="e.g. 1234 Main St"
+        oninput="onFormChange()"
+        onblur="onAddressBlur()"/>
     </div>
   </div>
   <div id="ji-coords-row" style="display:none;margin-top:.5rem">
@@ -1398,7 +1404,7 @@ function completeSignIn(){
   const _isDebugUser = _debugEmails.some(e=>_userEmail===e.toLowerCase());
   const addrRow    = document.getElementById('ji-address-row');
   const debugPanel = document.getElementById('dev-debug-panel');
-  if(addrRow)    addrRow.style.display    = _isTestUser  ? '' : 'none';
+  if(addrRow)    addrRow.style.display    = ''; // visible to all users
   if(debugPanel) debugPanel.style.display = _isDebugUser ? '' : 'none';
 
   const supEl = document.getElementById('ji-supervisor');
@@ -3565,6 +3571,122 @@ async function geocodeAddress(address){
   }
 }
 
+function setGeocodeStatus(state, formattedAddr=''){
+  const el = document.getElementById('ji-geocode-status');
+  if(!el) return;
+  if(state==='loading'){
+    el.style.display='inline';
+    el.style.color='var(--text2)';
+    el.textContent='⟳ Locating…';
+  } else if(state==='ok'){
+    el.style.display='inline';
+    el.style.color='var(--success-text,#6abf3a)';
+    el.textContent='✓ ' + (formattedAddr || 'Located');
+  } else if(state==='warn'){
+    el.style.display='inline';
+    el.style.color='var(--warn-text,#f4a93a)';
+    el.textContent='⚠ Address not found — using city/state';
+  } else if(state==='err'){
+    el.style.display='inline';
+    el.style.color='var(--danger-text,#f87171)';
+    el.textContent='✗ Geocode failed';
+  } else {
+    el.style.display='none';
+    el.textContent='';
+  }
+}
+
+// Modal geocode status helper
+function ntmSetGeocodeStatus(state, formattedAddr=''){
+  const el = document.getElementById('ntm-geocode-status');
+  if(!el) return;
+  if(state==='loading'){
+    el.style.display='inline'; el.style.color='var(--text2)';
+    el.textContent='⟳ Locating…';
+  } else if(state==='ok'){
+    el.style.display='inline'; el.style.color='var(--success-text,#6abf3a)';
+    el.textContent='✓ ' + (formattedAddr||'Located');
+  } else if(state==='warn'){
+    el.style.display='inline'; el.style.color='var(--warn-text,#f4a93a)';
+    el.textContent='⚠ Address not found — will use city/state';
+  } else if(state==='err'){
+    el.style.display='inline'; el.style.color='var(--danger-text,#f87171)';
+    el.textContent='✗ Geocode failed';
+  } else {
+    el.style.display='none'; el.textContent='';
+  }
+}
+
+// Live geocode preview when user leaves the address field in the New Timesheet modal
+let _ntmAddrTimer = null;
+async function ntmAddressBlur(){
+  const addr  = document.getElementById('ntm-address')?.value.trim()||'';
+  const city  = document.getElementById('ntm-city')?.value.trim()||'';
+  const state = document.getElementById('ntm-state')?.value.trim()||'';
+  if(!addr){ ntmSetGeocodeStatus(''); return; }
+  if(!city||!state){
+    ntmSetGeocodeStatus('warn','Enter city & state to validate address');
+    return;
+  }
+  clearTimeout(_ntmAddrTimer);
+  _ntmAddrTimer = setTimeout(async ()=>{
+    ntmSetGeocodeStatus('loading');
+    const addrStr = [addr, city, state].join(', ');
+    try{
+      const url  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+        + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
+      const data = await (await fetch(url)).json();
+      if(data.status==='OK' && data.results[0]){
+        ntmSetGeocodeStatus('ok', data.results[0].formatted_address);
+        // Cache result so _confirmJobInfo skips a second API call
+        window._ntmGeocodeCache = {
+          lat:     data.results[0].geometry.location.lat,
+          lng:     data.results[0].geometry.location.lng,
+          address: data.results[0].formatted_address,
+          confidence: data.results[0].geometry.location_type||null,
+          forAddr: addrStr,
+        };
+      } else {
+        ntmSetGeocodeStatus('warn');
+        window._ntmGeocodeCache = null;
+      }
+    } catch(e){
+      ntmSetGeocodeStatus('err');
+      window._ntmGeocodeCache = null;
+    }
+  }, 400);
+}
+let _addrBlurTimer = null;
+async function onAddressBlur(){
+  const addr  = document.getElementById('ji-address')?.value.trim()||'';
+  const city  = document.getElementById('ji-city')?.value.trim()||'';
+  const state = document.getElementById('ji-state')?.value.trim()||'';
+  if(!addr || !city || !state){ setGeocodeStatus(''); return; }
+  clearTimeout(_addrBlurTimer);
+  _addrBlurTimer = setTimeout(async ()=>{
+    setGeocodeStatus('loading');
+    const addrStr = [addr, city, state].join(', ');
+    try{
+      const url  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+        + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
+      const data = await (await fetch(url)).json();
+      if(data.status==='OK' && data.results[0]){
+        const loc = data.results[0].geometry.location;
+        setGeocodeStatus('ok', data.results[0].formatted_address);
+        // Cache in dev fields so save skips a second API call
+        const latEl  = document.getElementById('ji-dest-lat');
+        const lngEl  = document.getElementById('ji-dest-lng');
+        const addrEl = document.getElementById('ji-dest-addr');
+        if(latEl)  latEl.value  = loc.lat;
+        if(lngEl)  lngEl.value  = loc.lng;
+        if(addrEl) addrEl.value = data.results[0].formatted_address;
+      } else {
+        setGeocodeStatus('warn');
+      }
+    } catch(e){ setGeocodeStatus('err'); }
+  }, 400);
+}
+
 
 // ════════════════════════════════════════════════════════════
 // NEW TIMESHEET / MY SUBMISSIONS / SAVE & SUBMIT
@@ -3840,9 +3962,6 @@ function _openJobInfoModal(){
     String(today.getMonth()+1).padStart(2,'0')+'-'+
     String(today.getDate()).padStart(2,'0');
 
-  const userEmail = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  const isDevUser = ['supervisor@datascan.com'].includes(userEmail);
-
   openWizModal('Job Information', `
     <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
       Enter the required store details to continue.
@@ -3874,10 +3993,15 @@ function _openJobInfoModal(){
           style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"/>
       </div>
     </div>
-    ${isDevUser ? `<div class="wiz-modal-field">
-      <label style="color:var(--amber)">Street address <span style="font-size:11px;font-weight:400;color:var(--text3)">(improves GPS accuracy)</span></label>
-      <input type="text" id="ntm-address" placeholder="e.g. 1234 Main St"/>
-    </div>` : ''}
+    <div class="wiz-modal-field">
+      <label>
+        Store street address
+        <span style="font-size:11px;font-weight:400;color:var(--text3)"> — optional · improves travel log GPS accuracy</span>
+        <span id="ntm-geocode-status" style="font-size:10px;font-weight:700;margin-left:6px;display:none"></span>
+      </label>
+      <input type="text" id="ntm-address" placeholder="e.g. 1234 Main St"
+        onblur="ntmAddressBlur()"/>
+    </div>
     <div id="ntm-err" style="color:var(--danger-text);font-size:12px;min-height:18px;margin-top:.25rem"></div>
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
       <button class="wiz-btn" onclick="_cancelNewTimesheet()" style="flex:1">
@@ -3932,26 +4056,45 @@ async function _confirmJobInfo(){
   if(errEl) errEl.textContent = '';
   if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Saving...'; }
 
-  // Geocode (non-blocking — continues if it fails)
+  // Geocode — use cached result from blur preview if address matches, else fetch fresh
   let destLat=null, destLng=null, destAddress=null, destGeoConfidence=null;
   try{
     const addrStr = address
       ? [address,city,state].join(', ')
       : [customer,store?'Store '+store:'',city,state].filter(Boolean).join(', ');
-    const geoUrl  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
-      + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
-    const geoResp = await fetch(geoUrl);
-    const geoData = await geoResp.json();
-    if(geoData.status === 'OK' && geoData.results[0]){
-      destLat           = geoData.results[0].geometry.location.lat;
-      destLng           = geoData.results[0].geometry.location.lng;
-      destAddress       = geoData.results[0].formatted_address;
-      destGeoConfidence = geoData.results[0].geometry.location_type || null;
-      console.log('[geocode] ✓', destLat, destLng, destAddress, 'confidence:', destGeoConfidence);
+
+    const cache = window._ntmGeocodeCache;
+    if(cache && cache.forAddr === addrStr){
+      // Use the cached result from the blur preview — no extra API call
+      destLat           = cache.lat;
+      destLng           = cache.lng;
+      destAddress       = cache.address;
+      destGeoConfidence = cache.confidence;
+      console.log('[geocode] ✓ using cached result:', destLat, destLng);
     } else {
-      console.warn('[geocode] status:', geoData.status, 'for:', addrStr);
+      // No cache or address changed — fetch fresh
+      ntmSetGeocodeStatus('loading');
+      const geoUrl  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+        + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
+      const geoResp = await fetch(geoUrl);
+      const geoData = await geoResp.json();
+      if(geoData.status === 'OK' && geoData.results[0]){
+        destLat           = geoData.results[0].geometry.location.lat;
+        destLng           = geoData.results[0].geometry.location.lng;
+        destAddress       = geoData.results[0].formatted_address;
+        destGeoConfidence = geoData.results[0].geometry.location_type || null;
+        ntmSetGeocodeStatus('ok', destAddress);
+        console.log('[geocode] ✓', destLat, destLng, destAddress);
+      } else {
+        ntmSetGeocodeStatus('warn');
+        console.warn('[geocode] status:', geoData.status, 'for:', addrStr);
+      }
     }
-  } catch(ge){ console.warn('[geocode]', ge.message); }
+    window._ntmGeocodeCache = null; // clear after use
+  } catch(ge){
+    ntmSetGeocodeStatus('err');
+    console.warn('[geocode]', ge.message);
+  }
 
   // UPDATE the skeleton record with real data
   console.log('[confirmJobInfo] updating id:', currentTimesheetId, {supervisor,jobDate,customer,store,city,state});
@@ -3985,6 +4128,10 @@ async function _confirmJobInfo(){
     sv('ji-store',      store);
     sv('ji-city',       city);
     sv('ji-state',      state);
+    sv('ji-address',    address);
+    // Reflect geocode result in the main form status indicator
+    if(destLat && destAddress) setGeocodeStatus('ok', destAddress);
+    else if(address)           setGeocodeStatus('warn');
 
   } catch(e){
     console.error('[confirmJobInfo] UPDATE failed:', e.message, e);
@@ -4422,14 +4569,20 @@ async function saveTimesheet(statusVal, silent=false){
       console.log('[geocode] using manual coords:', _manualLat, _manualLng);
     }
 
+    // Force re-geocode if street address is present but lat not yet stored
+    const _streetAddr = document.getElementById('ji-address')?.value.trim()||'';
+    const forceGeocode = !!_streetAddr && !tsRecord.dest_lat;
+
     // Geocode using Maps JS API Geocoder (browser-authorized, no CORS issues)
-    if(_city && _state && !currentTimesheetId && !tsRecord.dest_lat){
+    // Fires on new timesheets OR when address is provided but lat not yet set
+    if(_city && _state && (!tsRecord.dest_lat || forceGeocode)){
       try{
         const streetAddr = document.getElementById('ji-address')?.value.trim()||'';
         const addrStr = streetAddr
           ? [streetAddr, _city, _state].filter(Boolean).join(', ')
           : [_client, _store?'Store '+_store:'', _city, _state].filter(Boolean).join(', ');
 
+        setGeocodeStatus('loading');
         const geoUrl2  = 'https://maps.googleapis.com/maps/api/geocode/json?address='
           + encodeURIComponent(addrStr) + '&key=' + GEOCODE_KEY;
         const geoResp2 = await fetch(geoUrl2);
@@ -4441,17 +4594,22 @@ async function saveTimesheet(statusVal, silent=false){
           tsRecord.dest_address = geoData2.results[0].formatted_address;
           tsRecord.dest_geo_confidence = geoData2.results[0].geometry.location_type || null;
           console.log('[geocode] ✓', loc.lat, loc.lng, geoData2.results[0].formatted_address, 'confidence:', tsRecord.dest_geo_confidence);
+          setGeocodeStatus('ok', geoData2.results[0].formatted_address);
           // Populate dev coord fields if visible
           const latEl  = document.getElementById('ji-dest-lat');
           const lngEl  = document.getElementById('ji-dest-lng');
           const addrEl = document.getElementById('ji-dest-addr');
-          if(latEl  && !latEl.value)  latEl.value  = loc.lat;
-          if(lngEl  && !lngEl.value)  lngEl.value  = loc.lng;
+          if(latEl)  latEl.value  = loc.lat;
+          if(lngEl)  lngEl.value  = loc.lng;
           if(addrEl) addrEl.value = geoData2.results[0].formatted_address;
         } else {
           console.warn('[geocode] no results:', geoData2.status, 'for:', addrStr);
+          setGeocodeStatus('warn');
         }
-      } catch(geoErr){ console.warn('[geocode] failed:', geoErr.message); }
+      } catch(geoErr){
+        console.warn('[geocode] failed:', geoErr.message);
+        setGeocodeStatus('err');
+      }
     }
 
     // Safety guard: silent autosave with no ID means mid-navigation — skip.
