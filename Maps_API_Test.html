@@ -112,6 +112,8 @@ h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
           <div class="result-row"><div class="result-label">Lng</div><div class="result-val" id="g1-lng">—</div></div>
           <div class="result-row"><div class="result-label">Confidence</div><div class="result-val" id="g1-conf">—</div></div>
           <div class="result-row"><div class="result-label">Status</div><div class="result-val" id="g1-status">—</div></div>
+          <button class="json-toggle" onclick="toggleBox('g1-json')" style="margin-top:.5rem">Show raw JSON</button>
+          <div class="json-box" id="g1-json"></div>
         </div>
         <div class="result-card">
           <div class="result-card-title geo">Destination</div>
@@ -120,6 +122,8 @@ h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
           <div class="result-row"><div class="result-label">Lng</div><div class="result-val" id="g2-lng">—</div></div>
           <div class="result-row"><div class="result-label">Confidence</div><div class="result-val" id="g2-conf">—</div></div>
           <div class="result-row"><div class="result-label">Status</div><div class="result-val" id="g2-status">—</div></div>
+          <button class="json-toggle" onclick="toggleBox('g2-json')" style="margin-top:.5rem">Show raw JSON</button>
+          <div class="json-box" id="g2-json"></div>
         </div>
       </div>
     </div>
@@ -151,7 +155,12 @@ h1{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
       <div id="map"></div>
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:.5rem">Turn-by-turn</div>
       <div id="steps-wrap"></div>
-      <button class="json-toggle" onclick="toggleJson()" style="margin-top:.75rem">Show raw JSON</button>
+      <!-- Directions error detail — shown when API call fails -->
+      <div id="dir-error-wrap" style="display:none;margin-bottom:.75rem">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--red);margin-bottom:.35rem">Directions Error Detail</div>
+        <div class="json-box show" id="dir-error-json" style="border-color:rgba(248,113,113,.3)"></div>
+      </div>
+      <button class="json-toggle" onclick="toggleBox('json-box')" style="margin-top:.75rem">Show raw Directions JSON</button>
       <div class="json-box" id="json-box"></div>
     </div>
 
@@ -249,15 +258,221 @@ function decodePolyline(enc){
   return pts;
 }
 
-// ── Geocode via fetch (Geocoding API allows CORS) ─────────────────────────────
-async function geocode(address){
+// ── Geocode via fetch ─────────────────────────────────────────────────────────
+async function geocode(address, key){
+  const params = {address, key:'[GEOCODE_KEY]'};
   const url = 'https://maps.googleapis.com/maps/api/geocode/json'
-    + '?address=' + encodeURIComponent(address) + '&key=' + GEOCODE_KEY;
-  const resp = await fetch(url);
-  const data = await resp.json();
-  if(data.status!=='OK'||!data.results?.length) return {ok:false,status:data.status||'NO_RESULTS'};
-  const r=data.results[0], loc=r.geometry.location;
-  return {ok:true,status:'OK',formatted:r.formatted_address,lat:loc.lat,lng:loc.lng,locType:r.geometry.location_type};
+    + '?address=' + encodeURIComponent(address) + '&key=' + key;
+  let raw, fetchErr=null;
+  try{
+    const resp = await fetch(url);
+    raw = await resp.json();
+  } catch(e){
+    fetchErr = e.message;
+    raw = {error: 'FETCH_FAILED', message: e.message};
+  }
+  const result = raw?.results?.[0];
+  const loc    = result?.geometry?.location;
+  return {
+    ok:        !fetchErr && raw?.status==='OK' && !!result,
+    status:    fetchErr ? 'FETCH_ERROR' : (raw?.status||'NO_RESULTS'),
+    formatted: result?.formatted_address,
+    lat:       loc?.lat,
+    lng:       loc?.lng,
+    locType:   result?.geometry?.location_type,
+    debug: {
+      request:  { url: url.replace(key,'[KEY_HIDDEN]'), params },
+      response: raw,
+    },
+  };
+}
+
+// ── Directions via Maps JS SDK ────────────────────────────────────────────────
+async function getDirections(originLat, originLng, destLat, destLng){
+  const requestParams = {
+    origin:      {lat:originLat, lng:originLng},
+    destination: {lat:destLat,   lng:destLng},
+    travelMode:  'DRIVING',
+    unitSystem:  'IMPERIAL',
+    sdk:         'google.maps.DirectionsService',
+    key:         '[MAPS_KEY]',
+  };
+
+  // Bail immediately if SDK auth already failed
+  if(window._mapsError){
+    return {
+      ok:false,
+      status:'SDK_AUTH_ERROR',
+      debug:{
+        request:  requestParams,
+        response: {error: window._mapsError,
+          suggestion:'Add https://bill04040.github.io/* and https://bill04040.github.io/Datascan/* to Maps API key allowed referrers in Google Cloud Console'},
+      },
+    };
+  }
+
+  // Wait for SDK
+  let sdkErr = null;
+  await new Promise((resolve, reject)=>{
+    if(window._mapsReady) return resolve();
+    const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout after 12s')), 12000);
+    window._mapsQueue.push((err)=>{ clearTimeout(timeout); err?reject(new Error(err)):resolve(); });
+  }).catch(e=>{ sdkErr=e.message; });
+
+  if(sdkErr){
+    return {
+      ok:false, status:'SDK_ERROR',
+      debug:{ request:requestParams, response:{error:sdkErr} },
+    };
+  }
+
+  const svc = new google.maps.DirectionsService();
+  let result, dirErr=null;
+  try{
+    result = await svc.route({
+      origin:      {lat:originLat, lng:originLng},
+      destination: {lat:destLat,   lng:destLng},
+      travelMode:  google.maps.TravelMode.DRIVING,
+      unitSystem:  google.maps.UnitSystem.IMPERIAL,
+    });
+  } catch(e){
+    dirErr = e.code||e.message||'DIRECTIONS_ERROR';
+    return {
+      ok:false, status:dirErr,
+      debug:{ request:requestParams,
+        response:{error:dirErr, raw_error:String(e)} },
+    };
+  }
+
+  const route = result.routes[0];
+  const leg   = route.legs[0];
+  const steps = (leg.steps||[]).map(s=>({
+    instruction: (s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+    distMeters:  s.distance.value,
+    durSecs:     s.duration.value,
+  }));
+  const polyline = route.overview_polyline;
+
+  return {
+    ok:true, status:'OK',
+    distMeters: leg.distance.value,
+    durSecs:    leg.duration.value,
+    polyline,
+    bounds:{
+      ne:{lat:route.bounds.getNorthEast().lat(), lng:route.bounds.getNorthEast().lng()},
+      sw:{lat:route.bounds.getSouthWest().lat(), lng:route.bounds.getSouthWest().lng()},
+    },
+    steps,
+    debug:{
+      request: requestParams,
+      response:{
+        status:         'OK',
+        distance_text:  leg.distance.text,
+        distance_meters:leg.distance.value,
+        duration_text:  leg.duration.text,
+        duration_secs:  leg.duration.value,
+        polyline_length:polyline?.length||0,
+        polyline_sample:polyline?.substring(0,60)+'…',
+        bounds:{
+          northeast:{lat:route.bounds.getNorthEast().lat(), lng:route.bounds.getNorthEast().lng()},
+          southwest:{lat:route.bounds.getSouthWest().lat(), lng:route.bounds.getSouthWest().lng()},
+        },
+        steps_count: steps.length,
+        steps: steps.map(s=>({
+          instruction:    s.instruction,
+          distance_miles: +(s.distMeters/1609.34).toFixed(2),
+          duration_secs:  s.durSecs,
+        })),
+      },
+    },
+  };
+}
+
+// ── Main test runner ──────────────────────────────────────────────────────────
+async function runTest(){
+  const addr1 = document.getElementById('addr1').value.trim();
+  const addr2 = document.getElementById('addr2').value.trim();
+  if(!addr1||!addr2){ setStatus('err','Enter both addresses'); return; }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled=true; btn.textContent='Running…';
+  document.getElementById('results').style.display='none';
+  document.getElementById('dir-error-wrap').style.display='none';
+
+  try{
+    // ── Step 1: Geocode origin ──────────────────────────────────────────────
+    setStatus('pending','Step 1 of 3 — Geocoding origin…');
+    const geo1 = await geocode(addr1, GEOCODE_KEY);
+    sv('g1-formatted', geo1.ok?geo1.formatted:'Failed', geo1.ok?'good':'bad');
+    sv('g1-lat',       geo1.ok?geo1.lat.toFixed(6):'—',  geo1.ok?'good':'');
+    sv('g1-lng',       geo1.ok?geo1.lng.toFixed(6):'—',  geo1.ok?'good':'');
+    sv('g1-conf',      geo1.ok?confLabel(geo1.locType):'—', geo1.ok?confCls(geo1.locType):'bad');
+    sv('g1-status',    geo1.status, geo1.ok?'good':'bad');
+    setJson('g1-json', geo1.debug);
+    if(!geo1.ok) throw new Error('Geocode failed for origin: '+geo1.status);
+
+    // ── Step 2: Geocode destination ─────────────────────────────────────────
+    setStatus('pending','Step 2 of 3 — Geocoding destination…');
+    const geo2 = await geocode(addr2, GEOCODE_KEY);
+    sv('g2-formatted', geo2.ok?geo2.formatted:'Failed', geo2.ok?'good':'bad');
+    sv('g2-lat',       geo2.ok?geo2.lat.toFixed(6):'—',  geo2.ok?'good':'');
+    sv('g2-lng',       geo2.ok?geo2.lng.toFixed(6):'—',  geo2.ok?'good':'');
+    sv('g2-conf',      geo2.ok?confLabel(geo2.locType):'—', geo2.ok?confCls(geo2.locType):'bad');
+    sv('g2-status',    geo2.status, geo2.ok?'good':'bad');
+    setJson('g2-json', geo2.debug);
+    if(!geo2.ok) throw new Error('Geocode failed for destination: '+geo2.status);
+
+    // Show geocode results now — don't wait for directions
+    document.getElementById('results').style.display='block';
+
+    // ── Step 3: Directions ──────────────────────────────────────────────────
+    setStatus('pending','Step 3 of 3 — Getting directions (Maps JS SDK)…');
+    const dir = await getDirections(geo1.lat, geo1.lng, geo2.lat, geo2.lng);
+
+    sv('d-status',    dir.status, dir.ok?'good':'bad');
+    sv('d-meters',    dir.ok?dir.distMeters.toLocaleString()+' m':'—');
+    sv('d-seconds',   dir.ok?dir.durSecs+' s':'—');
+    sv('d-polylen',   dir.ok?(dir.polyline?.length||0)+' chars':'—', dir.ok?'good':'');
+    sv('d-polysample',dir.ok&&dir.polyline?dir.polyline.substring(0,30)+'…':'—');
+
+    // Always show directions debug JSON — success or failure
+    setJson('json-box', dir.debug);
+
+    if(dir.ok){
+      document.getElementById('d-miles').textContent    = fmtMiles(dir.distMeters);
+      document.getElementById('d-duration').textContent = fmtDur(dir.durSecs);
+      document.getElementById('d-steps').textContent    = dir.steps.length;
+      sv('d-ne-lat', dir.bounds.ne.lat.toFixed(6));
+      sv('d-ne-lng', dir.bounds.ne.lng.toFixed(6));
+      sv('d-sw-lat', dir.bounds.sw.lat.toFixed(6));
+      sv('d-sw-lng', dir.bounds.sw.lng.toFixed(6));
+
+      document.getElementById('steps-wrap').innerHTML = dir.steps.map((s,i)=>`
+        <div class="step-item">
+          <div class="step-num">${i+1}</div>
+          <div>
+            <div class="step-text">${s.instruction}</div>
+            <div class="step-dist">${fmtMiles(s.distMeters)} · ${fmtDur(s.durSecs)}</div>
+          </div>
+        </div>`).join('');
+
+      renderMap(geo1, geo2, dir.polyline);
+      setStatus('ok','All APIs OK — '+fmtMiles(dir.distMeters)+' · '+fmtDur(dir.durSecs));
+    } else {
+      // Show error detail box
+      const errWrap = document.getElementById('dir-error-wrap');
+      const errBox  = document.getElementById('dir-error-json');
+      errBox.textContent = JSON.stringify(dir.debug, null, 2);
+      errWrap.style.display='block';
+      setStatus('err','Directions failed: '+dir.status+' — see error detail below');
+    }
+
+  } catch(e){
+    setStatus('err', e.message);
+    document.getElementById('results').style.display='block';
+  } finally {
+    btn.disabled=false; btn.textContent='Run API Test';
+  }
 }
 
 // ── Directions via Maps JS SDK (only browser-side option — no CORS on JSON endpoint) ──
@@ -395,10 +610,24 @@ function renderMap(geo1, geo2, polyline){
   _map.fitBounds(line.getBounds(),{padding:[20,20]});
 }
 
-function toggleJson(){
-  const box = document.getElementById('json-box');
+function setJson(id, data){
+  const el = document.getElementById(id);
+  if(el) el.textContent = JSON.stringify(data, null, 2);
+}
+
+function toggleBox(id){
+  const box = document.getElementById(id);
+  if(!box) return;
   box.classList.toggle('show');
-  document.querySelector('.json-toggle').textContent = box.classList.contains('show') ? 'Hide raw JSON' : 'Show raw JSON';
+  // Update the button label
+  const btn = box.previousElementSibling;
+  if(btn && btn.classList.contains('json-toggle')){
+    btn.textContent = box.classList.contains('show') ? 'Hide JSON' : 'Show raw JSON';
+  }
+}
+
+function toggleJson(){
+  toggleBox('json-box');
 }
 
 document.addEventListener('keydown',e=>{
