@@ -2531,15 +2531,18 @@ function decodePolyline(encoded){
 // Called at trip start and at waypoint depart.
 async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, destLng, tableCol='planned_route'){
   if(!originLat||!originLng||!destLat||!destLng){
-    console.warn('[plannedRoute] missing coords — skipping');
+    console.warn('[plannedRoute] missing coords — skipping', {originLat,originLng,destLat,destLng});
     return null;
   }
+  console.log('[plannedRoute] starting for log', logId, {originLat,originLng,destLat,destLng});
   try{
     // Wait for Maps SDK to be ready (loaded async in <head>)
+    console.log('[plannedRoute] waiting for Maps SDK…');
     await new Promise((resolve, reject)=>{
-      const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout')), 10000);
+      const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout after 10s')), 10000);
       whenMapsReady(()=>{ clearTimeout(timeout); resolve(); });
     });
+    console.log('[plannedRoute] Maps SDK ready — calling DirectionsService');
 
     const directionsService = new google.maps.DirectionsService();
     const result = await directionsService.route({
@@ -2548,6 +2551,7 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
       travelMode:  google.maps.TravelMode.DRIVING,
       unitSystem:  google.maps.UnitSystem.IMPERIAL,
     });
+    console.log('[plannedRoute] DirectionsService response status:', result.status||'OK');
 
     // result.routes[0] — DirectionsService throws on failure so no status check needed
     const route  = result.routes[0];
@@ -2557,8 +2561,9 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
     const durSec = leg.duration.value;       // seconds
 
     // Build steps (strip HTML tags from instructions)
+    // JS SDK uses html_instructions (same as JSON API)
     const steps = (leg.steps||[]).map(s=>({
-      instruction:      s.instructions.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+      instruction:      (s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
       distance_miles:   +(s.distance.value/1609.34).toFixed(2),
       duration_seconds: s.duration.value,
     }));
