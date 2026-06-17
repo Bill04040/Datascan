@@ -330,27 +330,8 @@ h1{font-size:18px;font-weight:800;color:#fff;letter-spacing:.04em;margin-bottom:
 </div><!-- /page -->
 
 <script>
-const MAPS_KEY     = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
-const GEOCODE_KEY  = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI';
-
-// ── Load Maps JS SDK ──────────────────────────────────────────────────────────
-window._mapsReady = false;
-window._mapsQueue = [];
-window.onMapsReady = function(){
-  window._mapsReady = true;
-  window._mapsQueue.forEach(cb=>cb());
-  window._mapsQueue = [];
-};
-(function(){
-  const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key='+MAPS_KEY+'&callback=onMapsReady&loading=async';
-  s.async = true; s.defer = true;
-  document.head.appendChild(s);
-})();
-function whenMapsReady(cb){
-  if(window._mapsReady) cb();
-  else window._mapsQueue.push(cb);
-}
+const GEOCODE_KEY  = 'AIzaSyAYqPNgPh3jdMyRiO4kUhSUPd3b9GsdnkI'; // Geocoding — unrestricted
+const MAPS_KEY     = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M'; // Directions + Maps JS SDK — restricted to bill04040.github.io
 
 // ── Map instance ──────────────────────────────────────────────────────────────
 let _map = null;
@@ -459,7 +440,8 @@ async function runTest(){
     setStatus('pending','Step 3 of 3 — Fetching directions…');
     const dir = await getDirections(geo1.lat, geo1.lng, geo2.lat, geo2.lng);
 
-    sv('d-status',    dir.status,                                 dir.ok?'good':'bad');
+    sv('d-status',    dir.status + (dir.errorMessage?' — '+dir.errorMessage:''),
+                      dir.ok?'good':'bad');
     sv('d-miles',     dir.ok ? fmtMiles(dir.distMeters) : '—');
     sv('d-duration',  dir.ok ? fmtDur(dir.durSecs)      : '—');
     sv('d-steps',     dir.ok ? dir.steps.length+' steps' : '—');
@@ -548,28 +530,29 @@ async function geocode(address){
   };
 }
 
-// ── Directions via Maps JS SDK DirectionsService (browser-auth, no CORS) ─────
+// ── Directions via Directions API JSON endpoint (fetch — no SDK needed) ───────
 async function getDirections(originLat, originLng, destLat, destLng){
-  // Wait for Maps SDK
-  await new Promise((resolve, reject)=>{
-    const t = setTimeout(()=>reject(new Error('Maps SDK timeout — check API key and network')), 12000);
-    whenMapsReady(()=>{ clearTimeout(t); resolve(); });
-  });
+  const url = 'https://maps.googleapis.com/maps/api/directions/json'
+    + '?origin='      + originLat + ',' + originLng
+    + '&destination=' + destLat   + ',' + destLng
+    + '&mode=driving'
+    + '&units=imperial'
+    + '&key='         + MAPS_KEY;   // Maps key — has bill04040.github.io in allowed referrers
 
-  const svc = new google.maps.DirectionsService();
-  let result;
+  let data;
   try{
-    result = await svc.route({
-      origin:      {lat: originLat, lng: originLng},
-      destination: {lat: destLat,   lng: destLng},
-      travelMode:  google.maps.TravelMode.DRIVING,
-      unitSystem:  google.maps.UnitSystem.IMPERIAL,
-    });
+    const resp = await fetch(url);
+    data = await resp.json();
   } catch(e){
-    return {ok:false, status: e.code||e.message||'UNKNOWN_ERROR'};
+    return {ok:false, status:'FETCH_ERROR: '+e.message};
   }
 
-  const route = result.routes[0];
+  if(data.status !== 'OK' || !data.routes?.length){
+    return {ok:false, status: data.status||'NO_ROUTES',
+      errorMessage: data.error_message||''};
+  }
+
+  const route = data.routes[0];
   const leg   = route.legs[0];
 
   const steps = (leg.steps||[]).map(s=>({
@@ -583,10 +566,10 @@ async function getDirections(originLat, originLng, destLat, destLng){
     status:     'OK',
     distMeters: leg.distance.value,
     durSecs:    leg.duration.value,
-    polyline:   route.overview_polyline,
+    polyline:   route.overview_polyline.points,
     bounds: {
-      ne: {lat: route.bounds.getNorthEast().lat(), lng: route.bounds.getNorthEast().lng()},
-      sw: {lat: route.bounds.getSouthWest().lat(), lng: route.bounds.getSouthWest().lng()},
+      ne: {lat: route.bounds.northeast.lat, lng: route.bounds.northeast.lng},
+      sw: {lat: route.bounds.southwest.lat, lng: route.bounds.southwest.lng},
     },
     steps,
   };
