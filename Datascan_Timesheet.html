@@ -61,6 +61,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .no-break-warning-list.visible{display:block}
 .no-break-warning-list ul{margin:4px 0 0 14px;padding:0}
 .no-break-warning-list li{margin-bottom:2px}
+/* Missing times warning — shown after scan upload */
+.missing-times-warning{margin-top:6px;padding:8px 10px;background:rgba(248,113,113,0.1);border-left:3px solid #f87171;border-radius:0 4px 4px 0;font-size:11.5px;color:#f87171;display:none}
+.missing-times-warning.visible{display:block}
+.missing-times-warning ul{margin:4px 0 0 14px;padding:0}
+.missing-times-warning li{margin-bottom:3px;line-height:1.4}
+.missing-times-warning .mt-block-pill{font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(248,113,113,0.2);margin-left:4px;white-space:nowrap}
 .emp-card.role-supervisor{border-left:4px solid #185fa5;background:var(--info-bg)}
 .emp-card.role-assistant{border-left:4px solid #854f0b;background:var(--warn-bg)}
 .emp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.65rem}
@@ -467,18 +473,6 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .restore-banner.show{display:block}
 .restore-banner p{font-size:13px;margin-bottom:.6rem}
 .restore-banner p strong{color:#6abf3a}
-
-/* ── UAT Announcement banner ─────────────────────────────── */
-.ann-banner{background:#1a2e4a;color:#fff;padding:.85rem 1.1rem;margin-bottom:.75rem;border-radius:var(--radius-lg);border-left:4px solid #6abf3a;display:none}
-.ann-banner.show{display:block}
-.ann-banner-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:.35rem}
-.ann-banner-tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;background:#6abf3a;color:#1a2e4a;text-transform:uppercase;letter-spacing:.04em}
-.ann-banner-meta{font-size:11px;color:rgba(255,255,255,0.55)}
-.ann-banner-msg{font-size:13px;color:#fff;line-height:1.5;white-space:pre-wrap;margin-bottom:.5rem}
-.ann-banner-dismiss{background:rgba(255,255,255,0.12);border:none;cursor:pointer;color:#fff;font-size:12px;font-weight:600;padding:5px 12px;border-radius:var(--radius);font-family:inherit;display:flex;align-items:center;gap:4px}
-.ann-banner-dismiss:active{opacity:.7}
-.ann-banner-nav{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
-.ann-banner-counter{font-size:11px;color:rgba(255,255,255,0.55)}
 .rejection-banner{background:var(--danger-bg);border-left:3px solid var(--danger-border);border-radius:0 var(--radius) var(--radius) 0;padding:.7rem .9rem;font-size:13px;color:var(--danger-text);margin-bottom:1rem;line-height:1.5}
 .rejection-banner strong{font-weight:700}
 .restore-btn-row{display:flex;gap:8px}
@@ -844,26 +838,6 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 <!-- Timesheet form -->
 <div class="wrap" id="main-wrap" style="display:none">
 
-<!-- UAT Announcement banner -->
-<div class="ann-banner" id="ann-banner">
-  <div class="ann-banner-header">
-    <div style="display:flex;align-items:center;gap:6px">
-      <i class="ti ti-speakerphone" style="font-size:15px;color:#6abf3a"></i>
-      <span id="ann-banner-tag" class="ann-banner-tag" style="display:none"></span>
-      <span class="ann-banner-meta" id="ann-banner-meta"></span>
-    </div>
-    <span class="ann-banner-counter" id="ann-banner-counter"></span>
-  </div>
-  <div class="ann-banner-msg" id="ann-banner-msg"></div>
-  <div class="ann-banner-nav">
-    <div style="display:flex;gap:6px">
-      <button class="ann-banner-dismiss" id="ann-banner-prev" onclick="annBannerNav(-1)" style="display:none"><i class="ti ti-chevron-left"></i> Prev</button>
-      <button class="ann-banner-dismiss" id="ann-banner-next" onclick="annBannerNav(1)" style="display:none"><i class="ti ti-chevron-right"></i> Next</button>
-    </div>
-    <button class="ann-banner-dismiss" onclick="dismissAnnBanner()"><i class="ti ti-check"></i> Got it</button>
-  </div>
-</div>
-
 <!-- Restore banner -->
 <div class="restore-banner" id="restore-banner">
   <p><i class="ti ti-history" style="margin-right:4px"></i>You have <strong>unsaved work</strong> from a previous session (<span id="restore-time"></span>). Restore it?</p>
@@ -971,6 +945,10 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   <div class="no-break-warning-list" id="no-break-warning-list">
     <strong><i class="ti ti-alert-triangle" style="margin-right:4px"></i>No break recorded for employees with 8+ consecutive hours:</strong>
     <ul id="no-break-warning-items"></ul>
+  </div>
+  <div class="missing-times-warning" id="missing-times-warning">
+    <strong><i class="ti ti-clock-x" style="margin-right:4px"></i>Missing Out times — submit is blocked until resolved:</strong>
+    <ul id="missing-times-items"></ul>
   </div>
   <div class="autosave-bar" id="autosave-bar"><i class="ti ti-device-floppy"></i> <span id="autosave-text">Not yet saved to server</span></div>
   <div class="submission-status not-submitted" id="submission-status">
@@ -1233,70 +1211,6 @@ function stopFeedbackSubscription(){
   }
 }
 
-// ── UAT Announcements (banner shown to end users) ────────────────────────────
-let _annQueue = [];    // unseen announcements to display
-let _annIndex  = 0;   // current index in queue
-
-async function loadAndShowAnnouncements(){
-  if(!currentUser) return;
-  try{
-    // Fetch all announcements
-    const {data: allAnns, error} = await getSupabase()
-      .from('uat_announcements')
-      .select('id, message, version_tag, posted_by_name, created_at')
-      .order('created_at', {ascending:false})
-      .limit(20);
-    if(error || !allAnns?.length) return;
-
-    // Fetch which ones this user has already seen
-    const {data: seen} = await getSupabase()
-      .from('uat_announcement_seen')
-      .select('announcement_id')
-      .eq('user_id', currentUser.id);
-    const seenIds = new Set((seen||[]).map(s=>s.announcement_id));
-
-    _annQueue = allAnns.filter(a=>!seenIds.has(a.id));
-    if(!_annQueue.length) return;
-    _annIndex = 0;
-    renderAnnBanner();
-  } catch(e){ console.warn('[announcements] load failed:', e.message); }
-}
-
-function renderAnnBanner(){
-  const banner = document.getElementById('ann-banner');
-  if(!banner || !_annQueue.length) return;
-  const a = _annQueue[_annIndex];
-  const when = a.created_at ? new Date(a.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
-  document.getElementById('ann-banner-msg').textContent = a.message || '';
-  const tagEl = document.getElementById('ann-banner-tag');
-  if(a.version_tag){ tagEl.textContent = a.version_tag; tagEl.style.display='inline'; }
-  else { tagEl.style.display='none'; }
-  document.getElementById('ann-banner-meta').textContent = `From ${a.posted_by_name||'Manager'} · ${when}`;
-  const total = _annQueue.length;
-  document.getElementById('ann-banner-counter').textContent = total > 1 ? `${_annIndex+1} of ${total}` : '';
-  document.getElementById('ann-banner-prev').style.display = (_annIndex > 0 && total > 1) ? 'flex' : 'none';
-  document.getElementById('ann-banner-next').style.display = (_annIndex < total-1 && total > 1) ? 'flex' : 'none';
-  banner.classList.add('show');
-}
-
-function annBannerNav(dir){
-  _annIndex = Math.max(0, Math.min(_annQueue.length-1, _annIndex + dir));
-  renderAnnBanner();
-}
-
-async function dismissAnnBanner(){
-  const banner = document.getElementById('ann-banner');
-  if(!banner) return;
-  banner.classList.remove('show');
-  // Mark all queued announcements as seen
-  if(!currentUser || !_annQueue.length) return;
-  try{
-    const rows = _annQueue.map(a=>({ announcement_id: a.id, user_id: currentUser.id }));
-    await getSupabase().from('uat_announcement_seen').upsert(rows, {onConflict:'announcement_id,user_id'});
-    _annQueue = [];
-  } catch(e){ console.warn('[announcements] mark-seen failed:', e.message); }
-}
-
 async function doLogout(){
   await getSupabase().auth.signOut();
   stopTimesheetSubscription();
@@ -1498,9 +1412,6 @@ function completeSignIn(){
   if(fbBtn) fbBtn.style.display = uatEnabled ? 'inline-flex' : 'none';
   if(uatEnabled){ refreshFeedbackBadge(); startFeedbackSubscription(); }
 
-  // Load UAT announcements for all users (not just UAT-enabled)
-  setTimeout(loadAndShowAnnouncements, 1200);
-
   // Load dynamic card types and supervisor PIN
   loadCardTypesAndPin();
 
@@ -1542,6 +1453,7 @@ function handleScanFiles(files){
       if(isPdf){
         // For PDFs: store and check orientation via canvas rendering
         scans.push({scanId,name:file.name,dataUrl,isPdf,orientation:'unknown'});
+        _scanEverUploaded = true;
         renderScans();checkSubmitReady();
         checkPdfOrientation(scanId, dataUrl);
       } else {
@@ -1550,6 +1462,7 @@ function handleScanFiles(files){
         img.onload=()=>{
           const orientation=img.naturalWidth<img.naturalHeight?'portrait':'landscape';
           scans.push({scanId,name:file.name,dataUrl,isPdf,orientation});
+          _scanEverUploaded = true;
           renderScans();checkSubmitReady();
           renderOrientationWarnings();
         };
@@ -1756,6 +1669,64 @@ function checkSubmitReady(){
   // NOTE: onFormChange() intentionally removed — checkSubmitReady is called
   // programmatically (scroll, load, resize) and must NOT trigger autosave.
   // Only actual user input events (oninput/onchange) should set dirty flags.
+  checkMissingTimes();
+}
+
+// ── Missing Out-time diagnostic ───────────────────────────────────────────
+// Runs after scan upload and on every checkSubmitReady call.
+// Shows a red panel listing every employee + block where In is filled
+// but Out is missing (or Out is filled but In is missing).
+// This explains to the user exactly why submit is blocked.
+let _scanEverUploaded = false;
+
+function checkMissingTimes(){
+  const panel     = document.getElementById('missing-times-warning');
+  const itemsList = document.getElementById('missing-times-items');
+  if(!panel||!itemsList) return;
+
+  const issues = [];
+
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid   = parseInt(card.dataset.empId);
+    const blocks = empBlocks[eid]||[];
+
+    // Only check employees who have a name or are the supervisor
+    const isSupervisor = card.classList.contains('role-supervisor');
+    const fnameEl = document.getElementById('fname-'+eid);
+    const hasName = fnameEl && fnameEl.value.trim().length > 0;
+    if(!isSupervisor && !hasName) return;
+
+    // Build display name
+    const lnameEl = card.querySelectorAll('input[type=text]')[1];
+    const name = [fnameEl?.value.trim(), lnameEl?.value.trim()].filter(Boolean).join(' ') || 'Employee';
+
+    blocks.forEach(b=>{
+      const hasIn  = !!(b.inVal  && b.inVal.trim());
+      const hasOut = !!(b.outVal && b.outVal.trim());
+      if(hasIn === hasOut) return; // both filled or both empty — OK
+
+      const ct       = _ct(b.type);
+      const typeLabel = ct ? ct.label : b.type;
+      const missing  = hasIn ? 'missing Out' : 'missing In';
+      const present  = hasIn ? `In: ${fmtEpochMins(toMins(b.inVal))}` : `Out: ${fmtEpochMins(toMins(b.outVal))}`;
+      issues.push({ name, typeLabel, missing, present, isPrimary: b.isPrimary });
+    });
+  });
+
+  if(issues.length && _scanEverUploaded){
+    itemsList.innerHTML = issues.map(i=>
+      `<li>
+        <strong>${i.name}</strong>
+        <span class="mt-block-pill">${i.typeLabel}</span>
+        — ${i.missing}
+        <span style="opacity:.75;font-size:10px;margin-left:4px">(${i.present})</span>
+      </li>`
+    ).join('');
+    panel.classList.add('visible');
+  } else {
+    panel.classList.remove('visible');
+    itemsList.innerHTML = '';
+  }
 }
 
 // ── Time block engine ─────────────────────────────────────────
@@ -4280,10 +4251,9 @@ async function loadDraftTimesheet(tsId){
       } catch(e){ console.warn('[loadDraft] scan restore failed for', sc.file_name, e.message); }
     }
     renderScans();
+    _scanEverUploaded = true;
     checkSubmitReady();
   }
-
-  // ── 8. Validate all employees — populates hours badges and block hr displays ──
   // Must run after all block values are restored so calculations have real data
   document.querySelectorAll('.emp-card').forEach(card => {
     const eid = card.dataset.empId;
