@@ -343,19 +343,29 @@ async function getDirections(originLat,originLng,destLat,destLng){
   try{ await whenMapsReady(); }
   catch(e){ return{ok:false,status:'SDK_ERROR',request,response:{error:e.message}}; }
 
-  // Call DirectionsService
+  // Call DirectionsService using callback pattern (more reliable on mobile)
   let result;
   try{
     const svc=new google.maps.DirectionsService();
-    result=await svc.route({
-      origin:{lat:originLat,lng:originLng},
-      destination:{lat:destLat,lng:destLng},
-      travelMode:google.maps.TravelMode.DRIVING,
-      unitSystem:google.maps.UnitSystem.IMPERIAL,
+    result = await new Promise((resolve, reject)=>{
+      const timeout = setTimeout(()=>reject(new Error('DirectionsService timeout after 15s — no response received')), 15000);
+      svc.route({
+        origin:      {lat:originLat, lng:originLng},
+        destination: {lat:destLat,   lng:destLng},
+        travelMode:  google.maps.TravelMode.DRIVING,
+        unitSystem:  google.maps.UnitSystem.IMPERIAL,
+      }, (result, status)=>{
+        clearTimeout(timeout);
+        if(status === google.maps.DirectionsStatus.OK){
+          resolve(result);
+        } else {
+          reject(new Error('DirectionsStatus: '+status));
+        }
+      });
     });
   } catch(e){
-    return{ok:false,status:e.code||e.message,request,
-      response:{error:e.code||e.message,raw:String(e)}};
+    return{ok:false,status:e.message,request,
+      response:{error:e.message,note:'callback pattern used — status returned: '+e.message}};
   }
 
   const route=result.routes[0];
