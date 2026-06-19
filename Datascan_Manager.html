@@ -1032,7 +1032,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.1.0</div>    <div class="login-version" id="login-version"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.26</div>    <div class="login-version" id="login-version"></div>
   </div>
 </div>
 
@@ -1447,7 +1447,14 @@ function can(permission){
 function isSupervisor(){ return (_testRoleKey || currentProfile?.role) === 'supervisor'; }
 function isEmployee()  { return (_testRoleKey || currentProfile?.role) === 'employee'; }
 function isFieldRole() { return isSupervisor() || isEmployee(); }
-function canApprove()  { return can('approve'); }
+function canApprove(){
+  // Explicit permission flag from role_definitions / overrides
+  if(can('approve')) return true;
+  // Admin role always gets approve
+  const role  = (currentProfile?.role||'').toLowerCase();
+  const email = (currentProfile?.email||currentUser?.email||'').toLowerCase();
+  return role==='admin' || role==='superadmin' || email==='admin@datascan.com';
+}
 function canViewAll()  { return can('view_all'); }
 function isReadOnly()  { return can('read_only'); }
 
@@ -1673,6 +1680,13 @@ function completeSignIn(){
   startTimesheetSubscription();
   // Refresh UAT badge for managers
   setTimeout(refreshUATBadge, 1500);
+
+  // Show hidden delete button for admin@datascan.com
+  const _adminEmail = (currentProfile?.email||currentUser?.email||'').toLowerCase();
+  if(_adminEmail === 'admin@datascan.com'){
+    const adminBtn = document.getElementById('admin-delete-btn');
+    if(adminBtn) adminBtn.style.display = 'block';
+  }
 }
 
 
@@ -3640,8 +3654,7 @@ async function openDetailScreen(ts, isManager=false){
 
   function fmtMins(m){
     if(!m||m<=0) return '—';
-    const h=Math.floor(m/60), mn=m%60;
-    return mn>0 ? `${h}:${String(mn).padStart(2,'0')}h` : `${h}h`;
+    return (m/60).toFixed(2)+'h';
   }
 
   // Format time for cell — time on line 1, date on line 2
@@ -4698,8 +4711,38 @@ async function saveEdits(){
 </div>
 
 <script>
-// ════════════════════════════════════════════════════════════
-// ADD PERSON TO TIMESHEET
+// ── Admin-only: delete timesheet and all related data ────────────────────────
+async function adminDeleteTimesheet(){
+  const ts = _currentDetailTs;
+  if(!ts) return;
+
+  const label = [ts.client_name, ts.store_number?'#'+ts.store_number:'', ts.job_date]
+    .filter(Boolean).join(' · ');
+
+  if(!confirm(`DELETE TIMESHEET\n\n${label}\n\nThis will permanently delete the timesheet and all related employees, time blocks, scan attachments, pay adjustments, and UAT feedback.\n\nThis cannot be undone. Continue?`)) return;
+  if(!confirm(`Final confirmation — delete timesheet ${ts.id}?`)) return;
+
+  const btn = document.getElementById('admin-delete-btn');
+  if(btn){ btn.style.opacity='1'; btn.style.background='rgba(248,113,113,.6)'; }
+
+  try{
+    const id = ts.id;
+    await getSupabase().from('uat_feedback').delete().eq('timesheet_id', id);
+    await getSupabase().from('pay_adjustments').delete().eq('timesheet_id', id);
+    await getSupabase().from('scan_attachments').delete().eq('timesheet_id', id);
+    await getSupabase().from('time_blocks').delete().eq('timesheet_id', id);
+    await getSupabase().from('employees').delete().eq('timesheet_id', id);
+    await getSupabase().from('timesheet_edit_log').delete().eq('timesheet_id', id);
+    const {error} = await getSupabase().from('timesheets').delete().eq('id', id);
+    if(error) throw new Error(error.message);
+    closeDetailScreen();
+    loadMgrTimesheets();
+  } catch(e){
+    alert('Delete failed: '+e.message);
+    if(btn){ btn.style.opacity='0.15'; btn.style.background='transparent'; }
+  }
+}
+
 // ════════════════════════════════════════════════════════════
 
 function openAddPersonPanel(){
