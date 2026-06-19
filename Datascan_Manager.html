@@ -144,6 +144,59 @@ input[type=file]{display:none}
 .submit-hint{font-size:13px;color:rgba(255,255,255,0.6);text-align:center;margin-top:6px;font-weight:500;min-height:20px}
 input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-style:dashed}
 
+/* ── Add Person panel ─────────────────────────────────────── */
+#add-person-panel{position:fixed;top:0;right:-560px;width:560px;height:100vh;
+  background:var(--bg2);border-left:1px solid var(--border2);z-index:300;
+  display:flex;flex-direction:column;transition:right .25s ease;
+  box-shadow:-8px 0 32px rgba(0,0,0,.5)}
+#add-person-panel.open{right:0}
+.ap-header{display:flex;align-items:center;gap:10px;padding:1rem 1.25rem;
+  border-bottom:1px solid var(--border);background:#1a2e4a;flex-shrink:0}
+.ap-title{font-size:15px;font-weight:700;color:#fff;flex:1}
+.ap-close{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.6);
+  font-size:20px;display:flex;align-items:center;padding:4px}
+.ap-close:hover{color:#fff}
+.ap-body{flex:1;overflow-y:auto;padding:1.25rem}
+.ap-section{margin-bottom:1.25rem}
+.ap-section-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--text3);margin-bottom:.6rem;
+  display:flex;align-items:center;gap:6px}
+.ap-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
+.ap-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.65rem}
+.ap-field{margin-bottom:.1rem}
+.ap-field label{display:block;font-size:11px;font-weight:700;color:var(--text2);
+  letter-spacing:.04em;margin-bottom:4px}
+.ap-field input,.ap-field select{width:100%;padding:8px 10px;
+  background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-sm);
+  font-size:13px;color:var(--text);font-family:inherit}
+.ap-field input:focus,.ap-field select:focus{outline:none;border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(30,95,164,.15)}
+.ap-checkbox-row{display:flex;align-items:center;gap:8px;font-size:13px;
+  color:var(--text2);cursor:pointer;padding:4px 0}
+.ap-checkbox-row input[type=checkbox]{width:15px;height:15px;cursor:pointer}
+.ap-block-card{background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.75rem .85rem;margin-bottom:.5rem}
+.ap-block-label{font-size:11px;font-weight:700;color:var(--text2);
+  margin-bottom:.5rem;display:flex;align-items:center;gap:6px}
+.ap-block-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ap-time-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.ap-time-field label{font-size:10px;color:var(--text3);font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px}
+.ap-time-field input[type=datetime-local]{width:100%;padding:6px 8px;
+  background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-sm);
+  font-size:12px;color:var(--text);font-family:inherit}
+.ap-time-field input:focus{outline:none;border-color:var(--blue)}
+.ap-footer{padding:1rem 1.25rem;border-top:1px solid var(--border);
+  display:flex;gap:8px;justify-content:flex-end;background:var(--bg2);flex-shrink:0}
+.ap-btn{padding:9px 18px;border-radius:var(--radius-sm);font-size:13px;
+  font-weight:700;cursor:pointer;font-family:inherit;display:flex;
+  align-items:center;gap:6px;border:none}
+.ap-btn.primary{background:var(--blue);color:#fff}
+.ap-btn.primary:hover{background:#2572cc}
+.ap-btn.secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border2)}
+.ap-btn.secondary:hover{color:var(--text)}
+.ap-err{font-size:12px;color:#f87171;margin-top:.35rem;min-height:16px}
+
 /* ── UAT Feedback Review screen ──────────────────────────── */
 #uat-screen{display:none;max-width:860px;margin:0 auto;padding:.75rem 1rem 2rem}
 #uat-screen.active{display:block}
@@ -496,7 +549,7 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .tsv-grid tr.tsv-continuation-row:hover td{background:var(--bg3)}
 
 /* ── Timeline Grid ──────────────────────────────────────────── */
-.tl-wrap{overflow-x:auto;overflow-y:visible;width:100%;-webkit-overflow-scrolling:touch}
+.tl-wrap{overflow-x:auto;overflow-y:auto;width:100%;max-height:calc(100vh - 220px);-webkit-overflow-scrolling:touch}
 .tl-table{border-collapse:collapse;font-size:11px;white-space:nowrap}
 .tl-table th.tl-sticky,
 .tl-table td.tl-sticky{position:sticky;left:0;z-index:3;background:var(--bg);min-width:128px;max-width:128px;width:128px;text-align:left;box-shadow:2px 0 4px rgba(0,0,0,0.06)}
@@ -611,8 +664,13 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 /* ── Detail view (manager + supervisor shared) ─────────────── */
 #detail-screen{display:none;position:fixed;inset:0;z-index:210;background:var(--bg3);overflow:hidden;flex-direction:column}
 #detail-screen.active{display:flex}
-.detail-topbar{background:#1a2e4a;padding:.4rem 1rem;display:flex;align-items:center;gap:6px;z-index:50;flex-wrap:nowrap;overflow:visible;flex-shrink:0}
+.detail-topbar{background:#1a2e4a;padding:.4rem 1rem;display:flex;align-items:center;gap:6px;z-index:50;flex-wrap:nowrap;overflow:visible;flex-shrink:0;position:relative}
 .detail-topbar-logo{height:22px;width:auto;object-fit:contain;margin-left:auto;flex-shrink:0;opacity:.9}
+/* Hidden admin delete button — top-left of detail topbar */
+.admin-delete-btn{position:absolute;top:6px;left:6px;width:10px;height:10px;
+  border-radius:50%;background:transparent;border:0.5px solid rgba(255,255,255,.15);
+  cursor:pointer;opacity:0.15;z-index:60;display:none}
+.admin-delete-btn:hover{opacity:0.5;background:rgba(248,113,113,.3)}
 .topbar-info-grid{display:flex;flex:1;gap:0;border:0.5px solid rgba(255,255,255,0.2);border-radius:4px;overflow:hidden;min-width:0}
 .topbar-info-cell{display:flex;flex-direction:column;gap:1px;padding:2px 5px;border-right:0.5px solid rgba(255,255,255,0.12);flex:1;min-width:0}
 .topbar-info-cell.narrow{flex:0 0 44px;min-width:0}
@@ -974,7 +1032,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div class="login-version" id="login-version"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.1.0</div>    <div class="login-version" id="login-version"></div>
   </div>
 </div>
 
@@ -1139,6 +1197,10 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 </div>
 <div id="detail-screen">
   <div class="detail-topbar">
+    <!-- Hidden admin-only delete button — top-left dot -->
+    <button class="admin-delete-btn" id="admin-delete-btn"
+      onclick="adminDeleteTimesheet()"
+      title="Admin: Delete timesheet"></button>
     <button class="detail-back-btn" onclick="closeDetailScreen()"><i class="ti ti-arrow-left"></i></button>
     <span class="detail-topbar-status" id="detail-topbar-status"></span>
     <div class="topbar-mgr-btns" id="topbar-mgr-btns" style="display:none"></div>
@@ -3483,6 +3545,9 @@ function clearMgrFilters(){
 // ════════════════════════════════════════════════════════════
 let _mgrFilters = {};
 let _currentDetailTs = null;
+let _detailCols = [];        // column definitions from last openDetailScreen
+let _detailCardTypes = [];   // card types from last openDetailScreen
+let _detailUsedKeys = [];    // used block type keys from last openDetailScreen
 let _detailScans = [];
 let _scanRotation = 0;
 let _scanScale = 1;
@@ -3653,8 +3718,8 @@ async function openDetailScreen(ts, isManager=false){
       cols.push({
         key,
         label: ct.label||key,
-        occurrence: i,         // 0-based; "Count 1" = 0, "Count 2" = 1
-        occTotal: maxOcc,      // total slots for this type
+        occurrence: i,
+        occTotal: maxOcc,
         unpaid: isUnpaid(key),
         travel: isTravel(key),
         color: ct.color_hex||'#888',
@@ -3662,8 +3727,15 @@ async function openDetailScreen(ts, isManager=false){
     }
   });
 
+  // Persist for edit mode / add person
+  _detailCols       = cols;
+  _detailCardTypes  = cardTypes||[];
+  _detailUsedKeys   = usedKeys;
+
   // ── Totals accumulators ───────────────────────────────────
   let grandLaborMins=0, grandTravelMins=0, grandEmpCount=0;
+  // Per block type grand totals — keyed by block_type key
+  const grandBlockMins = {}; // key -> total mins across all employees
 
   // ── Build table rows ──────────────────────────────────────
   function buildEmpRows(e){
@@ -3692,9 +3764,8 @@ async function openDetailScreen(ts, isManager=false){
       const dayBlocks = blocksByDate[dateKey]||[];
 
       // For this day, map each block to its column slot
-      // Track occurrence index per type
       const typeIdx={};
-      const slotMap={}; // "key_occIdx" -> block
+      const slotMap={};
       dayBlocks.forEach(b=>{
         const k=b.block_type;
         if(!typeIdx[k]) typeIdx[k]=0;
@@ -3702,28 +3773,32 @@ async function openDetailScreen(ts, isManager=false){
         slotMap[k+'_'+occ]=b;
       });
 
-      // Calculate hours for this day
+      // Calculate hours for this day — per block type and totals
       let dayLaborMins=0, dayTravelMins=0;
+      const dayBlockMins={}; // key -> mins for this day
+
       dayBlocks.forEach(b=>{
         const m=bMins(b);
-        if(isTravel(b.block_type)) dayTravelMins+=m;
-        else if(!isUnpaid(b.block_type)) dayLaborMins+=m;
+        const k=b.block_type;
+        if(!isUnpaid(k)){
+          dayBlockMins[k]=(dayBlockMins[k]||0)+m;
+          grandBlockMins[k]=(grandBlockMins[k]||0)+m;
+          if(isTravel(k)) dayTravelMins+=m;
+          else            dayLaborMins+=m;
+        }
       });
       laborMins+=dayLaborMins; travelMins+=dayTravelMins;
 
-      // Build date label for display
+      // Build date label
       let dateLbl='';
       if(dateKey!=='nodate'){
         const d=new Date(dateKey+'T00:00:00');
         dateLbl=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'2-digit'});
       }
 
-      // Build the data row cells
+      // Build In/Out cells
       const cells = cols.map((col,cIdx)=>{
         const b = slotMap[col.key+'_'+col.occurrence]||null;
-        const isFirst=(cIdx===0);
-        const sep=isFirst?'':' tl-group-sep';
-        // Only add group separator at first column of each type group
         const firstOfGroup = cIdx===0 || cols[cIdx-1].key!==col.key;
         const groupSep = firstOfGroup && cIdx>0 ? ' tl-group-sep':'';
         const unpaidCls = col.unpaid?' tl-unpaid':'';
@@ -3731,7 +3806,17 @@ async function openDetailScreen(ts, isManager=false){
         return `<td class="tl-cell-in${groupSep}${unpaidCls}">${tlFmt(b?.time_in)}${modDot}</td><td class="tl-cell-out${unpaidCls}">${tlFmt(b?.time_out)}</td>`;
       }).join('');
 
-      // Hours cells for this day row
+      // Build per-block-type hours cells (one column per unique key used)
+      const blockHrCells = usedKeys.map((key,i)=>{
+        if(isUnpaid(key)) return ''; // skip unpaid types — no hours to show
+        const m = dayBlockMins[key]||0;
+        const firstCol = usedKeys.filter(k=>!isUnpaid(k)).indexOf(key)===0;
+        const groupSep = firstCol ? ' tl-group-sep' : '';
+        const travelStyle = isTravel(key) ? 'color:#3b6d11' : 'color:var(--info-text)';
+        return `<td class="tl-hrs${groupSep}${m?'':' tl-empty'}" style="${travelStyle}">${m?fmtMins(m):'—'}</td>`;
+      }).filter(Boolean).join('');
+
+      // Labor + Travel summary cells (far right)
       const lHrs=fmtMins(dayLaborMins);
       const tHrs=fmtMins(dayTravelMins);
 
@@ -3743,8 +3828,9 @@ async function openDetailScreen(ts, isManager=false){
           ${e.notes&&e.notes.trim()?`<div style="font-size:9px;color:var(--text3);margin-top:2px;white-space:normal;max-width:120px">${e.notes.trim()}</div>`:''}
         </td>
         ${cells}
-        <td class="tl-hrs tl-group-sep${dayLaborMins?''  :' tl-empty'}" style="color:var(--info-text)">${lHrs}</td>
-        <td class="tl-hrs${dayTravelMins?'':' tl-empty'}" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--success-text')||'#3b6d11'}">${tHrs}</td>
+        ${blockHrCells}
+        <td class="tl-hrs tl-group-sep${dayLaborMins?'':' tl-empty'}" style="color:var(--info-text)">${lHrs}</td>
+        <td class="tl-hrs${dayTravelMins?'':' tl-empty'}" style="color:#3b6d11">${tHrs}</td>
       </tr>`);
     });
 
@@ -3753,7 +3839,10 @@ async function openDetailScreen(ts, isManager=false){
   }
 
   // ── Build header ──────────────────────────────────────────
-  // Row 1: type group headers (merged colspan=2 per slot)
+  // Paid block type keys (for hours columns)
+  const paidKeys = usedKeys.filter(k=>!isUnpaid(k));
+
+  // Row 1: In/Out group headers + block hour headers + Labor/Travel
   let hdr1='<th class="tl-sticky" rowspan="2" style="text-align:left">Employee</th>';
   cols.forEach((col,i)=>{
     const firstOfGroup = i===0||cols[i-1].key!==col.key;
@@ -3763,9 +3852,18 @@ async function openDetailScreen(ts, isManager=false){
     const colorDot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col.color};margin-right:4px;flex-shrink:0"></span>`;
     hdr1+=`<th colspan="2" class="tl-type-hdr${groupSep}${unpaidCls}" style="border-left:2px solid ${col.color}40">${colorDot}${col.label}${occLabel}</th>`;
   });
-  hdr1+='<th colspan="2" class="tl-group-sep" style="min-width:96px">Hours</th>';
+  // Per-block-type hours headers
+  paidKeys.forEach((key,i)=>{
+    const ct=ctOf(key);
+    const colorDot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.color_hex||'#888'};margin-right:4px;flex-shrink:0"></span>`;
+    const groupSep=i===0?' tl-group-sep':'';
+    const travelStyle=isTravel(key)?'color:#3b6d11':'color:var(--info-text)';
+    hdr1+=`<th class="tl-type-hdr${groupSep}" style="${travelStyle}">${colorDot}${ct.label||key}</th>`;
+  });
+  // Labor + Travel summary headers
+  hdr1+='<th colspan="2" class="tl-group-sep" style="min-width:96px">Summary</th>';
 
-  // Row 2: In / Out sub-headers
+  // Row 2: In/Out sub-headers + blank for block hrs + Labor/Travel labels
   let hdr2='';
   cols.forEach((col,i)=>{
     const firstOfGroup=i===0||cols[i-1].key!==col.key;
@@ -3773,17 +3871,31 @@ async function openDetailScreen(ts, isManager=false){
     const unpaidCls=col.unpaid?' tl-unpaid-hdr':'';
     hdr2+=`<th class="tl-in-out${groupSep}${unpaidCls}">In</th><th class="tl-in-out${unpaidCls}">Out</th>`;
   });
+  // Sub-headers for block hour columns — "Hrs" under each
+  paidKeys.forEach((key,i)=>{
+    const groupSep=i===0?' tl-group-sep':'';
+    const travelStyle=isTravel(key)?'color:#3b6d11':'color:var(--info-text)';
+    hdr2+=`<th class="tl-in-out${groupSep}" style="${travelStyle}">Hrs</th>`;
+  });
   hdr2+='<th class="tl-in-out tl-group-sep" style="color:var(--info-text)">Labor</th><th class="tl-in-out" style="color:#3b6d11">Travel</th>';
 
   // ── Build all employee rows ───────────────────────────────
   const bodyRows = validEmps.length
     ? validEmps.map(e=>buildEmpRows(e)).join('')
-    : `<tr><td class="tl-sticky" style="color:var(--text3);font-weight:400">No employees</td>${cols.map(()=>'<td></td><td></td>').join('')}<td></td><td></td></tr>`;
+    : `<tr><td class="tl-sticky" style="color:var(--text3);font-weight:400">No employees</td>${cols.map(()=>'<td></td><td></td>').join('')}${paidKeys.map(()=>'<td></td>').join('')}<td></td><td></td></tr>`;
 
   // ── Totals row ────────────────────────────────────────────
+  const blockTotalCells = paidKeys.map((key,i)=>{
+    const m = grandBlockMins[key]||0;
+    const groupSep=i===0?' tl-group-sep':'';
+    const travelStyle=isTravel(key)?'color:#3b6d11':'color:var(--info-text)';
+    return `<td class="tl-hrs${groupSep}${m?'':' tl-empty'}" style="${travelStyle}">${m?fmtMins(m):'—'}</td>`;
+  }).join('');
+
   const totalsRow=`<tr class="tl-totals-row">
     <td class="tl-sticky">Total · ${grandEmpCount} emp</td>
     ${cols.map(()=>'<td></td><td></td>').join('')}
+    ${blockTotalCells}
     <td class="tl-hrs tl-group-sep" style="color:var(--info-text)">${fmtMins(grandLaborMins)}</td>
     <td class="tl-hrs" style="color:#3b6d11">${fmtMins(grandTravelMins)}</td>
   </tr>`;
@@ -4258,64 +4370,46 @@ function enterEditMode(){
     bar.id = 'edit-mode-bar';
     bar.style.cssText='background:#412402;color:#FAC775;padding:.6rem 1rem;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:48px;z-index:9;border-bottom:1px solid #633806';
     bar.innerHTML = `<i class="ti ti-pencil" style="font-size:16px"></i>
-      Edit mode — enter time as digits (e.g. 455 = 4:55), select AM/PM, pick date if needed.
+      Edit mode — click any In/Out cell to change time.
       <button class="edit-cancel-btn" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
+      <button class="edit-save-btn" id="add-person-btn" onclick="openAddPersonPanel()" style="background:rgba(106,179,79,.25);border-color:rgba(106,179,79,.6);color:#6ab34f"><i class="ti ti-user-plus"></i> Add Person</button>
       <button class="edit-save-btn" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save changes</button>`;
     detailBody.insertBefore(bar, detailBody.firstChild);
   }
 
-  // Replace each time cell with the new edit widget
-  document.querySelectorAll('.tsv-grid tbody tr').forEach(row=>{
-    row.querySelectorAll('td.col-time').forEach(cell=>{
-      const blockId = cell.dataset.blockId;
-      const field   = cell.dataset.field;
-      const empId   = cell.dataset.empId;
-      if(!blockId || !field) return;
+  // Make tl-table In/Out cells editable
+  document.querySelectorAll('.tl-table td.tl-cell-in, .tl-table td.tl-cell-out').forEach(cell=>{
+    const blockId = cell.dataset.blockId;
+    const field   = cell.dataset.field;
+    const empId   = cell.dataset.empId;
+    if(!blockId || !field) return;
 
-      // Read current stored value from data attribute
-      const stored = cell.dataset.storedVal || '';
-      const p = parseStoredVal(stored);
+    const stored = cell.dataset.storedVal || '';
+    const p = parseStoredVal(stored);
+    const key = blockId + '_' + field;
 
-      const key = blockId + '_' + field;
-      const wrap = document.createElement('div');
-      wrap.className = 'edit-cell-wrap';
-      wrap.id = 'ecw-' + key;
-
-      wrap.innerHTML = `
-        <div style="display:flex;align-items:center;gap:3px">
-          <input  id="eti-${key}"
-                  class="edit-time-input"
-                  type="text" maxlength="4"
-                  value="${p.displayTime}"
-                  placeholder="HMM"
-                  data-block-id="${blockId}"
-                  data-field="${field}"
-                  data-emp-id="${empId}"
-                  data-orig-iso="${stored}"
-                  data-date="${p.dateStr}"
-                  data-ampm="${p.ampm}"
-                  style="width:56px"
-                  onblur="onEditTimeBlur(this)"
-                  oninput="onEditTimeInput(this)" />
-          <div class="ampm-toggle" id="ampm-${key}">
-            <button class="ampm-btn ${p.ampm==='AM'?'active':''}" onclick="setAmpm('${key}','AM')">AM</button>
-            <button class="ampm-btn ${p.ampm==='PM'?'active':''}" onclick="setAmpm('${key}','PM')">PM</button>
-          </div>
+    const wrap = document.createElement('div');
+    wrap.className = 'edit-cell-wrap';
+    wrap.id = 'ecw-' + key;
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap">
+        <input id="eti-${key}" class="edit-time-input" type="text" maxlength="4"
+          value="${p.displayTime}" placeholder="HMM"
+          data-block-id="${blockId}" data-field="${field}" data-emp-id="${empId}"
+          data-orig-iso="${stored}" data-date="${p.dateStr}" data-ampm="${p.ampm}"
+          style="width:52px;font-size:11px;padding:3px 4px"
+          onblur="onEditTimeBlur(this)" oninput="onEditTimeInput(this)"/>
+        <div class="ampm-toggle" id="ampm-${key}" style="font-size:10px">
+          <button class="ampm-btn ${p.ampm==='AM'?'active':''}" onclick="setAmpm('${key}','AM')">AM</button>
+          <button class="ampm-btn ${p.ampm==='PM'?'active':''}" onclick="setAmpm('${key}','PM')">PM</button>
         </div>
-        ${p.dateStr ? `<input id="dte-${key}"
-                class="edit-date-input"
-                type="date"
-                value="${p.dateStr}"
-                data-key="${key}"
-                onchange="onEditDateChange(this)" />` : ''}
-        <div id="ebadge-${key}" class="edit-changed-badge" style="display:none"><i class="ti ti-edit"></i> changed</div>
-        <div id="eerr-${key}" class="edit-err-badge" style="display:none"></div>
-        ${stored ? `<div id="eorig-${key}" class="edit-original" style="display:none">${p.displayTime} ${p.ampm}${p.dateStr?' · '+p.displayDate:''}</div>` : ''}
-      `;
+      </div>
+      ${p.dateStr?`<input id="dte-${key}" class="edit-date-input" type="date" value="${p.dateStr}" data-key="${key}" onchange="onEditDateChange(this)" style="font-size:10px;margin-top:2px"/>`:``}
+      <div id="ebadge-${key}" class="edit-changed-badge" style="display:none"><i class="ti ti-edit"></i></div>
+      <div id="eerr-${key}" class="edit-err-badge" style="display:none"></div>`;
 
-      cell.innerHTML = '';
-      cell.appendChild(wrap);
-    });
+    cell.innerHTML = '';
+    cell.appendChild(wrap);
   });
 
   // Topbar buttons
@@ -4325,6 +4419,7 @@ function enterEditMode(){
     btns.innerHTML=`
       <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
       <button class="topbar-mgr-btn" style="background:rgba(255,255,255,.15);color:#fff" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
+      <button class="topbar-mgr-btn" style="background:rgba(106,179,79,.25);color:#6ab34f;border-color:rgba(106,179,79,.5)" onclick="openAddPersonPanel()"><i class="ti ti-user-plus"></i> Add Person</button>
       <button class="topbar-mgr-btn edit" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save</button>`;
   }
 }
@@ -4584,5 +4679,213 @@ async function saveEdits(){
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- ── Add Person Panel ──────────────────────────────────────── -->
+<div id="add-person-panel">
+  <div class="ap-header">
+    <div class="ap-title"><i class="ti ti-user-plus" style="margin-right:6px"></i>Add Person to Timesheet</div>
+    <button class="ap-close" onclick="closeAddPersonPanel()"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="ap-body" id="ap-body">
+    <!-- Filled dynamically -->
+  </div>
+  <div class="ap-footer">
+    <div class="ap-err" id="ap-err"></div>
+    <button class="ap-btn secondary" onclick="closeAddPersonPanel()">Cancel</button>
+    <button class="ap-btn primary" id="ap-save-btn" onclick="saveAddPerson()">
+      <i class="ti ti-user-plus"></i> Add to Timesheet
+    </button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// ADD PERSON TO TIMESHEET
+// ════════════════════════════════════════════════════════════
+
+function openAddPersonPanel(){
+  const ts = _currentDetailTs; if(!ts) return;
+
+  // Build the panel body
+  const jobDate = ts.job_date || new Date().toISOString().split('T')[0];
+
+  // Build block time entry cards for each unique paid block type used in this job
+  const paidKeys = _detailUsedKeys.filter(k=>{
+    const ct = _detailCardTypes.find(c=>c.key===k);
+    return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid';
+  });
+
+  const blockCards = paidKeys.map(key=>{
+    const ct = _detailCardTypes.find(c=>c.key===key)||{};
+    const color = ct.color_hex||'#888';
+    const label = ct.label||key;
+    return `
+      <div class="ap-block-card" id="ap-block-${key}">
+        <div class="ap-block-label">
+          <span class="ap-block-dot" style="background:${color}"></span>
+          ${label}
+        </div>
+        <div class="ap-time-row">
+          <div class="ap-time-field">
+            <label>In</label>
+            <input type="datetime-local" id="ap-${key}-in" data-key="${key}" data-field="in"/>
+          </div>
+          <div class="ap-time-field">
+            <label>Out</label>
+            <input type="datetime-local" id="ap-${key}-out" data-key="${key}" data-field="out"/>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('ap-body').innerHTML = `
+    <!-- Employee info -->
+    <div class="ap-section">
+      <div class="ap-section-title"><i class="ti ti-user" style="font-size:11px"></i> Employee Info</div>
+      <div class="ap-grid" style="margin-bottom:.65rem">
+        <div class="ap-field">
+          <label>First Name <span style="color:#f87171">*</span></label>
+          <input type="text" id="ap-fname" placeholder="First name" autocomplete="off"/>
+        </div>
+        <div class="ap-field">
+          <label>Last Name <span style="color:#f87171">*</span></label>
+          <input type="text" id="ap-lname" placeholder="Last name" autocomplete="off"/>
+        </div>
+      </div>
+      <div class="ap-grid" style="margin-bottom:.65rem">
+        <div class="ap-field">
+          <label>Login / ID</label>
+          <input type="text" id="ap-login" placeholder="Employee ID" autocomplete="off"/>
+        </div>
+        <div class="ap-field">
+          <label>Role</label>
+          <select id="ap-role">
+            <option value="employee">Employee</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="assistant">Assistant</option>
+          </select>
+        </div>
+      </div>
+      <div class="ap-grid-3" style="margin-bottom:.65rem">
+        <label class="ap-checkbox-row">
+          <input type="checkbox" id="ap-dnr"/> DNR
+        </label>
+        <label class="ap-checkbox-row">
+          <input type="checkbox" id="ap-pref"/> Preferred
+        </label>
+        <label class="ap-checkbox-row">
+          <input type="checkbox" id="ap-travel-only"/> Travel Only
+        </label>
+      </div>
+      <div class="ap-field">
+        <label>Notes</label>
+        <input type="text" id="ap-notes" placeholder="Optional notes…"/>
+      </div>
+    </div>
+
+    <!-- Time blocks -->
+    ${paidKeys.length ? `
+    <div class="ap-section">
+      <div class="ap-section-title"><i class="ti ti-clock" style="font-size:11px"></i> Time Entries
+        <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;font-size:10px"> — leave blank if not applicable</span>
+      </div>
+      ${blockCards}
+    </div>` : ''}
+  `;
+
+  document.getElementById('ap-err').textContent = '';
+  document.getElementById('add-person-panel').classList.add('open');
+  setTimeout(()=>document.getElementById('ap-fname')?.focus(), 200);
+}
+
+function closeAddPersonPanel(){
+  document.getElementById('add-person-panel').classList.remove('open');
+}
+
+async function saveAddPerson(){
+  const ts = _currentDetailTs; if(!ts) return;
+  const errEl = document.getElementById('ap-err');
+  errEl.textContent = '';
+
+  // Validate required fields
+  const fname = document.getElementById('ap-fname')?.value.trim()||'';
+  const lname  = document.getElementById('ap-lname')?.value.trim()||'';
+  if(!fname||!lname){ errEl.textContent='First name and last name are required.'; return; }
+
+  const login       = document.getElementById('ap-login')?.value.trim()||'';
+  const role        = document.getElementById('ap-role')?.value||'employee';
+  const dnr         = document.getElementById('ap-dnr')?.checked||false;
+  const pref        = document.getElementById('ap-pref')?.checked||false;
+  const travelOnly  = document.getElementById('ap-travel-only')?.checked||false;
+  const notes       = document.getElementById('ap-notes')?.value.trim()||'';
+
+  const btn = document.getElementById('ap-save-btn');
+  btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Saving…';
+
+  try{
+    // 1. Get current max display_order for employees on this timesheet
+    const {data:existingEmps} = await getSupabase()
+      .from('employees').select('display_order')
+      .eq('timesheet_id', ts.id)
+      .order('display_order',{ascending:false}).limit(1);
+    const nextOrder = ((existingEmps?.[0]?.display_order)||0) + 1;
+
+    // 2. Insert employee record
+    const {data:newEmp, error:empErr} = await getSupabase()
+      .from('employees').insert({
+        timesheet_id:  ts.id,
+        first_name:    fname,
+        last_name:     lname,
+        login_id:      login||null,
+        role_type:     role,
+        dnr:           dnr,
+        preferred:     pref,
+        travel_only:   travelOnly,
+        notes:         notes||null,
+        display_order: nextOrder,
+      }).select('id').maybeSingle();
+
+    if(empErr) throw new Error('Employee insert failed: '+empErr.message);
+    if(!newEmp?.id) throw new Error('Employee insert returned no ID');
+
+    const empId = newEmp.id;
+
+    // 3. Insert time blocks for each paid block type that has at least one time entered
+    const paidKeys = _detailUsedKeys.filter(k=>{
+      const ct = _detailCardTypes.find(c=>c.key===k);
+      return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid';
+    });
+
+    let blockOrder = 0;
+    for(const key of paidKeys){
+      const inVal  = document.getElementById(`ap-${key}-in`)?.value||'';
+      const outVal = document.getElementById(`ap-${key}-out`)?.value||'';
+      // Always insert the block (with null times if empty) so the timeline shows the column
+      const {error:blkErr} = await getSupabase().from('time_blocks').insert({
+        timesheet_id:  ts.id,
+        employee_id:   empId,
+        block_type:    key,
+        time_in:       inVal ? new Date(inVal).toISOString() : null,
+        time_out:      outVal ? new Date(outVal).toISOString() : null,
+        is_primary:    blockOrder===0,
+        display_order: blockOrder++,
+      });
+      if(blkErr) console.warn('[addPerson] block insert error for', key, blkErr.message);
+    }
+
+    // 4. Close panel and refresh detail view
+    closeAddPersonPanel();
+    await openDetailScreen(ts, true);
+    // Re-enter edit mode so manager can keep editing
+    setTimeout(()=>enterEditMode(), 300);
+
+  } catch(e){
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled=false;
+    btn.innerHTML='<i class="ti ti-user-plus"></i> Add to Timesheet';
+  }
+}
+</script>
+
 </body>
 </html>
