@@ -794,7 +794,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div class="login-version" id="login-version"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.37</div>
   </div>
 </div>
 
@@ -1320,15 +1320,21 @@ async function onSignedIn(user){
 
   const rolePerms     = roleDef?.permissions          || {};
   const userOverrides = profile?.permissions_override || {};
-  _userPermissions    = {...rolePerms, ...userOverrides};
+  const effectiveOverrides = {};
+  Object.entries(userOverrides).forEach(([k,v])=>{
+    if(k==='qa_config') effectiveOverrides[k]=v;
+    else if(v===true)   effectiveOverrides[k]=true;
+  });
+  _userPermissions    = {...rolePerms, ...effectiveOverrides};
   _userScopeType      = roleDef?.scope_type || 'own';
   _pendingRoleLabel   = roleDef?.role_label || profile?.role || 'Supervisor';
 
-  if(!isFieldRole()){
+  // Gate: must have app_timesheet permission
+  if(!_userPermissions['app_timesheet']){
     await getSupabase().auth.signOut();
-    document.getElementById('login-err').textContent = 'This account is for managers/admins. Please use the Manager app instead.';
+    document.getElementById('login-err').textContent = 'Access denied — your role does not have Timesheet App access.';
     document.getElementById('login-btn').disabled = false;
-    document.getElementById('login-btn').textContent = 'Sign in';
+    document.getElementById('login-btn').innerHTML = '<i class="ti ti-login"></i> Sign in';
     return;
   }
 
@@ -3467,7 +3473,7 @@ function buildCustomerAC(){
   input.id = 'ji-customer';
   input.placeholder = 'Name or code';
   input.autocomplete = 'off';
-  input.setAttribute('oninput','checkSubmitReady()');
+  input.className = 'field-input';
 
   const dropdown = document.createElement('div');
   dropdown.className = 'ac-dropdown';
@@ -3477,15 +3483,19 @@ function buildCustomerAC(){
 
   function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
 
-  function renderDropdown(q){
-    dropdown.innerHTML='';
-    activeIdx=-1;
-    if(!q){dropdown.classList.remove('open');return;}
+  function getHits(q){
     const ql=q.toLowerCase();
-    const hits=CLIENT_LIST.filter(c=>
+    return CLIENT_LIST.filter(c=>
       c.code.toLowerCase().startsWith(ql)||
       c.desc.toLowerCase().includes(ql)
     ).slice(0,12);
+  }
+
+  function renderDropdown(q){
+    dropdown.innerHTML='';
+    activeIdx=-1;
+    if(!q||q.length<1){dropdown.classList.remove('open');return;}
+    const hits=getHits(q);
     if(!hits.length){dropdown.classList.remove('open');return;}
     hits.forEach((c,i)=>{
       const item=document.createElement('div');
@@ -3523,25 +3533,39 @@ function buildCustomerAC(){
     checkSubmitReady();
   });
 
-  input.addEventListener('keydown',e=>{
-    const items=dropdown.querySelectorAll('.ac-item');
-    if(!items.length)return;
-    if(e.key==='ArrowDown'){e.preventDefault();activeIdx=Math.min(activeIdx+1,items.length-1);highlightItem(activeIdx);}
-    else if(e.key==='ArrowUp'){e.preventDefault();activeIdx=Math.max(activeIdx-1,0);highlightItem(activeIdx);}
-    else if(e.key==='Enter'||e.key==='Tab'){
-      if(activeIdx>=0){e.preventDefault();const hits=CLIENT_LIST.filter(c=>{const ql=input.value.toLowerCase();return c.code.toLowerCase().startsWith(ql)||c.desc.toLowerCase().includes(ql);}).slice(0,12);if(hits[activeIdx])selectItem(hits[activeIdx]);}
-      else if(e.key==='Tab'){
-        // Tab with no selection: try exact code match
-        const ql=input.value.trim().toLowerCase();
-        const exact=CLIENT_LIST.find(c=>c.code.toLowerCase()===ql);
-        if(exact){e.preventDefault();selectItem(exact);}
-        else dropdown.classList.remove('open');
-      }
-    }
-    else if(e.key==='Escape'){dropdown.classList.remove('open');}
+  input.addEventListener('focus',()=>{
+    if(input.value.trim()) renderDropdown(input.value.trim());
   });
 
-  document.addEventListener('click',e=>{if(!wrap.contains(e.target))dropdown.classList.remove('open');});
+  input.addEventListener('keydown',e=>{
+    const items=dropdown.querySelectorAll('.ac-item');
+    if(!items.length) return;
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      activeIdx=Math.min(activeIdx+1,items.length-1);
+      highlightItem(activeIdx);
+    } else if(e.key==='ArrowUp'){
+      e.preventDefault();
+      activeIdx=Math.max(activeIdx-1,0);
+      highlightItem(activeIdx);
+    } else if(e.key==='Enter'||e.key==='Tab'){
+      if(activeIdx>=0){
+        e.preventDefault();
+        const hits=getHits(input.value.trim());
+        if(hits[activeIdx]) selectItem(hits[activeIdx]);
+      } else if(e.key==='Tab'){
+        const exact=CLIENT_LIST.find(c=>c.code.toLowerCase()===input.value.trim().toLowerCase());
+        if(exact){ e.preventDefault(); selectItem(exact); }
+        else dropdown.classList.remove('open');
+      }
+    } else if(e.key==='Escape'){
+      dropdown.classList.remove('open');
+    }
+  });
+
+  document.addEventListener('click',e=>{
+    if(!wrap.contains(e.target)) dropdown.classList.remove('open');
+  });
 
   wrap.append(input,dropdown);
   return wrap;
@@ -4012,7 +4036,68 @@ function _openJobInfoModal(){
       </button>
     </div>`
   );
-  setTimeout(()=> document.getElementById('ntm-customer')?.focus(), 150);
+  setTimeout(()=>{
+    // Focus customer field
+    const ntmCust = document.getElementById('ntm-customer');
+    if(ntmCust) ntmCust.focus();
+
+    // Wire up autocomplete on ntm-customer (same CLIENT_LIST as main form)
+    if(ntmCust && !ntmCust.dataset.acWired){
+      ntmCust.dataset.acWired = '1';
+      ntmCust.autocomplete = 'off';
+
+      // Create dropdown
+      const dd = document.createElement('div');
+      dd.className = 'ac-dropdown';
+      dd.id = 'ntm-ac-dropdown';
+      ntmCust.parentNode.style.position='relative';
+      ntmCust.parentNode.appendChild(dd);
+
+      let ntmActiveIdx=-1;
+      function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+      function ntmHits(q){
+        const ql=q.toLowerCase();
+        return CLIENT_LIST.filter(c=>c.code.toLowerCase().startsWith(ql)||c.desc.toLowerCase().includes(ql)).slice(0,12);
+      }
+      function ntmRender(q){
+        dd.innerHTML=''; ntmActiveIdx=-1;
+        if(!q){ dd.classList.remove('open'); return; }
+        const hits=ntmHits(q);
+        if(!hits.length){ dd.classList.remove('open'); return; }
+        hits.forEach((c,i)=>{
+          const item=document.createElement('div');
+          item.className='ac-item';
+          const re=new RegExp('('+escRe(q)+')','gi');
+          item.innerHTML=`<span class="ac-code">${c.code}</span><span class="ac-desc">${c.desc.replace(re,'<mark>$1</mark>')}</span>`;
+          item.addEventListener('mousedown',e=>{
+            e.preventDefault();
+            ntmCust.value=c.desc;
+            ntmCust.dataset.clientCode=c.code;
+            dd.classList.remove('open');
+          });
+          item.addEventListener('touchstart',e=>{
+            e.preventDefault();
+            ntmCust.value=c.desc;
+            ntmCust.dataset.clientCode=c.code;
+            dd.classList.remove('open');
+          },{passive:false});
+          dd.appendChild(item);
+        });
+        dd.classList.add('open');
+      }
+      ntmCust.addEventListener('input',()=>{ ntmCust.dataset.clientCode=''; ntmRender(ntmCust.value.trim()); });
+      ntmCust.addEventListener('focus',()=>{ if(ntmCust.value.trim()) ntmRender(ntmCust.value.trim()); });
+      ntmCust.addEventListener('keydown',e=>{
+        const items=dd.querySelectorAll('.ac-item');
+        if(!items.length) return;
+        if(e.key==='ArrowDown'){ e.preventDefault(); ntmActiveIdx=Math.min(ntmActiveIdx+1,items.length-1); items.forEach((el,i)=>el.classList.toggle('active',i===ntmActiveIdx)); }
+        else if(e.key==='ArrowUp'){ e.preventDefault(); ntmActiveIdx=Math.max(ntmActiveIdx-1,0); items.forEach((el,i)=>el.classList.toggle('active',i===ntmActiveIdx)); }
+        else if(e.key==='Enter'&&ntmActiveIdx>=0){ e.preventDefault(); const hits=ntmHits(ntmCust.value.trim()); if(hits[ntmActiveIdx]){ ntmCust.value=hits[ntmActiveIdx].desc; ntmCust.dataset.clientCode=hits[ntmActiveIdx].code; dd.classList.remove('open'); } }
+        else if(e.key==='Escape'){ dd.classList.remove('open'); }
+      });
+      document.addEventListener('click',e=>{ if(!ntmCust.parentNode.contains(e.target)) dd.classList.remove('open'); });
+    }
+  }, 150);
 }
 
 // ── Cancel: delete the skeleton record and go back ────────────────────────────
@@ -4530,7 +4615,10 @@ async function saveTimesheet(statusVal, silent=false){
     let waited = 0;
     while(_savingInProgress && waited < 5000){ await new Promise(r=>setTimeout(r,200)); waited+=200; }
   }
-  if(!silent && !validateAll()){ alert('Please fix highlighted errors before submitting.'); return; }
+  if(!silent && statusVal === 'submitted' && !validateAll()){
+    alert('Please fix highlighted errors before submitting.');
+    return;
+  }
   _savingInProgress = true;
 
   if(!silent) showSaving(statusVal === 'submitted' ? 'Submitting timesheet...' : 'Saving draft...');
@@ -4724,13 +4812,14 @@ async function saveTimesheet(statusVal, silent=false){
       if(!silent) hideSaving();
       switchTab('status');
     } else if(!silent){
+      hideSaving();
       if(_resubmittingRejected){
         updateStatus('rejected');
-        alert('✓ Changes saved. This timesheet stays Rejected until you resubmit it.');
+        setAutosaveStatus('ok', 'Changes saved — timesheet stays Rejected until resubmitted');
       } else {
         setSubmissionStatus('draft');
         updateStatus('draft');
-        alert('✓ Draft saved successfully!');
+        setAutosaveStatus('ok', '✓ Draft saved successfully!');
       }
     }
 
