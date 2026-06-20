@@ -395,25 +395,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// Load Google Maps JS SDK dynamically so DirectionsService is available
-// Uses a callback so we know exactly when it's ready
-window._mapsApiReady = false;
-window._mapsApiCallbacks = [];
-window.onGoogleMapsReady = function(){
-  window._mapsApiReady = true;
-  window._mapsApiCallbacks.forEach(cb=>cb());
-  window._mapsApiCallbacks=[];
-};
-(function(){
-  const s=document.createElement('script');
-  s.src='https://maps.googleapis.com/maps/api/js?key=AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M&callback=onGoogleMapsReady&loading=async';
-  s.async=true; s.defer=true;
-  document.head.appendChild(s);
-})();
-function whenMapsReady(cb){
-  if(window._mapsApiReady){ cb(); }
-  else { window._mapsApiCallbacks.push(cb); }
-}
+// Routes API v2 used for planned routes — no Maps JS SDK needed
 </script>
 </head>
 <body>
@@ -444,7 +426,7 @@ function whenMapsReady(cb){
       <i class="ti ti-login"></i> Sign in
     </button>
     <div class="login-err" id="login-err"></div>
-  </div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.3</div>  </div>
   <div class="login-version" id="login-version"></div>
 </div>
 
@@ -2255,22 +2237,6 @@ async function confirmPassengers(){
 
     if(logErr) throw logErr;
 
-    // ── Fetch & store planned route (non-blocking) ────────────────────────────
-    // Run in background — don't await so it doesn't delay trip start UI
-    updatePlannedRouteDebug('pending');
-    fetchAndStorePlannedRoute(
-      log.id,
-      originLat, originLng,
-      _activeJob.dest_lat, _activeJob.dest_lng,
-      'planned_route'
-    ).then(route=>{
-      if(route){
-        // Cache on the active trip object so showTripActive can display it
-        if(_activeTrip) _activeTrip.planned_route = route;
-        updatePlannedRouteSummary(route);
-      }
-    });
-
     // Insert passengers
     const paxPayload = _passengers.map(p=>({
       travel_log_id: log.id,
@@ -2287,14 +2253,26 @@ async function confirmPassengers(){
     _activeTrip = log;
     clearTripState(); // clean up localStorage now that it's in Supabase
 
-    // Pre-trip GPS tracking is no longer needed — flush its buffered pings now
-    // that this leg has a travel_log_id, then record a "board" ping (at the
-    // meet-spot origin fix) for every passenger boarding this vehicle.
     stopSetupGPS();
     await _flushSetupPingBuffer(log, 'outbound');
     await _recordPaxBoardAlight(log, 'outbound', _passengers, []);
 
+    // Render the trip screen first so the debug panel DOM exists
     showTripActive(log);
+
+    // NOW start the planned route fetch — debug panel is in the DOM
+    updatePlannedRouteDebug('pending');
+    fetchAndStorePlannedRoute(
+      log.id,
+      originLat, originLng,
+      _activeJob.dest_lat, _activeJob.dest_lng,
+      'planned_route'
+    ).then(route=>{
+      if(route){
+        if(_activeTrip) _activeTrip.planned_route = route;
+        updatePlannedRouteSummary(route);
+      }
+    });
 
   } catch(e){
     console.error('[confirmPassengers]', e);
@@ -2528,47 +2506,68 @@ function decodePolyline(encoded){
 }
 
 // ── Fetch planned route from Directions API and store as jsonb ────────────────
-// Uses google.maps.DirectionsService (browser-authorized, no CORS issues).
-// Called at trip start and at waypoint depart.
+// ── Fetch planned route via Routes API v2 (CORS-enabled, no SDK needed) ──────
+// POST to routes.googleapis.com — works from any browser page.
+// Stores result as jsonb in travel_logs.planned_route or travel_waypoints.planned_segment.
 async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, destLng, tableCol='planned_route'){
   if(!originLat||!originLng||!destLat||!destLng){
     console.warn('[plannedRoute] missing coords — skipping', {originLat,originLng,destLat,destLng});
+    updatePlannedRouteDebug('error', null, 'Missing coordinates');
     return null;
   }
-  console.log('[plannedRoute] starting for log', logId, {originLat,originLng,destLat,destLng});
+
+  console.log('[plannedRoute] calling Routes API v2 for log', logId);
+  updatePlannedRouteDebug('calling');
+
+  const ROUTES_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+  const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps,routes.legs.distanceMeters,routes.legs.duration,routes.bounds';
+
   try{
-    // Wait for Maps SDK to be ready (loaded async in <head>)
-    console.log('[plannedRoute] waiting for Maps SDK…');
-    updatePlannedRouteDebug('waiting');
-    await new Promise((resolve, reject)=>{
-      const timeout = setTimeout(()=>reject(new Error('Maps SDK timeout after 10s')), 10000);
-      whenMapsReady(()=>{ clearTimeout(timeout); resolve(); });
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers:{
+        'Content-Type':    'application/json',
+        'X-Goog-Api-Key':  ROUTES_KEY,
+        'X-Goog-FieldMask': fieldMask,
+      },
+      body: JSON.stringify({
+        origin:      {location:{latLng:{latitude:originLat, longitude:originLng}}},
+        destination: {location:{latLng:{latitude:destLat,   longitude:destLng}}},
+        travelMode:  'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE',
+        computeAlternativeRoutes: false,
+        languageCode: 'en-US',
+        units: 'IMPERIAL',
+      }),
     });
-    console.log('[plannedRoute] Maps SDK ready — calling DirectionsService');
-    updatePlannedRouteDebug('calling');
 
-    const directionsService = new google.maps.DirectionsService();
-    const result = await directionsService.route({
-      origin:      {lat: originLat, lng: originLng},
-      destination: {lat: destLat,   lng: destLng},
-      travelMode:  google.maps.TravelMode.DRIVING,
-      unitSystem:  google.maps.UnitSystem.IMPERIAL,
-    });
-    console.log('[plannedRoute] DirectionsService response status:', result.status||'OK');
+    const data = await resp.json();
 
-    // result.routes[0] — DirectionsService throws on failure so no status check needed
-    const route  = result.routes[0];
-    const leg    = route.legs[0];
-    const distM  = leg.distance.value;       // metres
-    const distMi = distM / 1609.34;          // miles
-    const durSec = leg.duration.value;       // seconds
+    if(data.error){
+      const msg = data.error.message||'API error '+data.error.code;
+      console.warn('[plannedRoute] Routes API error:', msg);
+      updatePlannedRouteDebug('error', null, msg);
+      return null;
+    }
 
-    // Build steps (strip HTML tags from instructions)
-    // JS SDK uses html_instructions (same as JSON API)
-    const steps = (leg.steps||[]).map(s=>({
-      instruction:      (s.html_instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
-      distance_miles:   +(s.distance.value/1609.34).toFixed(2),
-      duration_seconds: s.duration.value,
+    const route  = data.routes?.[0];
+    if(!route){
+      console.warn('[plannedRoute] no routes returned');
+      updatePlannedRouteDebug('error', null, 'No routes returned');
+      return null;
+    }
+
+    const leg     = route.legs?.[0];
+    const distM   = route.distanceMeters || 0;
+    const distMi  = distM / 1609.34;
+    const durSec  = parseInt((route.duration||'0s').replace('s',''))||0;
+    const polyline = route.polyline?.encodedPolyline || '';
+
+    const steps = (leg?.steps||[]).map(s=>({
+      instruction:      (s.navigationInstruction?.instructions||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(),
+      distance_miles:   +(( s.distanceMeters||0)/1609.34).toFixed(2),
+      duration_seconds: parseInt((s.staticDuration||'0s').replace('s',''))||0,
     }));
 
     const routeObj = {
@@ -2578,15 +2577,15 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
       distance_miles:   +distMi.toFixed(2),
       duration_seconds: durSec,
       duration_text:    fmtDuration(durSec),
-      polyline:         route.overview_polyline,  // already a string in JS SDK
-      bounds: {
-        northeast: {lat: route.bounds.getNorthEast().lat(), lng: route.bounds.getNorthEast().lng()},
-        southwest: {lat: route.bounds.getSouthWest().lat(), lng: route.bounds.getSouthWest().lng()},
-      },
+      polyline,
+      bounds: route.bounds ? {
+        northeast: {lat: route.bounds.high?.latitude||0,  lng: route.bounds.high?.longitude||0},
+        southwest: {lat: route.bounds.low?.latitude||0,   lng: route.bounds.low?.longitude||0},
+      } : null,
       steps,
     };
 
-    // Show fetched data in debug panel before DB write
+    // Show in debug panel
     updatePlannedRouteDebug('ok', routeObj);
 
     // Persist to DB
@@ -2601,12 +2600,25 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
       updatePlannedRouteDebug('db_error', routeObj, error.message);
     } else {
       console.log('[plannedRoute] ✓', distMi.toFixed(1)+'mi', fmtDuration(durSec), 'stored for', table, logId);
+
+      // Also store decoded coordinate array to travel_logs.directions
+      // so the Edge Function can do proximity checks without decoding on every ping
+      if(table === 'travel_logs' && polyline){
+        const decodedCoords = decodePolyline(polyline);
+        if(decodedCoords.length){
+          await getSupabase()
+            .from('travel_logs')
+            .update({ directions: decodedCoords })
+            .eq('id', logId);
+          console.log('[plannedRoute] ✓ decoded', decodedCoords.length, 'coords stored to directions');
+        }
+      }
     }
 
     return routeObj;
 
   } catch(e){
-    console.warn('[plannedRoute] error:', e.message);
+    console.warn('[plannedRoute] fetch error:', e.message);
     updatePlannedRouteDebug('error', null, e.message);
     return null;
   }
@@ -2666,7 +2678,7 @@ function updatePlannedRouteDebug(state, route, error){
   } else if(state==='waiting'){
     statusEl.textContent='Waiting for Maps SDK…'; statusEl.style.color='#f4a93a';
   } else if(state==='calling'){
-    statusEl.textContent='Calling DirectionsService…'; statusEl.style.color='#7eb8f7';
+    statusEl.textContent='Calling Routes API v2…'; statusEl.style.color='#7eb8f7';
   } else if(state==='ok' && route){
     statusEl.textContent='✓ OK'; statusEl.style.color='#6AB34F';
     if(milesEl) milesEl.textContent = route.distance_miles!=null ? route.distance_miles.toFixed(2)+' mi' : '—';
