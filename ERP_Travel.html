@@ -579,6 +579,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let currentUser    = null;
 let currentProfile = null;
 let driverApproval = null; // row from driver_approvals table
+let _userPermissions = {}; // loaded from role_definitions on sign-in
 let _activeJob     = null; // selected timesheet/job
 let _activeTrip    = null; // active travel_log row
 
@@ -649,11 +650,35 @@ async function onSignedIn(user){
   try {
     currentUser = user;
 
-    // Load profile — use maybeSingle so missing profile doesn't throw
+    // Load profile
     const {data:profile, error:profErr} = await getSupabase()
       .from('profiles').select('*').eq('id', user.id).maybeSingle();
     if(profErr) console.warn('[onSignedIn] profile error:', profErr.message);
     currentProfile = profile || { full_name: user.email, role: 'unknown' };
+
+    // Load role permissions
+    const {data:roleDef} = await getSupabase()
+      .from('role_definitions')
+      .select('permissions,scope_type,role_label')
+      .eq('role_key', currentProfile?.role || 'supervisor')
+      .maybeSingle();
+
+    const rolePerms     = roleDef?.permissions          || {};
+    const userOverrides = currentProfile?.permissions_override || {};
+    const effectiveOverrides = {};
+    Object.entries(userOverrides).forEach(([k,v])=>{
+      if(k==='qa_config') effectiveOverrides[k]=v;
+      else if(v===true)   effectiveOverrides[k]=true;
+    });
+    _userPermissions = {...rolePerms, ...effectiveOverrides};
+
+    // ── App gate: must have app_travel permission ─────────────────────────────
+    if(!_userPermissions['app_travel']){
+      await getSupabase().auth.signOut();
+      if(err) err.textContent = 'Access denied — your role does not have Travel App access.';
+      if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
+      return;
+    }
 
     // Check driver approval
     const {data:approval, error:drvErr} = await getSupabase()
@@ -668,8 +693,7 @@ async function onSignedIn(user){
     document.getElementById('login-screen').classList.add('hidden');
     if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-login"></i> Sign in'; }
 
-    // Gate: if admin has flagged a password change, show the set-password screen
-    // before revealing whether the driver is approved or not
+    // Gate: force password change if flagged
     if(currentProfile?.must_change_password){
       showForcePasswordScreen();
       return;
