@@ -426,8 +426,8 @@ body{background:#0f1e30;color:#f0f4f8}
       <i class="ti ti-login"></i> Sign in
     </button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.3</div>  </div>
-  <div class="login-version" id="login-version"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.4</div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
@@ -2022,6 +2022,33 @@ async function showPassengerCheckIn(){
         Step 3 of 4 — Select crew members boarding this vehicle
       </div>
 
+      <!-- Route debug panel — shown during testing for all users -->
+      <div style="background:rgba(30,95,174,.08);border:1px solid rgba(30,95,174,.25);
+        border-radius:var(--radius);padding:.875rem;margin-bottom:1rem;font-size:12px">
+        <div style="font-weight:700;color:#7eb8f7;margin-bottom:.5rem;display:flex;align-items:center;gap:6px">
+          <i class="ti ti-map-route"></i> Planned Route — API Status
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;color:var(--text2)">
+          <span style="color:var(--text3)">Status</span>
+          <span id="gd-route-status" style="color:#f4a93a">Pending…</span>
+          <span style="color:var(--text3)">Distance</span>
+          <span id="gd-route-miles">—</span>
+          <span style="color:var(--text3)">Duration</span>
+          <span id="gd-route-duration">—</span>
+          <span style="color:var(--text3)">Steps</span>
+          <span id="gd-route-steps">—</span>
+          <span style="color:var(--text3)">Polyline</span>
+          <span id="gd-route-polyline" style="font-family:monospace;font-size:10px;word-break:break-all">—</span>
+          <span style="color:var(--text3)">DB write</span>
+          <span id="gd-route-stored">—</span>
+        </div>
+        <button onclick="retryPlannedRoute()" style="margin-top:.75rem;padding:5px 12px;
+          border-radius:4px;background:rgba(30,95,174,.2);border:1px solid rgba(30,95,174,.4);
+          color:#7eb8f7;font-size:11px;cursor:pointer;font-family:inherit">
+          <i class="ti ti-refresh"></i> Retry API call
+        </button>
+      </div>
+
       <div id="pax-loading">
         <div class="spinner"></div>
       </div>
@@ -2064,6 +2091,27 @@ async function showPassengerCheckIn(){
     </div>`;
 
   await loadPassengers();
+
+  // Fetch planned route on passenger screen so result is visible before trip starts
+  const originLat = _activeTrip?.origin_lat || currentPosition?.lat;
+  const originLng = _activeTrip?.origin_lng || currentPosition?.lng;
+  const destLat   = _activeJob?.dest_lat;
+  const destLng   = _activeJob?.dest_lng;
+
+  if(originLat && originLng && destLat && destLng && _activeTrip?.id){
+    updatePlannedRouteDebug('pending');
+    fetchAndStorePlannedRoute(
+      _activeTrip.id,
+      originLat, originLng,
+      destLat, destLng,
+      'planned_route'
+    ).then(route=>{
+      if(route && _activeTrip) _activeTrip.planned_route = route;
+    });
+  } else {
+    updatePlannedRouteDebug('error', null,
+      `Missing coords — origin:(${originLat},${originLng}) dest:(${destLat},${destLng})`);
+  }
 }
 
 async function loadPassengers(){
@@ -4341,8 +4389,7 @@ async function pushTravelBlocksToTimesheet(){
 
 // ── Dev user check ────────────────────────────────────────────────────────────
 function _isDevUser(){
-  const email = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  return ['supervisor@datascan.com'].includes(email);
+  return true; // Debug panel shown for all users during testing
 }
 
 // ── Reset trip (dev/test only) ────────────────────────────────────────────────
