@@ -426,7 +426,7 @@ body{background:#0f1e30;color:#f0f4f8}
       <i class="ti ti-login"></i> Sign in
     </button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.4</div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.11</div>
   </div>
 </div>
 
@@ -571,7 +571,7 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.54';
+const APP_VERSION  = 'v1.0.114';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -2027,6 +2027,7 @@ async function showPassengerCheckIn(){
         border-radius:var(--radius);padding:.875rem;margin-bottom:1rem;font-size:12px">
         <div style="font-weight:700;color:#7eb8f7;margin-bottom:.5rem;display:flex;align-items:center;gap:6px">
           <i class="ti ti-map-route"></i> Planned Route — API Status
+          ${MOCK_GPS ? '<span style="font-size:10px;background:rgba(244,169,58,.2);color:#f4a93a;border:0.5px solid rgba(244,169,58,.4);padding:1px 6px;border-radius:4px">MOCK GPS</span>' : ''}
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;color:var(--text2)">
           <span style="color:var(--text3)">Status</span>
@@ -2041,6 +2042,12 @@ async function showPassengerCheckIn(){
           <span id="gd-route-polyline" style="font-family:monospace;font-size:10px;word-break:break-all">—</span>
           <span style="color:var(--text3)">DB write</span>
           <span id="gd-route-stored">—</span>
+        </div>
+        <div style="margin-top:.75rem">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Request body</div>
+          <pre id="gd-req-body" style="font-size:10px;color:var(--text2);background:var(--bg);border-radius:4px;padding:6px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:100px;overflow-y:auto">—</pre>
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;margin-top:6px">Raw response</div>
+          <pre id="gd-raw-response" style="font-size:10px;color:var(--text2);background:var(--bg);border-radius:4px;padding:6px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto">—</pre>
         </div>
         <button onclick="retryPlannedRoute()" style="margin-top:.75rem;padding:5px 12px;
           border-radius:4px;background:rgba(30,95,174,.2);border:1px solid rgba(30,95,174,.4);
@@ -2092,25 +2099,43 @@ async function showPassengerCheckIn(){
 
   await loadPassengers();
 
-  // Fetch planned route on passenger screen so result is visible before trip starts
-  const originLat = _activeTrip?.origin_lat || currentPosition?.lat;
-  const originLng = _activeTrip?.origin_lng || currentPosition?.lng;
-  const destLat   = _activeJob?.dest_lat;
-  const destLng   = _activeJob?.dest_lng;
+  // Get current position for route preview — real GPS primary, mock fallback
+  let previewOriginLat = null;
+  let previewOriginLng = null;
+  try{
+    const pos = await _getGPS();
+    previewOriginLat = pos.lat;
+    previewOriginLng = pos.lng;
+    console.log('[passengerScreen] GPS origin:', previewOriginLat, previewOriginLng, pos.mock?'(mock)':'(real)');
+  } catch(gpsErr){
+    console.warn('[passengerScreen] GPS failed:', gpsErr.message);
+  }
 
-  if(originLat && originLng && destLat && destLng && _activeTrip?.id){
+  const previewDestLat = _activeJob?.dest_lat ? parseFloat(_activeJob.dest_lat) : null;
+  const previewDestLng = _activeJob?.dest_lng ? parseFloat(_activeJob.dest_lng) : null;
+
+  // Cache preview coords for retryPlannedRoute
+  window._previewOriginLat = previewOriginLat;
+  window._previewOriginLng = previewOriginLng;
+
+  const diagParts = [
+    'Departing lat: ' + (previewOriginLat||'NULL'),
+    'Departing lng: ' + (previewOriginLng||'NULL'),
+    'Dest lat: ' + (previewDestLat||'NULL'),
+    'Dest lng: ' + (previewDestLng||'NULL'),
+    'Job: ' + (_activeJob?.client_name||'NULL'),
+    'MOCK_GPS: ' + MOCK_GPS,
+  ];
+  const diagInfo = diagParts.join(' | ');
+  console.log('[passengerScreen]', diagInfo);
+  const storedEl = document.getElementById('gd-route-stored');
+  if(storedEl) storedEl.textContent = diagInfo;
+
+  if(previewOriginLat && previewOriginLng && previewDestLat && previewDestLng){
     updatePlannedRouteDebug('pending');
-    fetchAndStorePlannedRoute(
-      _activeTrip.id,
-      originLat, originLng,
-      destLat, destLng,
-      'planned_route'
-    ).then(route=>{
-      if(route && _activeTrip) _activeTrip.planned_route = route;
-    });
+    previewPlannedRoute(previewOriginLat, previewOriginLng, previewDestLat, previewDestLng);
   } else {
-    updatePlannedRouteDebug('error', null,
-      `Missing coords — origin:(${originLat},${originLng}) dest:(${destLat},${destLng})`);
+    updatePlannedRouteDebug('error', null, 'Missing coords: ' + diagInfo);
   }
 }
 
@@ -2249,21 +2274,18 @@ async function confirmPassengers(){
   btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Starting trip...';
 
   try{
-    // Capture meet spot coordinates (Option A — auto silent capture)
+    // Capture meet spot coordinates — uses mock GPS on desktop if real GPS unavailable
     let originLat = null, originLng = null;
     try{
-      const pos = await new Promise((resolve, reject)=>{
-        navigator.geolocation.getCurrentPosition(resolve, reject,
-          {enableHighAccuracy:true, timeout:8000, maximumAge:0});
-      });
-      originLat = pos.coords.latitude;
-      originLng = pos.coords.longitude;
-      console.log('[meet spot] captured:', originLat, originLng);
+      const pos = await _getGPS();
+      originLat = pos.lat;
+      originLng = pos.lng;
+      console.log('[meet spot] captured:', originLat, originLng, pos.mock ? '(MOCK)' : '(real GPS)');
     } catch(gpsErr){
       console.warn('[meet spot] GPS unavailable:', gpsErr.message);
     }
 
-    // If GPS failed at trip start, try once more with low accuracy fallback
+    // Secondary fallback — low accuracy
     if(!originLat || !originLng){
       try{
         const pos2 = await new Promise((res,rej)=>{
@@ -2273,7 +2295,11 @@ async function confirmPassengers(){
         originLat = pos2.coords.latitude;
         originLng = pos2.coords.longitude;
         console.log('[meetSpot] fallback GPS:', originLat, originLng);
-      } catch(e2){ console.warn('[meetSpot] fallback also failed'); }
+      } catch(e2){
+        // Final fallback to mock
+        if(MOCK_GPS){ originLat = MOCK_LAT; originLng = MOCK_LNG; console.log('[meetSpot] using mock'); }
+        else { console.warn('[meetSpot] all GPS attempts failed'); }
+      }
     }
 
     const logPayload = {
@@ -2332,19 +2358,39 @@ async function confirmPassengers(){
     // Render the trip screen first so the debug panel DOM exists
     showTripActive(log);
 
-    // NOW start the planned route fetch — debug panel is in the DOM
-    updatePlannedRouteDebug('pending');
-    fetchAndStorePlannedRoute(
-      log.id,
-      originLat, originLng,
-      _activeJob.dest_lat, _activeJob.dest_lng,
-      'planned_route'
-    ).then(route=>{
-      if(route){
-        if(_activeTrip) _activeTrip.planned_route = route;
-        updatePlannedRouteSummary(route);
+    // Use cached preview route if available, otherwise fetch fresh
+    if(window._previewRoute && window._previewRoute.polyline){
+      console.log('[confirmPassengers] using cached preview route');
+      // Store the cached route to DB
+      const {error:routeErr} = await getSupabase()
+        .from('travel_logs')
+        .update({planned_route: window._previewRoute})
+        .eq('id', log.id);
+      if(!routeErr){
+        _activeTrip.planned_route = window._previewRoute;
+        updatePlannedRouteSummary(window._previewRoute);
+        // Also store decoded coords
+        const decoded = decodePolyline(window._previewRoute.polyline);
+        if(decoded.length){
+          await getSupabase().from('travel_logs').update({directions: decoded}).eq('id', log.id);
+        }
       }
-    });
+      window._previewRoute = null;
+    } else {
+      // Fetch fresh
+      updatePlannedRouteDebug('pending');
+      fetchAndStorePlannedRoute(
+        log.id,
+        originLat, originLng,
+        _activeJob.dest_lat, _activeJob.dest_lng,
+        'planned_route'
+      ).then(route=>{
+        if(route){
+          if(_activeTrip) _activeTrip.planned_route = route;
+          updatePlannedRouteSummary(route);
+        }
+      });
+    }
 
   } catch(e){
     console.error('[confirmPassengers]', e);
@@ -2372,6 +2418,36 @@ let _legType          = 'outbound'; // outbound | return | job_to_job
 let _lastPingTime     = 0;
 let _pingCount        = 0;
 let _currentPos       = null;
+
+// ── GPS configuration ────────────────────────────────────────────────────────
+// MOCK_GPS: set true only for desktop testing without GPS hardware.
+// When false, real device GPS is used exclusively.
+const MOCK_GPS = false;
+const MOCK_LAT = 30.6756;   // fallback lat — only used when MOCK_GPS = true
+const MOCK_LNG = -87.8464;  // fallback lng — only used when MOCK_GPS = true
+
+function _getGPS(){
+  // Returns a Promise resolving to {lat, lng} — real GPS or mock fallback
+  return new Promise((resolve, reject)=>{
+    if(!navigator.geolocation){
+      if(MOCK_GPS) return resolve({lat:MOCK_LAT, lng:MOCK_LNG, mock:true});
+      return reject(new Error('Geolocation not supported'));
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:pos.coords.accuracy}),
+      err => {
+        console.warn('[GPS] failed:', err.message);
+        if(MOCK_GPS){
+          console.log('[GPS] using mock location', MOCK_LAT, MOCK_LNG);
+          resolve({lat:MOCK_LAT, lng:MOCK_LNG, mock:true});
+        } else {
+          reject(err);
+        }
+      },
+      {enableHighAccuracy:true, timeout:8000, maximumAge:0}
+    );
+  });
+}
 let _tripMap          = null;
 let _driverMarker     = null;
 let _directionsRenderer = null;
@@ -2593,7 +2669,7 @@ async function fetchAndStorePlannedRoute(logId, originLat, originLng, destLat, d
 
   const ROUTES_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
   const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
-  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps,routes.legs.distanceMeters,routes.legs.duration,routes.bounds';
+  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps,routes.legs.distanceMeters,routes.legs.duration';
 
   try{
     const resp = await fetch(url, {
@@ -2769,21 +2845,104 @@ function updatePlannedRouteDebug(state, route, error){
 }
 
 // Retry button — lets dev user re-trigger the API call without restarting the trip
-async function retryPlannedRoute(){
-  if(!_activeTrip?.id){
-    updatePlannedRouteDebug('error','No active trip');
+// ── Preview planned route (passenger screen — no DB write yet) ───────────────
+async function previewPlannedRoute(originLat, originLng, destLat, destLng){
+  // Ensure all coords are numbers
+  originLat = parseFloat(originLat);
+  originLng = parseFloat(originLng);
+  destLat   = parseFloat(destLat);
+  destLng   = parseFloat(destLng);
+  if(!originLat||!originLng||!destLat||!destLng||isNaN(originLat)||isNaN(destLat)){
+    updatePlannedRouteDebug('error', null, `Invalid coords — origin:(${originLat},${originLng}) dest:(${destLat},${destLng})`);
     return;
   }
-  updatePlannedRouteDebug('pending');
-  const route = await fetchAndStorePlannedRoute(
-    _activeTrip.id,
-    _activeTrip.origin_lat, _activeTrip.origin_lng,
-    _activeJob?.dest_lat,   _activeJob?.dest_lng,
-    'planned_route'
-  );
-  if(route){
-    if(_activeTrip) _activeTrip.planned_route = route;
-    updatePlannedRouteSummary(route);
+  updatePlannedRouteDebug('calling');
+  const ROUTES_KEY = 'AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+  const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps,routes.legs.distanceMeters,routes.legs.duration';
+  const reqBody = {
+    origin:      {location:{latLng:{latitude:originLat, longitude:originLng}}},
+    destination: {location:{latLng:{latitude:destLat,   longitude:destLng}}},
+    travelMode:  'DRIVE',
+    routingPreference: 'TRAFFIC_UNAWARE',
+    computeAlternativeRoutes: false,
+    languageCode: 'en-US',
+    units: 'IMPERIAL',
+  };
+  // Show request body in debug panel
+  const reqEl = document.getElementById('gd-req-body');
+  if(reqEl) reqEl.textContent = JSON.stringify(reqBody, null, 2);
+  try{
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers:{
+        'Content-Type':    'application/json',
+        'X-Goog-Api-Key':  ROUTES_KEY,
+        'X-Goog-FieldMask': fieldMask,
+      },
+      body: JSON.stringify(reqBody),
+    });
+    const data = await resp.json();
+    // Show raw response in debug panel
+    const rawEl = document.getElementById('gd-raw-response');
+    if(rawEl) rawEl.textContent = JSON.stringify(data, null, 2).substring(0, 2000);
+    if(data.error){
+      updatePlannedRouteDebug('error', null, data.error.message||'API error '+data.error.code);
+      return;
+    }
+    const route = data.routes?.[0];
+    if(!route){ updatePlannedRouteDebug('error', null, 'No routes returned'); return; }
+
+    const leg    = route.legs?.[0];
+    const distM  = route.distanceMeters || 0;
+    const durSec = parseInt((route.duration||'0s').replace('s',''))||0;
+    const polyline = route.polyline?.encodedPolyline || '';
+    const steps = (leg?.steps||[]).map(s=>({
+      instruction:      (s.navigationInstruction?.instructions||'').replace(/<[^>]+>/g,' ').trim(),
+      distance_miles:   +(( s.distanceMeters||0)/1609.34).toFixed(2),
+      duration_seconds: parseInt((s.staticDuration||'0s').replace('s',''))||0,
+    }));
+    const routeObj = {
+      fetched_at: new Date().toISOString(),
+      origin:     {lat:originLat, lng:originLng},
+      destination:{lat:destLat,   lng:destLng},
+      distance_miles:   +((distM/1609.34)).toFixed(2),
+      duration_seconds: durSec,
+      duration_text:    fmtDuration(durSec),
+      polyline, steps,
+    };
+    // Cache for use when trip is confirmed
+    window._previewRoute = routeObj;
+    updatePlannedRouteDebug('ok', routeObj);
+    // Update stored label to show preview only
+    const storedEl = document.getElementById('gd-route-stored');
+    if(storedEl){ storedEl.textContent = '⚠ Preview only — will write to DB when trip starts'; storedEl.style.color='#f4a93a'; }
+  } catch(e){
+    updatePlannedRouteDebug('error', null, 'Fetch error: ' + e.message);
+  }
+}
+
+async function retryPlannedRoute(){
+  const originLat = parseFloat(window._previewOriginLat || (MOCK_GPS ? MOCK_LAT : null));
+  const originLng = parseFloat(window._previewOriginLng || (MOCK_GPS ? MOCK_LNG : null));
+  const destLat   = parseFloat(_activeJob?.dest_lat);
+  const destLng   = parseFloat(_activeJob?.dest_lng);
+
+  if(!originLat||!originLng||!destLat||!destLng){
+    updatePlannedRouteDebug('error', null,
+      'Missing coords — origin:('+(originLat||'null')+','+(originLng||'null')+') dest:('+(destLat||'null')+','+(destLng||'null')+') MOCK_GPS:'+MOCK_GPS);
+    return;
+  }
+
+  // If active trip exists write to DB, otherwise preview only
+  if(_activeTrip?.id){
+    updatePlannedRouteDebug('pending');
+    const route = await fetchAndStorePlannedRoute(
+      _activeTrip.id, originLat, originLng, destLat, destLng, 'planned_route'
+    );
+    if(route && _activeTrip) _activeTrip.planned_route = route;
+  } else {
+    await previewPlannedRoute(originLat, originLng, destLat, destLng);
   }
 }
 
