@@ -794,7 +794,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.37</div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.47</div>
   </div>
 </div>
 
@@ -1637,13 +1637,28 @@ function checkSubmitReady(){
     }
   });
   const ready=noEmpErrors&&hasSig&&hasScan&&allHaveTimes&&jiOk;
-  btn.disabled=!ready;
+
+  // DNR requires notes
+  let dnrMissingNotes = false;
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid = card.dataset.empId;
+    const dnrEl = document.getElementById('dnr-'+eid);
+    const notesEl = card.querySelector('input[placeholder="Optional notes…"]');
+    const reqEl = document.getElementById('dnr-notes-req-'+eid);
+    const isDnr = dnrEl?.checked;
+    const hasNotes = notesEl?.value.trim().length > 0;
+    if(reqEl) reqEl.style.display = isDnr && !hasNotes ? '' : 'none';
+    if(isDnr && !hasNotes) dnrMissingNotes = true;
+  });
+
+  btn.disabled = !(ready && !dnrMissingNotes);
   const missing=[];
   if(!jiOk)missing.push('all job info fields');
   if(!allHaveTimes||!noEmpErrors)missing.push('valid employee times');
   if(!hasSig)missing.push('supervisor signature');
   if(!hasScan)missing.push('at least one scan');
-  if(ready){
+  if(dnrMissingNotes)missing.push('notes for DNR employees');
+  if(ready&&!dnrMissingNotes){
     hint.innerHTML='<i class="ti ti-circle-check" style="color:#6abf3a"></i> <span style="color:#6abf3a">Ready to submit!</span>';
   } else {
     hint.innerHTML='<i class="ti ti-alert-circle" style="color:#f4c26a"></i> <span style="color:#f4c26a">Still needed: </span><span style="color:rgba(255,255,255,0.75)">'+missing.join(' &bull; ')+'</span>';
@@ -1678,7 +1693,7 @@ function checkSubmitReady(){
         noBreakEmps.push(`${name} &mdash; ${(paidMins/60).toFixed(1)}h with no break`);
       }
     });
-    if(ready && noBreakEmps.length){
+    if(ready && !dnrMissingNotes && noBreakEmps.length){
       warnItems.innerHTML = noBreakEmps.map(n=>`<li>${n}</li>`).join('');
       warnDiv.classList.add('visible');
     } else {
@@ -1730,6 +1745,19 @@ function checkMissingTimes(){
       const present  = hasIn ? `In: ${fmtEpochMins(toMins(b.inVal))}` : `Out: ${fmtEpochMins(toMins(b.outVal))}`;
       issues.push({ name, typeLabel, missing, present, isPrimary: b.isPrimary });
     });
+  });
+
+  // DNR employees missing notes
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid = card.dataset.empId;
+    const dnrEl = document.getElementById('dnr-'+eid);
+    const notesEl = card.querySelector('input[placeholder="Optional notes…"]');
+    if(dnrEl?.checked && !notesEl?.value.trim()){
+      const fnameEl = document.getElementById('fname-'+eid);
+      const lnameEl = card.querySelectorAll('input[type=text]')[1];
+      const name = [fnameEl?.value.trim(), lnameEl?.value.trim()].filter(Boolean).join(' ') || 'Employee';
+      issues.push({ name, typeLabel:'DNR', missing:'notes required for DNR', present:'', isPrimary:false });
+    }
   });
 
   if(issues.length && _scanEverUploaded){
@@ -1932,8 +1960,10 @@ function validateEmployee(empId){
   });
 
   // ── Helper: get all paid segments for this employee (excluding a block) ──
+  // Excludes inside_paid and inside_or_between blocks — those nest inside paid blocks by design
   const paidSegs = (excludeId=null) => blocks
-    .filter(b=>_ctIsPaid(b.type)&&b.blockId!==excludeId)
+    .filter(b=>_ctIsPaid(b.type)&&b.blockId!==excludeId
+      &&_ctNesting(b.type)!=='inside_paid'&&_ctNesting(b.type)!=='inside_or_between')
     .map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)}))
     .filter(s=>s.in!==null&&s.out!==null&&s.out>s.in);
 
@@ -2053,28 +2083,22 @@ function validateEmployee(empId){
       }
     }
 
-    // ── 5. inside_or_between: Break Unpaid rule ───────────────────
-    // Valid if EITHER:
-    //   (a) falls entirely inside a single paid block, OR
-    //   (b) abuts a paid block on each side (between two paid blocks)
+    // ── 5. inside_or_between: Break Unpaid ───────────────────────
+    // Valid if EITHER entirely inside a paid block, OR abutting paid blocks on both sides
     if(nesting==='inside_or_between'){
       const paid=paidSegs(b.blockId);
-      const enclosed = paid.some(s=>st>=s.in&&en<=s.out);
-      const prevPaid  = paid.find(s=>s.out===st);
-      const allPaidIns = blocks
+      const enclosed=paid.some(s=>st>=s.in&&en<=s.out);
+      const prevPaid=paid.find(s=>s.out===st);
+      const allPaidIns=blocks
         .filter(x=>_ctIsPaid(x.type)&&x.blockId!==b.blockId&&x.inVal)
         .map(x=>toMins(x.inVal)).filter(x=>x!==null);
-      const nextPaid = en!==null && allPaidIns.some(x=>x===en);
-      const between  = prevPaid && nextPaid;
-      if(!enclosed && !between){
+      const nextPaid=en!==null&&allPaidIns.some(x=>x===en);
+      const between=prevPaid&&nextPaid;
+      if(!enclosed&&!between){
         setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
-        if(em){
-          em.textContent = typeLabel+' must either fall entirely within a paid period, or abut paid blocks on both sides';
-          em.classList.add('show');
-        }
+        if(em){em.textContent=typeLabel+' must fall entirely within a paid period, or abut paid blocks on both sides'; em.classList.add('show');}
         empValid=false;
       }
-      // No overlap with other blocks of the same type
       const sameType=blocks.filter(x=>x.type===b.type&&x.blockId!==b.blockId)
         .map(x=>({in:toMins(x.inVal),out:toMins(x.outVal)})).filter(x=>x.in!==null&&x.out!==null);
       if(sameType.some(x=>st<x.out&&en>x.in)){
@@ -2086,9 +2110,19 @@ function validateEmployee(empId){
   });
 
   // ── Totals & badges ───────────────────────────────────────────
-  const paidMins=getPaidSegs(empId,null).reduce((s,p)=>s+(p.out-p.in),0);
+  // (paid DateDiff - breakUnpaid DateDiff inside paid) / 60
+  const _paidSegs=getPaidSegs(empId,null);
+  const _paidGross=_paidSegs.reduce((s,p)=>s+(p.out-p.in),0);
+  const _breakDeduct=(empBlocks[empId]||[])
+    .filter(b=>_ctNesting(b.type)==='inside_or_between'&&b.inVal&&b.outVal)
+    .reduce((s,b)=>{
+      const bst=toMins(b.inVal),ben=toMins(b.outVal);
+      if(bst===null||ben===null||ben<=bst) return s;
+      return _paidSegs.some(p=>bst>=p.in&&ben<=p.out)?s+(ben-bst):s;
+    },0);
+  const paidMins=Math.max(0,_paidGross-_breakDeduct);
   const badge=document.getElementById('badge-'+empId);
-  if(badge) badge.textContent=(paidMins/60).toFixed(1)+' hrs';
+  if(badge) badge.textContent=(paidMins/60).toFixed(2)+' hrs';
   (empBlocks[empId]||[]).forEach(b=>{
     const bel=document.getElementById('bhrs-'+b.blockId);
     if(bel) bel.innerHTML=blockHrsBadge(empId,b);
@@ -2179,7 +2213,10 @@ function calcTotals(){
     const primary=blocks.find(b=>b.isPrimary);
     const hasClockIn=primary&&primary.inVal;
     if(hasName&&hasClockIn){
-      tp+=getPaidSegs(eid,null).reduce((s,p)=>s+(p.out-p.in),0);
+      const _ps=getPaidSegs(eid,null);
+      const _pg=_ps.reduce((s,p)=>s+(p.out-p.in),0);
+      const _bd=blocks.filter(b=>_ctNesting(b.type)==='inside_or_between'&&b.inVal&&b.outVal).reduce((s,b)=>{const bst=toMins(b.inVal),ben=toMins(b.outVal);if(bst===null||ben===null||ben<=bst)return s;return _ps.some(p=>bst>=p.in&&ben<=p.out)?s+(ben-bst):s;},0);
+      tp+=Math.max(0,_pg-_bd);
       tb+=blocks.filter(b=>_ctNesting(b.type)==='inside_paid'||_ctNesting(b.type)==='inside_or_between').map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in).reduce((s,b)=>s+(b.out-b.in),0);
       cnt++;
     }
@@ -2218,8 +2255,16 @@ function blockHrsBadge(empId, block){
   if(mins === null) return '';
 
   if(isPrimary || type === 'paid'){
-    // Count / additional paid — show total paid hours
-    const h = (mins/60).toFixed(1);
+    // (paid DateDiff(In,Out) - break DateDiff(In,Out)) / 60
+    const st=toMins(inVal), en=toMins(outVal);
+    const breakMins=(empBlocks[empId]||[])
+      .filter(b=>_ctNesting(b.type)==='inside_or_between'&&b.inVal&&b.outVal)
+      .reduce((s,b)=>{
+        const bst=toMins(b.inVal),ben=toMins(b.outVal);
+        if(bst===null||ben===null||ben<=bst) return s;
+        return (bst>=st&&ben<=en) ? s+(ben-bst) : s;
+      },0);
+    const h=(Math.max(0,mins-breakMins)/60).toFixed(2);
     return `<span class="block-hrs-badge">${h}h</span>`;
   }
 
@@ -2274,7 +2319,7 @@ function hasNoBreakWarning(empId){
   const longSpans = merged.filter(s => (s.out - s.in) >= 480);
   if(!longSpans.length) return false;
 
-  // Check if any break (inside_paid or inside_or_between nesting) falls within a long span
+  // Check if any break (inside_paid nesting) falls within a long span
   const brkSegs = blocks
     .filter(b => (_ctNesting(b.type)==='inside_paid'||_ctNesting(b.type)==='inside_or_between') && b.inVal && b.outVal)
     .map(b => { let i=toMins(b.inVal), o=toMins(b.outVal); if(o<i) o+=1440; return {in:i, out:o}; })
@@ -2300,10 +2345,7 @@ function _ctColor(typeKey){
   return legacy[typeKey]||'#888';
 }
 function _ctIsPaid(typeKey){
-  const t=_ct(typeKey); if(t){
-    if(t.nesting_rule==='inside_paid'||t.nesting_rule==='between_paid'||t.nesting_rule==='inside_or_between') return false;
-    return !!t.is_paid;
-  }
+  const t=_ct(typeKey); if(t) return !!t.is_paid;
   return typeKey!=='brk'&&typeKey!=='lunch';
 }
 function _ctNesting(typeKey){
@@ -2452,7 +2494,7 @@ function addEmployee(role,loginOverride){
         <span>Travel Only</span>
       </label>
     </div>
-    <div class="field-group" style="margin-top:8px"><label>Notes</label><input type="text" placeholder="Optional notes\u2026" style="font-size:14px"/></div>`;
+    <div class="field-group" style="margin-top:8px"><label>Notes <span id="dnr-notes-req-${empId}" style="display:none;color:var(--danger-text);font-size:11px;font-weight:600">* required for DNR</span></label><input type="text" placeholder="Optional notes\u2026" style="font-size:14px" oninput="checkSubmitReady()"/></div>`;
   c.appendChild(div);
 
   // Add the primary Count block (always first, always 'count' key)
