@@ -144,7 +144,52 @@ input[type=file]{display:none}
 .submit-hint{font-size:13px;color:rgba(255,255,255,0.6);text-align:center;margin-top:6px;font-weight:500;min-height:20px}
 input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-style:dashed}
 
-/* ── Add Person panel ─────────────────────────────────────── */
+/* ── Role impersonation switcher ─────────────────────────── */
+#impersonation-banner{display:none;align-items:center;gap:10px;
+  padding:.5rem 1.25rem;background:#412402;border-bottom:1px solid #633806;
+  font-size:12px;font-weight:600;color:#FAC775;position:sticky;top:0;z-index:200}
+#impersonation-banner.show{display:flex}
+#impersonation-banner i{font-size:15px}
+.imp-banner-label{flex:1}
+.imp-exit-btn{padding:4px 12px;border-radius:20px;background:rgba(244,169,58,.2);
+  border:1px solid rgba(244,169,58,.5);color:#FAC775;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px}
+.imp-exit-btn:hover{background:rgba(244,169,58,.35)}
+/* Role switcher dropdown in user bar */
+.role-switcher-wrap{position:relative;margin-left:8px}
+.role-switcher-btn{display:flex;align-items:center;gap:5px;padding:4px 10px;
+  background:rgba(244,169,58,.15);border:1px solid rgba(244,169,58,.4);
+  border-radius:20px;color:#FAC775;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.role-switcher-btn:hover{background:rgba(244,169,58,.25)}
+.role-switcher-btn i{font-size:13px}
+.role-switcher-dropdown{position:absolute;top:calc(100% + 6px);right:0;
+  width:320px;background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,.5);
+  z-index:300;display:none;overflow:hidden}
+.role-switcher-dropdown.show{display:block}
+.rsd-header{padding:.75rem 1rem;border-bottom:1px solid var(--border);
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text3)}
+.rsd-section{padding:.5rem 0}
+.rsd-section-label{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--text3);padding:.25rem 1rem .15rem}
+.rsd-option{display:flex;align-items:center;gap:10px;padding:.55rem 1rem;
+  cursor:pointer;transition:background .1s}
+.rsd-option:hover{background:var(--bg3)}
+.rsd-option.active{background:rgba(244,169,58,.1)}
+.rsd-option-role{font-size:13px;font-weight:600;color:var(--text);flex:1}
+.rsd-option-scope{font-size:10px;color:var(--text3);background:var(--bg3);
+  border:0.5px solid var(--border);border-radius:4px;padding:1px 6px}
+.rsd-option-user{font-size:11px;color:var(--text2);margin-top:1px}
+.rsd-divider{height:1px;background:var(--border);margin:.25rem 0}
+.rsd-user-search{padding:.5rem .75rem;border-bottom:1px solid var(--border)}
+.rsd-user-search input{width:100%;padding:6px 10px;background:var(--bg4);
+  border:1px solid var(--border2);border-radius:var(--radius-sm);
+  font-size:12px;color:var(--text);font-family:inherit}
+.rsd-user-search input:focus{outline:none;border-color:var(--blue)}
+.rsd-users{max-height:180px;overflow-y:auto}
+.rsd-no-results{padding:.75rem 1rem;font-size:12px;color:var(--text3);text-align:center}
 #add-person-panel{position:fixed;top:0;right:-560px;width:560px;height:100vh;
   background:var(--bg2);border-left:1px solid var(--border2);z-index:300;
   display:flex;flex-direction:column;transition:right .25s ease;
@@ -830,22 +875,72 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .status-dot.inactive{background:#a32d2d}
 /* Org tree */
 .org-tree{font-size:13px}
-.org-node{margin-bottom:2px}
-.org-node-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;border:0.5px solid transparent}
-.org-node-row:hover{background:var(--bg2)}
-.org-node-row.selected{background:var(--info-bg);border-color:var(--info-border);color:var(--info-text)}
-.org-node-children{padding-left:20px;border-left:1.5px solid var(--border);margin-left:12px}
-.org-type-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px;text-transform:uppercase}
-.org-type-region{background:#185fa5;color:#fff}
-.org-type-district{background:#854f0b;color:#fff}
-.org-type-area{background:#3b6d11;color:#fff}
-.org-type-division{background:#6b3fa0;color:#fff}
-.org-manager-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:6px;background:rgba(106,191,58,.15);color:#6abf3a;border:0.5px solid rgba(106,191,58,.3)}
-.org-manager-none{background:transparent;color:var(--text3);border:0.5px dashed var(--border2);font-weight:500}
-.org-node-actions{margin-left:auto;display:flex;gap:4px;opacity:0}
-.org-node-row:hover .org-node-actions{opacity:1}
-.org-action-btn{background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;padding:2px 4px;border-radius:3px}
-.org-action-btn:hover{background:var(--bg3);color:var(--text)}
+/* ── Org tree ─────────────────────────────────────────────── */
+.org-node{margin-bottom:1px}
+.org-node-row{display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:6px;cursor:pointer;border:0.5px solid transparent;position:relative}
+.org-node-row:hover{background:var(--bg2);border-color:var(--border)}
+.org-node-row:hover .org-edit-hint{opacity:1}
+.org-node-row:hover .org-type-badge{opacity:1}
+.org-edit-hint{opacity:0;font-size:11px;color:var(--text3);font-style:italic;
+  margin-left:auto;transition:opacity .15s;pointer-events:none;white-space:nowrap;
+  display:flex;align-items:center;gap:4px}
+/* Collapse toggle */
+.org-tog{width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:16px;font-weight:400;color:var(--text3);
+  cursor:pointer;line-height:1;user-select:none;background:none;border:none;
+  transition:color .12s}
+.org-tog:hover{color:var(--text)}
+.org-tog.leaf{opacity:0;pointer-events:none}
+/* Color dot */
+.org-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.org-dot-division{background:#6b3fa0}
+.org-dot-region{background:#185fa5}
+.org-dot-district{background:#854f0b}
+.org-dot-area{background:#3b6d11}
+/* Type badge — shown on hover only */
+.org-type-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;
+  text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;opacity:0;
+  transition:opacity .15s}
+.org-type-division{background:rgba(107,63,160,.15);color:#a87de0;border:0.5px solid rgba(107,63,160,.3)}
+.org-type-region{background:rgba(24,95,165,.15);color:#7eb8f7;border:0.5px solid rgba(24,95,165,.3)}
+.org-type-district{background:rgba(133,79,11,.15);color:#f4a93a;border:0.5px solid rgba(133,79,11,.3)}
+.org-type-area{background:rgba(59,109,17,.15);color:#6ab34f;border:0.5px solid rgba(59,109,17,.3)}
+/* Name and number */
+.org-name{font-size:13px;font-weight:600;color:var(--text)}
+.org-num{font-size:11px;color:var(--text3);background:var(--bg3);
+  border:0.5px solid var(--border);border-radius:4px;padding:1px 6px}
+/* Separator */
+.org-sep{width:1px;height:13px;background:var(--border2);flex-shrink:0}
+/* Manager label */
+.org-mgr{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+.org-mgr.none{color:var(--text3);font-style:italic;opacity:.6}
+.org-mgr i{font-size:13px}
+/* Children container */
+.org-children{border-left:1.5px solid var(--border);margin-left:9px;
+  padding-left:11px;overflow:hidden;transition:max-height .22s ease;max-height:4000px}
+.org-children.collapsed{max-height:0}
+/* Member chips */
+.org-members{display:flex;flex-wrap:wrap;gap:5px;padding:4px 0 6px 28px}
+.org-member-chip{font-size:11px;padding:2px 8px;border-radius:20px;
+  background:var(--bg3);color:var(--text2);border:0.5px solid var(--border);
+  display:flex;align-items:center;gap:4px}
+/* Edit modal overlay */
+.org-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:500;display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(2px)}
+.org-modal-box{background:var(--bg2);border:0.5px solid var(--border2);
+  border-radius:var(--radius-lg);padding:1.5rem;width:400px;max-width:90vw;
+  box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.org-modal-type{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;padding:2px 8px;border-radius:10px;display:inline-block;margin-bottom:.4rem}
+.org-modal-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:1rem}
+.org-modal-field label{display:block;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px}
+.org-modal-field input,.org-modal-field select{width:100%;padding:8px 10px;
+  background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius-sm);
+  font-size:13px;color:var(--text);font-family:inherit}
+.org-modal-field input:focus,.org-modal-field select:focus{outline:none;border-color:var(--blue)}
 /* Permission grid */
 .perm-table{width:100%;border-collapse:collapse;font-size:12px}
 .perm-table{border-collapse:collapse;border-spacing:0;width:auto}
@@ -941,11 +1036,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   <!-- Nav items -->
   <nav class="sb-nav" aria-label="Main navigation">
     <div class="sb-section-label">Main</div>
-    <button class="sb-link active" id="sb-dashboard" onclick="sbNavigate('dashboard')" aria-label="Dashboard">
-      <i class="ti ti-home" aria-hidden="true"></i>
-      <span class="sb-link-label">Dashboard</span>
-    </button>
-    <button class="sb-link" id="sb-timesheets" onclick="sbNavigate('timesheets')" aria-label="Timesheets">
+    <button class="sb-link active" id="sb-timesheets" onclick="sbNavigate('timesheets')" aria-label="Timesheets">
       <i class="ti ti-clock" aria-hidden="true"></i>
       <span class="sb-link-label">Timesheets</span>
     </button>
@@ -970,10 +1061,6 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <button class="sb-link" id="sb-config" onclick="openWizard()" aria-label="Configuration" style="display:none">
       <i class="ti ti-settings-2" aria-hidden="true"></i>
       <span class="sb-link-label">Configuration</span>
-    </button>
-    <button class="sb-link" id="sb-signout" onclick="doLogout()" aria-label="Sign out">
-      <i class="ti ti-logout" aria-hidden="true"></i>
-      <span class="sb-link-label">Sign out</span>
     </button>
     <div class="sb-divider"></div>
     <div class="sb-section-label">Finance</div>
@@ -1032,7 +1119,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.26</div>    <div class="login-version" id="login-version"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.40</div>
   </div>
 </div>
 
@@ -1055,6 +1142,15 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   </div>
 </div>
 
+<!-- Impersonation banner — shown when testing_qa user is impersonating a role -->
+<div id="impersonation-banner">
+  <i class="ti ti-theater"></i>
+  <span class="imp-banner-label" id="imp-banner-label">Impersonating: —</span>
+  <button class="imp-exit-btn" onclick="exitImpersonation()">
+    <i class="ti ti-x"></i> Exit impersonation
+  </button>
+</div>
+
 <div id="nav-tabs" style="display:none">
   <div class="nav-tabs">
     <button class="nav-tab active" id="tab-mgr" onclick="switchTab('mgr')">
@@ -1066,6 +1162,29 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 <div class="user-bar" id="user-bar" style="display:none">
   <span class="user-bar-name" id="user-bar-name">Loading...</span>
   <span class="user-bar-role" id="user-bar-role">—</span>
+  <!-- Role switcher — only visible for testing_qa users -->
+  <div class="role-switcher-wrap" id="role-switcher-wrap" style="display:none">
+    <button class="role-switcher-btn" onclick="toggleRoleSwitcher(event)">
+      <i class="ti ti-theater"></i> Switch role
+      <i class="ti ti-chevron-down" style="font-size:10px"></i>
+    </button>
+    <div class="role-switcher-dropdown" id="role-switcher-dropdown">
+      <div class="rsd-header">Impersonate a role for testing</div>
+      <div class="rsd-section">
+        <div class="rsd-section-label">Select role</div>
+        <div id="rsd-roles-list"></div>
+      </div>
+      <div class="rsd-divider"></div>
+      <div class="rsd-section">
+        <div class="rsd-section-label">Optionally impersonate specific user</div>
+        <div class="rsd-user-search">
+          <input type="text" id="rsd-user-search" placeholder="Search by name…"
+            oninput="filterImpersonateUsers(this.value)"/>
+        </div>
+        <div class="rsd-users" id="rsd-users-list"></div>
+      </div>
+    </div>
+  </div>
   <button class="logout-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
 </div>
 
@@ -1432,6 +1551,15 @@ let currentUser = null;
 let currentProfile = null;
 let _userPermissions = {};    // loaded on login from role_definitions + overrides
 let _userScopeType   = 'own'; // 'none'|'region'|'district'|'area'|'own'
+
+// ── Impersonation state ───────────────────────────────────────────────────────
+let _impersonating       = false;
+let _impersonatedRole    = null;   // role key being impersonated
+let _impersonatedUser    = null;   // specific user profile (optional)
+let _realPermissions     = null;   // saved before impersonation
+let _realScopeType       = null;
+let _allRolesForSwitcher = [];
+let _allUsersForSwitcher = [];
 let _pendingRoleLabel = '';   // role_label resolved during sign-in, applied in completeSignIn
 let _testRoleKey      = null; // QA role-switcher hook (test harness removed in this split)
 let _timesheetChannel = null;
@@ -1448,15 +1576,14 @@ function isSupervisor(){ return (_testRoleKey || currentProfile?.role) === 'supe
 function isEmployee()  { return (_testRoleKey || currentProfile?.role) === 'employee'; }
 function isFieldRole() { return isSupervisor() || isEmployee(); }
 function canApprove(){
-  // Explicit permission flag from role_definitions / overrides
-  if(can('approve')) return true;
-  // Admin role always gets approve
-  const role  = (currentProfile?.role||'').toLowerCase();
-  const email = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  return role==='admin' || role==='superadmin' || email==='admin@datascan.com';
+  return can('approve');
+}
+function canReject(){
+  if(can('reject')) return true;
+  return can('approve'); // anyone who can approve can also reject
 }
 function canViewAll()  { return can('view_all'); }
-function isReadOnly()  { return can('read_only'); }
+function isReadOnly()  { return can('read_only') || (can('timesheets_read') && !can('approve') && !can('reject') && !can('edit_times')); }
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function doLogin(){
@@ -1600,7 +1727,16 @@ async function onSignedIn(user){
 
   const rolePerms     = roleDef?.permissions          || {};
   const userOverrides = profile?.permissions_override || {};
-  _userPermissions    = {...rolePerms, ...userOverrides};
+  // Only apply override values that are explicitly true — false overrides
+  // should not cancel out role-level permissions (they're usually stale defaults)
+  // Exception: qa_config is always passed through as-is
+  const effectiveOverrides = {};
+  Object.entries(userOverrides).forEach(([k,v])=>{
+    if(k === 'qa_config') effectiveOverrides[k] = v;
+    else if(v === true)   effectiveOverrides[k] = true;
+    // false values are intentionally ignored — role permissions take precedence
+  });
+  _userPermissions    = {...rolePerms, ...effectiveOverrides};
   _userScopeType      = roleDef?.scope_type || 'own';
   _pendingRoleLabel   = roleDef?.role_label || profile?.role || 'Manager';
 
@@ -1687,6 +1823,9 @@ function completeSignIn(){
     const adminBtn = document.getElementById('admin-delete-btn');
     if(adminBtn) adminBtn.style.display = 'block';
   }
+
+  // Init role switcher for testing_qa users
+  if(can('role_switcher')) initRoleSwitcher();
 }
 
 
@@ -1706,19 +1845,24 @@ function initSidebar(){
     sidebar.classList.add('sb-visible');
     document.body.classList.add('has-sidebar');
     if(!shell){
-      // First login — defer DOM restructure one tick so sidebar is painted first
       setTimeout(wrapAppShell, 0);
     } else {
-      // Shell already exists (e.g. switching back from a field role test) —
-      // just ensure it's visible and correctly laid out, no re-wrap needed
       shell.style.display = 'flex';
     }
   }
-  // Settings button visibility
-  const settingsBtn = document.getElementById('sb-settings');
-  if(settingsBtn) settingsBtn.style.display = 'none'; // replaced by sb-config in nav
-  const cfgBtn2 = document.getElementById('sb-config');
-  if(cfgBtn2) cfgBtn2.style.display = (can('setup_wizard')||can('manage_users')) ? 'flex' : 'none';
+
+  // Admin-only nav items — everyone else sees Timesheets only
+  const isAdmin = can('setup_wizard') || can('manage_users') || can('manage_org');
+  const adminOnlyIds = ['sb-employees','sb-scheduling','sb-uat',
+                        'sb-config','sb-settings','sb-payroll','sb-reports'];
+  adminOnlyIds.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = isAdmin ? '' : 'none';
+  });
+  // Config button specifically needs flex not block
+  const cfgBtn = document.getElementById('sb-config');
+  if(cfgBtn && isAdmin) cfgBtn.style.display = 'flex';
+
   // User info
   if(currentProfile){
     const initials = (currentProfile.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -1729,7 +1873,6 @@ function initSidebar(){
     if(nm) nm.textContent = currentProfile.full_name || currentProfile.email || '—';
     if(rl) rl.textContent = document.getElementById('user-bar-role')?.textContent || '—';
   }
-  // Set active link based on current view
   updateSidebarActive();
 }
 
@@ -1798,7 +1941,7 @@ function sbNavigate(page){
 function updateSidebarActive(page){
   document.querySelectorAll('.sb-link').forEach(l=>l.classList.remove('active'));
   const map = {
-    'mgr':'sb-timesheets','dashboard':'sb-dashboard',
+    'mgr':'sb-timesheets','dashboard':'sb-timesheets',
     'timesheets':'sb-timesheets','employees':'sb-employees',
     'scheduling':'sb-scheduling','payroll':'sb-payroll','reports':'sb-reports',
     'uat':'sb-uat'
@@ -2254,7 +2397,8 @@ async function loadWizOrg(){
     getSupabase().from('districts').select('*').order('name'),
     getSupabase().from('areas').select('*').order('name'),
     getSupabase().from('profiles').select('id,full_name,role').eq('is_active',true)
-      .in('role',['admin','manager','regional_manager']).order('full_name'),
+      .not('role','in','("supervisor","employee","sales","scheduling")')
+      .order('full_name'),
   ]);
   _orgTree = {divisions:divisions||[], regions:regions||[], districts:districts||[], areas:areas||[], managers:managers||[]};
 
@@ -2283,26 +2427,36 @@ async function loadWizOrg(){
   }
 
   function nodeRow(item, type){
-    const inactive = item.is_active===false;
-    const eff = effectiveManager(item, type);
-    const mgrName = eff.id ? managerName(eff.id) : null;
-    const mgrLabel = mgrName
-      ? `<span class="org-manager-badge" title="${eff.inherited?'Inherited from a parent level':'Responsible manager for this level'}">${eff.inherited?'↑ ':''}${mgrName}</span>`
-      : '<span class="org-manager-badge org-manager-none">No manager</span>';
+    const inactive  = item.is_active===false;
+    const eff       = effectiveManager(item, type);
+    const mgrName   = eff.id ? managerName(eff.id) : null;
     const childType = CHILD_TYPE[type] || '';
-    return `<div class="org-node-row ${inactive?'opacity-50':''}">
-      <i class="ti ti-${ICONS[type]}" style="color:var(--text3)"></i>
-      <span style="${inactive?'text-decoration:line-through;opacity:.5':''}font-weight:500">${item.name}</span>
-      ${item.code?`<span style="font-size:10px;color:var(--text3);margin-left:4px">${item.code}</span>`:''}
-      <span class="org-type-badge org-type-${type}">${type}</span>
-      ${inactive?'<span style="font-size:10px;color:var(--danger-text);margin-left:4px">inactive</span>':''}
-      ${mgrLabel}
-      <div class="org-node-actions">
-        <button class="org-action-btn" onclick="openEditOrgNode('${item['id_'+type]}','${type}')" title="Edit"><i class="ti ti-edit"></i></button>
-        <button class="org-action-btn" onclick="openAddOrgNode('${childType}','${item['id_'+type]}')" title="Add child" ${!childType?'style="display:none"':''}><i class="ti ti-plus"></i></button>
-        <button class="org-action-btn" onclick="toggleOrgActive('${item['id_'+type]}','${type}',${item.is_active!==false})" title="${inactive?'Activate':'Deactivate'}">
-          <i class="ti ti-${inactive?'eye':'eye-off'}"></i></button>
+    const idKey     = item['id_'+type];
+    const code      = item.code ? `<span class="org-num">${item.code}</span>` : '';
+    const mgrHtml   = mgrName
+      ? `<div class="org-mgr"><i class="ti ti-user" style="font-size:12px"></i>${eff.inherited?'<span style="font-size:10px;opacity:.6" title="Inherited">↑</span>':''}${mgrName}</div>`
+      : `<div class="org-mgr none"><i class="ti ti-user" style="font-size:12px"></i>No manager</div>`;
+    const hasChildren = childType && (
+      (type==='division' && _orgTree.regions.some(r=>r.id_division===idKey)) ||
+      (type==='region'   && _orgTree.districts.some(d=>d.id_region===idKey)) ||
+      (type==='district' && _orgTree.areas.some(a=>a.id_district===idKey))
+    );
+
+    return `<div class="org-node-row${inactive?' org-inactive':''}"
+      onclick="openEditOrgNode('${idKey}','${type}')"
+      style="${inactive?'opacity:.45':''}">
+      <div class="org-tog${hasChildren?'':' leaf'}"
+        onclick="event.stopPropagation();toggleOrgNode(this,'ch-${type}-${idKey}')"
+        title="${hasChildren?'Expand/collapse':''}">
+        ${hasChildren?'+':''}
       </div>
+      <div class="org-dot org-dot-${type}"></div>
+      <span class="org-name">${item.name}</span>
+      ${code}
+      <span class="org-type-badge org-type-${type}">${type}</span>
+      <div class="org-sep"></div>
+      ${mgrHtml}
+      <div class="org-edit-hint"><i class="ti ti-click" style="font-size:12px"></i> click to edit</div>
     </div>`;
   }
 
@@ -2310,12 +2464,12 @@ async function loadWizOrg(){
     let html = `<div class="org-node">${nodeRow(r,'region')}`;
     const rdists = _orgTree.districts.filter(d=>d.id_region===r.id_region);
     if(rdists.length){
-      html += '<div class="org-node-children">';
+      html += `<div class="org-children collapsed" id="ch-region-${r.id_region}">`;
       rdists.forEach(d=>{
         html += `<div class="org-node">${nodeRow(d,'district')}`;
         const dareas = _orgTree.areas.filter(a=>a.id_district===d.id_district);
         if(dareas.length){
-          html += '<div class="org-node-children">';
+          html += `<div class="org-children collapsed" id="ch-district-${d.id_district}">`;
           dareas.forEach(a=>{ html += `<div class="org-node">${nodeRow(a,'area')}</div>`; });
           html += '</div>';
         }
@@ -2333,26 +2487,24 @@ async function loadWizOrg(){
       html += `<div class="org-node">${nodeRow(dv,'division')}`;
       const dregions = _orgTree.regions.filter(r=>r.id_division===dv.id_division);
       if(dregions.length){
-        html += '<div class="org-node-children">';
+        html += `<div class="org-children collapsed" id="ch-division-${dv.id_division}">`;
         dregions.forEach(r=>{ html += regionBlock(r); });
         html += '</div>';
       }
       html += '</div>';
     });
-    // Regions without a division
     _orgTree.regions.filter(r=>!r.id_division).forEach(r=>{ html += regionBlock(r); });
-    // Districts without a region
     _orgTree.districts.filter(d=>!d.id_region).forEach(d=>{
       html += `<div class="org-node">${nodeRow(d,'district')}`;
       const dareas = _orgTree.areas.filter(a=>a.id_district===d.id_district);
       if(dareas.length){
-        html += '<div class="org-node-children">';
+        html += `<div class="org-children collapsed" id="ch-district-${d.id_district}">`;
         dareas.forEach(a=>{ html += `<div class="org-node">${nodeRow(a,'area')}</div>`; });
         html += '</div>';
       }
       html += '</div>';
     });
-    return html || '<p style="color:var(--text3);font-size:13px">No org structure yet. Add your first division to get started.</p>';
+    return html || '<p style="font-size:13px;color:var(--text3);padding:.5rem">No org structure yet. Add your first division to get started.</p>';
   }
 
   body.innerHTML = `
@@ -2371,6 +2523,61 @@ function _orgManagerOptions(selectedId){
   return `<option value="">— none / inherit from parent —</option>${opts}`;
 }
 
+// Build the searchable manager typeahead HTML
+function _mgrTypeahead(selectedId){
+  const selected = selectedId ? (_orgTree.managers||[]).find(m=>m.id===selectedId) : null;
+  const initVal  = selected ? selected.full_name : '';
+  return `
+    <div class="mgr-search-wrap">
+      <input type="text" class="mgr-search-input" id="mgr-search-input"
+        placeholder="Search manager or leave blank to inherit…"
+        value="${initVal}"
+        autocomplete="off"
+        oninput="filterMgrDropdown(this.value)"
+        onfocus="showMgrDropdown()"
+        onblur="setTimeout(hideMgrDropdown,200)"/>
+      <input type="hidden" id="on-manager" value="${selectedId||''}"/>
+      <div class="mgr-dropdown" id="mgr-dropdown">
+        <div class="mgr-option none-opt" onclick="selectMgr('','')">
+          <span>— none / inherit from parent —</span>
+        </div>
+        ${(_orgTree.managers||[]).map(m=>`
+          <div class="mgr-option" onclick="selectMgr('${m.id}','${m.full_name.replace(/'/g,"\\'")}')">
+            <i class="ti ti-user" style="font-size:13px;color:var(--text3)"></i>
+            <span>${m.full_name}</span>
+            <span class="mgr-role">${m.role||''}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function filterMgrDropdown(q){
+  const dd = document.getElementById('mgr-dropdown');
+  if(!dd) return;
+  dd.classList.add('show');
+  const lower = q.toLowerCase();
+  dd.querySelectorAll('.mgr-option:not(.none-opt)').forEach(opt=>{
+    const name = opt.querySelector('span')?.textContent||'';
+    opt.style.display = name.toLowerCase().includes(lower) ? '' : 'none';
+  });
+}
+
+function showMgrDropdown(){
+  document.getElementById('mgr-dropdown')?.classList.add('show');
+}
+
+function hideMgrDropdown(){
+  document.getElementById('mgr-dropdown')?.classList.remove('show');
+}
+
+function selectMgr(id, name){
+  const hidden = document.getElementById('on-manager');
+  const input  = document.getElementById('mgr-search-input');
+  if(hidden) hidden.value = id;
+  if(input)  input.value  = name || '';
+  hideMgrDropdown();
+}
+
 function _orgParentField(type, parentId){
   if(type==='region') return `<div class="wiz-modal-field"><label>Parent division (optional)</label>
       <select id="on-parent"><option value="">— none / standalone —</option>
@@ -2387,21 +2594,54 @@ function _orgParentField(type, parentId){
   return '';
 }
 
+function toggleOrgNode(togEl, childId){
+  const ch = document.getElementById(childId);
+  if(!ch) return;
+  const isCollapsed = ch.classList.toggle('collapsed');
+  togEl.textContent = isCollapsed ? '+' : '−';
+}
+
+function _showOrgModal(html){
+  // Remove any existing modal
+  document.getElementById('org-modal-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'org-modal-overlay';
+  ov.id = 'org-modal-overlay';
+  ov.innerHTML = `<div class="org-modal-box" onclick="event.stopPropagation()">${html}</div>`;
+  ov.addEventListener('click', ()=>ov.remove());
+  document.body.appendChild(ov);
+}
+
+function _closeOrgModal(){
+  document.getElementById('org-modal-overlay')?.remove();
+}
+
 function openAddOrgNode(type, parentId=''){
   if(!type) return;
-  openWizModal('Add '+type, `
-    <div class="wiz-modal-field"><label>Name <span style="color:var(--danger-text)">*</span></label>
-      <input type="text" id="on-name" placeholder="${type.charAt(0).toUpperCase()+type.slice(1)} name"/></div>
-    <div class="wiz-modal-field"><label>Code (optional)</label>
-      <input type="text" id="on-code" placeholder="e.g. SE, ATL"/></div>
+  const typeCap = type.charAt(0).toUpperCase()+type.slice(1);
+  const typeColor = {division:'#a87de0',region:'#7eb8f7',district:'#f4a93a',area:'#6ab34f'}[type]||'var(--text2)';
+  const typeBg    = {division:'rgba(107,63,160,.15)',region:'rgba(24,95,165,.15)',district:'rgba(133,79,11,.15)',area:'rgba(59,109,17,.15)'}[type]||'var(--bg3)';
+  _showOrgModal(`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+      <span class="org-modal-type" style="background:${typeBg};color:${typeColor};border:0.5px solid ${typeColor}30">${typeCap}</span>
+      <button onclick="_closeOrgModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;padding:2px 6px">×</button>
+    </div>
+    <div class="org-modal-title">Add ${typeCap}</div>
+    <div style="display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:.65rem">
+      <div class="org-modal-field"><label>Name *</label><input type="text" id="on-name" placeholder="${typeCap} name"/></div>
+      <div class="org-modal-field"><label>Number</label><input type="text" id="on-code" placeholder="e.g. 100"/></div>
+    </div>
     ${_orgParentField(type, parentId)}
-    <div class="wiz-modal-field"><label>Responsible manager (optional)</label>
-      <select id="on-manager">${_orgManagerOptions('')}</select>
-      <span style="font-size:11px;color:var(--text3)">If left blank, the parent level's manager applies.</span></div>
-    <div class="wiz-modal-btns">
-      <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
-      <button class="wiz-btn primary" onclick="saveOrgNode('${type}','')"><i class="ti ti-plus"></i> Add ${type}</button>
+    <div class="org-modal-field" style="margin-bottom:.65rem">
+      <label>Responsible manager</label>
+      ${_mgrTypeahead('')}
+      <span style="font-size:11px;color:var(--text3);display:block;margin-top:3px">If blank, inherits from parent.</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:.75rem;border-top:0.5px solid var(--border)">
+      <button onclick="_closeOrgModal()" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Cancel</button>
+      <button onclick="saveOrgNode('${type}','')" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--blue);border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Add ${typeCap}</button>
     </div>`);
+  setTimeout(()=>document.getElementById('on-name')?.focus(), 100);
 }
 
 function openEditOrgNode(id, type){
@@ -2409,19 +2649,36 @@ function openEditOrgNode(id, type){
   const item = items.find(i=>i['id_'+type]===id);
   if(!item) return;
   const parentId = type==='region'?item.id_division:type==='district'?item.id_region:type==='area'?item.id_district:'';
-  openWizModal('Edit '+type, `
-    <div class="wiz-modal-field"><label>Name <span style="color:var(--danger-text)">*</span></label>
-      <input type="text" id="on-name" value="${item.name}"/></div>
-    <div class="wiz-modal-field"><label>Code</label>
-      <input type="text" id="on-code" value="${item.code||''}"/></div>
+  const typeCap = type.charAt(0).toUpperCase()+type.slice(1);
+  const typeColor = {division:'#a87de0',region:'#7eb8f7',district:'#f4a93a',area:'#6ab34f'}[type]||'var(--text2)';
+  const typeBg    = {division:'rgba(107,63,160,.15)',region:'rgba(24,95,165,.15)',district:'rgba(133,79,11,.15)',area:'rgba(59,109,17,.15)'}[type]||'var(--bg3)';
+  const isActive  = item.is_active!==false;
+  _showOrgModal(`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+      <span class="org-modal-type" style="background:${typeBg};color:${typeColor};border:0.5px solid ${typeColor}30">${typeCap}</span>
+      <button onclick="_closeOrgModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;padding:2px 6px">×</button>
+    </div>
+    <div class="org-modal-title">${item.name}</div>
+    <div style="display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:.65rem">
+      <div class="org-modal-field"><label>Name *</label><input type="text" id="on-name" value="${item.name}"/></div>
+      <div class="org-modal-field"><label>Number</label><input type="text" id="on-code" value="${item.code||''}"/></div>
+    </div>
     ${_orgParentField(type, parentId)}
-    <div class="wiz-modal-field"><label>Responsible manager (optional)</label>
-      <select id="on-manager">${_orgManagerOptions(item.responsible_manager_id||'')}</select>
-      <span style="font-size:11px;color:var(--text3)">If left blank, the parent level's manager applies.</span></div>
-    <div class="wiz-modal-btns">
-      <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
-      <button class="wiz-btn primary" onclick="saveOrgNode('${type}','${id}')"><i class="ti ti-device-floppy"></i> Save</button>
+    <div class="org-modal-field" style="margin-bottom:.75rem">
+      <label>Responsible manager</label>
+      ${_mgrTypeahead(item.responsible_manager_id||'')}
+      <span style="font-size:11px;color:var(--text3);display:block;margin-top:3px">If blank, inherits from parent.</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:.75rem;border-top:0.5px solid var(--border)">
+      <button onclick="toggleOrgActive('${id}','${type}',${isActive})" style="padding:7px 14px;border-radius:var(--radius-sm);background:transparent;border:1px solid var(--danger-text);color:var(--danger-text);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">
+        ${isActive?'Deactivate':'Activate'}
+      </button>
+      <div style="display:flex;gap:8px">
+        <button onclick="_closeOrgModal()" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Cancel</button>
+        <button onclick="saveOrgNode('${type}','${id}')" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--blue);border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Save</button>
+      </div>
     </div>`);
+  setTimeout(()=>document.getElementById('on-name')?.focus(), 100);
 }
 
 async function saveOrgNode(type, existingId){
@@ -2448,7 +2705,7 @@ async function saveOrgNode(type, existingId){
     alert('No changes were saved — 0 rows updated. This is usually a missing UPDATE policy on the '+table+' table for your role.');
     return;
   }
-  closeWizModal();
+  _closeOrgModal();
   loadWizOrg();
   checkFirstRun();
 }
@@ -2463,11 +2720,218 @@ async function toggleOrgActive(id, type, currentlyActive){
     alert('No changes were saved — 0 rows updated. This is usually a missing UPDATE policy on the '+table+' table for your role.');
     return;
   }
+  _closeOrgModal();
   loadWizOrg();
 }
 // TODO (stage 3B-3): Roles & Permissions / Approval Chain tabs
-function loadWizRoles(){ _wizComingSoon('Roles & Permissions'); }
-function loadWizChain(){ _wizComingSoon('Approval Chain'); }
+async function loadWizRoles(){
+  const body = document.getElementById('wizard-body');
+
+  // All known permissions with friendly labels
+  const ALL_PERMS = [
+    {key:'app_timesheet',         label:'Timesheet App',          group:'Application Access'},
+    {key:'app_manager',           label:'Manager App',            group:'Application Access'},
+    {key:'app_travel',            label:'Travel App',             group:'Application Access'},
+    {key:'app_travel_mgr',        label:'Travel Manager App',     group:'Application Access'},
+    {key:'ts_create',             label:'Create Timesheet',       group:'Timesheet App'},
+    {key:'ts_add_employees',      label:'Add Employees',          group:'Timesheet App'},
+    {key:'ts_submit',             label:'Submit Timesheet',       group:'Timesheet App'},
+    {key:'ts_view_own',           label:'View Own Timesheets',    group:'Timesheet App'},
+    {key:'timesheets',            label:'View Timesheets',        group:'Manager App'},
+    {key:'timesheets_read',       label:'Read Only',              group:'Manager App'},
+    {key:'approve',               label:'Approve',                group:'Manager App'},
+    {key:'reject',                label:'Reject',                 group:'Manager App'},
+    {key:'edit_times',            label:'Edit Times',             group:'Manager App'},
+    {key:'add_person',            label:'Add Person',             group:'Manager App'},
+    {key:'pay_adjustments',       label:'Pay Adjustments',        group:'Manager App'},
+    {key:'pay_adj_chain',         label:'Pay Adj Chain',          group:'Manager App'},
+    {key:'travel_log',            label:'Log Travel',             group:'Travel App'},
+    {key:'travel_view_own',       label:'View Own Travel',        group:'Travel App'},
+    {key:'travel_view',           label:'View Travel Logs',       group:'Travel Manager App'},
+    {key:'travel_fleet_map',      label:'Fleet Map',              group:'Travel Manager App'},
+    {key:'view_users',            label:'View Users',             group:'Users'},
+    {key:'manage_users',          label:'Add / Edit Users',       group:'Users'},
+    {key:'manage_users_assigned', label:'Manage Assigned Users',  group:'Users'},
+    {key:'deactivate_user',       label:'Deactivate User',        group:'Users'},
+    {key:'approved_driver',       label:'Approved Driver',        group:'Users'},
+    {key:'view_org',              label:'View Org Structure',     group:'Organization'},
+    {key:'manage_org',            label:'Edit Org Structure',     group:'Organization'},
+    {key:'assign_org_manager',    label:'Assign Org Manager',     group:'Organization'},
+    {key:'setup_wizard',          label:'Setup Wizard',           group:'Setup'},
+    {key:'manage_roles',          label:'Roles and Permissions',  group:'Setup'},
+    {key:'per_diem_view',         label:'Per Diem View',          group:'Setup'},
+    {key:'per_diem_set',          label:'Per Diem Set',           group:'Setup'},
+    {key:'qa_config',             label:'QA / UAT Config',        group:'Setup'},
+    {key:'reports',               label:'Run Reports',            group:'Reports'},
+    {key:'build_reports',         label:'Build Reports',          group:'Reports'},
+    {key:'notifications',         label:'Notifications',          group:'System'},
+    {key:'role_switcher',         label:'Role Switcher',          group:'System'},
+  ];
+
+  const SCOPE_OPTS = [
+    {value:'none',     label:'All (no filter)'},
+    {value:'division', label:'Division'},
+    {value:'region',   label:'Region'},
+    {value:'district', label:'District'},
+    {value:'area',     label:'Area'},
+    {value:'own',      label:'Own only'},
+  ];
+
+  const {data:roles, error} = await getSupabase()
+    .from('role_definitions')
+    .select('*')
+    .order('sort_order');
+
+  if(error){
+    body.innerHTML=`<div class="empty-state"><i class="ti ti-alert-triangle"></i><p>${error.message}</p></div>`;
+    return;
+  }
+
+  // Group perms by group
+  const groups = [...new Set(ALL_PERMS.map(p=>p.group))];
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:13px;color:var(--text2)">${(roles||[]).length} roles defined</div>
+      <button class="wiz-add-btn" onclick="openAddRole()">
+        <i class="ti ti-plus"></i> Add Role
+      </button>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)">
+      <table class="perm-table" id="perm-table">
+        <thead>
+          <tr>
+            <th class="col-role" rowspan="2">Role</th>
+            <th rowspan="2" style="padding:6px 8px;min-width:120px;text-align:left;font-size:10px;color:var(--text3)">Scope</th>
+            ${groups.map(g=>`<th colspan="${ALL_PERMS.filter(p=>p.group===g).length}" style="padding:6px 4px;border-bottom:1px solid var(--border2);color:var(--text3);font-size:10px">${g}</th>`).join('')}
+            <th rowspan="2" style="min-width:80px;padding:6px 4px">Actions</th>
+          </tr>
+          <tr>
+            ${ALL_PERMS.map(p=>`<th style="padding:4px 2px;writing-mode:vertical-rl;transform:rotate(180deg);height:80px;font-size:10px;font-weight:600;color:var(--text2)">${p.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${(roles||[]).map(role=>`
+            <tr id="role-row-${role.role_key}">
+              <td class="col-role">
+                <div style="font-weight:700">${role.role_label||role.role_key}</div>
+                <div style="font-size:10px;color:var(--text3);font-family:monospace">${role.role_key}</div>
+                ${role.is_active===false?'<span style="font-size:10px;color:var(--danger-text)">inactive</span>':''}
+              </td>
+              <td style="padding:6px 8px;text-align:left">
+                <select class="perm-scope-sel" data-role="${role.role_key}"
+                  onchange="saveRoleScope('${role.role_key}',this.value)"
+                  style="font-size:11px;padding:3px 6px;background:var(--bg4);border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-family:inherit">
+                  ${SCOPE_OPTS.map(s=>`<option value="${s.value}" ${(role.scope_type||'none')===s.value?'selected':''}>${s.label}</option>`).join('')}
+                </select>
+              </td>
+              ${ALL_PERMS.map(p=>{
+                const hasPerm = !!(role.permissions||{})[p.key];
+                return `<td>
+                  <input type="checkbox" class="perm-toggle" ${hasPerm?'checked':''}
+                    title="${role.role_label} — ${p.label}"
+                    onchange="toggleRolePerm('${role.role_key}','${p.key}',this.checked)"
+                    data-role="${role.role_key}" data-perm="${p.key}"/>
+                </td>`;
+              }).join('')}
+              <td style="padding:4px">
+                <button class="org-action-btn" onclick="openEditRole('${role.role_key}')" title="Edit role">
+                  <i class="ti ti-edit"></i>
+                </button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:.5rem">
+      <i class="ti ti-info-circle"></i> Changes save immediately. Users must sign out and back in for permission changes to take effect.
+    </div>`;
+}
+
+async function toggleRolePerm(roleKey, permKey, value){
+  // Fetch current permissions
+  const {data:rd} = await getSupabase()
+    .from('role_definitions').select('permissions').eq('role_key',roleKey).maybeSingle();
+  const perms = {...(rd?.permissions||{})};
+  if(value) perms[permKey]=true;
+  else delete perms[permKey];
+  const {error} = await getSupabase()
+    .from('role_definitions').update({permissions:perms}).eq('role_key',roleKey);
+  if(error){ alert('Failed to save: '+error.message); loadWizRoles(); }
+}
+
+async function saveRoleScope(roleKey, scopeValue){
+  const {error} = await getSupabase()
+    .from('role_definitions').update({scope_type:scopeValue}).eq('role_key',roleKey);
+  if(error) alert('Failed to save scope: '+error.message);
+}
+
+function openAddRole(){
+  _showOrgModal(`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:700;color:var(--text)">Add New Role</div>
+      <button onclick="_closeOrgModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.65rem">
+      <div class="org-modal-field">
+        <label>Role Key * <span style="font-size:10px;color:var(--text3)">(no spaces)</span></label>
+        <input type="text" id="nr-key" placeholder="e.g. manager_dvp"/>
+      </div>
+      <div class="org-modal-field">
+        <label>Display Label *</label>
+        <input type="text" id="nr-label" placeholder="e.g. Manager DVP"/>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.75rem">
+      <div class="org-modal-field">
+        <label>Group *</label>
+        <select id="nr-group">
+          <option value="executive">Executive</option>
+          <option value="admin">Admin</option>
+          <option value="operational">Operational</option>
+          <option value="field">Field</option>
+        </select>
+      </div>
+      <div class="org-modal-field">
+        <label>Scope</label>
+        <select id="nr-scope">
+          <option value="none">All (no filter)</option>
+          <option value="division">Division</option>
+          <option value="region">Region</option>
+          <option value="district">District</option>
+          <option value="area">Area</option>
+          <option value="own">Own only</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.75rem">
+      <div class="org-modal-field">
+        <label>Sort order</label>
+        <input type="number" id="nr-sort" placeholder="e.g. 15" min="1"/>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:.75rem;border-top:0.5px solid var(--border)">
+      <button onclick="_closeOrgModal()" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Cancel</button>
+      <button onclick="saveNewRole()" style="padding:7px 16px;border-radius:var(--radius-sm);background:var(--blue);border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Add Role</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('nr-key')?.focus(),100);
+}
+
+async function saveNewRole(){
+  const key   = (document.getElementById('nr-key')?.value||'').trim().toLowerCase().replace(/\s+/g,'_');
+  const label = (document.getElementById('nr-label')?.value||'').trim();
+  const group = document.getElementById('nr-group')?.value||'operational';
+  const scope = document.getElementById('nr-scope')?.value||'none';
+  const sort  = parseInt(document.getElementById('nr-sort')?.value)||99;
+  if(!key||!label){ alert('Role key and label are required.'); return; }
+  const {error} = await getSupabase().from('role_definitions').insert({
+    role_key:key, role_label:label, role_group:group,
+    scope_type:scope, sort_order:sort, is_active:true, permissions:{}
+  });
+  if(error){ alert('Failed to add role: '+error.message); return; }
+  _closeOrgModal();
+  loadWizRoles();
+}
 // TODO (stage 3B-4): Per Diem / QA-UAT tabs
 function loadWizPerDiem(){ _wizComingSoon('Per Diem'); }
 function loadWizQA(){ _wizComingSoon('QA / UAT'); }
@@ -2649,7 +3113,7 @@ async function toggleTimeCardActive(id,currentlyActive){
 // WIZARD TAB: USERS
 // ════════════════════════════════════════════════════════════
 const PERM_LABELS = {
-  view_all:'View all', read_only:'Read only', approve:'Approve timesheets',
+  view_all:'View all', read_only:'Read only', approve:'Approve timesheets', reject:'Reject timesheets',
   edit_times:'Edit times', pay_adjustments:'Pay adjustments', pay_adj_chain:'Pay adj chain',
   per_diem_set:'Set per diem', per_diem_view:'View per diem', manage_users:'Manage users',
   setup_wizard:'Setup wizard', reports:'Reports', build_reports:'Build reports',
@@ -3370,18 +3834,24 @@ function switchTab(tab){
 async function populateSupervisorFilter(){
   const sel = document.getElementById('mgr-f-supervisor');
   if(!sel || sel.options.length > 1) return; // already populated
+  // Pull distinct supervisors from actual timesheet data — not profile role
+  // This ensures managers who created timesheets appear even if their role changed
   const {data:sups} = await getSupabase()
-    .from('profiles')
-    .select('id, full_name')
-    .eq('role', 'supervisor')
-    .eq('is_active', true)
-    .order('full_name');
+    .from('timesheets')
+    .select('supervisor_id, supervisor_name')
+    .not('supervisor_id', 'is', null)
+    .not('supervisor_name', 'is', null)
+    .order('supervisor_name');
   if(!sups||!sups.length) return;
+  // Deduplicate by supervisor_id
+  const seen = new Set();
   sups.forEach(s=>{
+    if(seen.has(s.supervisor_id)) return;
+    seen.add(s.supervisor_id);
     const opt = document.createElement('option');
-    opt.value = s.full_name; // used for ilike fallback
-    opt.dataset.id = s.id;   // used for supervisor_id match
-    opt.textContent = s.full_name;
+    opt.value = s.supervisor_name;
+    opt.dataset.id = s.supervisor_id;
+    opt.textContent = s.supervisor_name;
     sel.appendChild(opt);
   });
 }
@@ -3405,7 +3875,9 @@ async function loadMgrTimesheets(){
   // Visibility filter — regional managers only see assigned supervisors
   // Use new visibility scope — call DB function for scoped roles
   if(_userScopeType !== 'none'){
-    const {data:supIds} = await getSupabase().rpc('visible_supervisor_ids', {p_id_user: currentUser.id});
+    // When impersonating a specific user, use their ID for scope filtering
+    const scopeUserId = (window._impersonatedProfile?.id) || currentUser.id;
+    const {data:supIds} = await getSupabase().rpc('visible_supervisor_ids', {p_id_user: scopeUserId});
     const ids = (supIds||[]).map(r => typeof r === 'string' ? r : r.visible_supervisor_ids);
     if(ids.length) query = query.in('supervisor_id', ids);
     else {
@@ -3961,9 +4433,9 @@ async function openDetailScreen(ts, isManager=false){
     } else if(ts.status==='submitted'){
       topbarBtns.innerHTML=`
         <button class="topbar-home-btn" onclick="closeDetailScreen()" title="Back">⌂ Home</button>
-        ${canApprove()?`<button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>`:''}
+        ${canApprove()||can('edit_times')?`<button class="topbar-mgr-btn edit" onclick="enterEditMode()"><i class="ti ti-pencil"></i> Edit</button>`:''}
         ${canApprove()?`<button class="topbar-mgr-btn approve" onclick="openApproveModal()"><i class="ti ti-circle-check"></i> Approve</button>`:''}
-        ${canApprove()?`<button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>`:''}`;
+        ${canReject()?`<button class="topbar-mgr-btn reject" onclick="openRejectModal()"><i class="ti ti-circle-x"></i> Reject</button>`:''}`;
     } else if(ts.status==='approved'||ts.status==='rejected'||ts.status==='draft'){
       const isApproved=ts.status==='approved';
       topbarBtns.innerHTML=`
@@ -4711,6 +5183,154 @@ async function saveEdits(){
 </div>
 
 <script>
+// ════════════════════════════════════════════════════════════
+// ROLE IMPERSONATION (testing_qa users only)
+// ════════════════════════════════════════════════════════════
+
+async function initRoleSwitcher(){
+  if(!can('role_switcher')) return;
+  document.getElementById('role-switcher-wrap').style.display = 'block';
+
+  const [{data:roles},{data:users}] = await Promise.all([
+    getSupabase().from('role_definitions')
+      .select('role_key,role_label,scope_type,permissions')
+      .eq('is_active',true)
+      .not('role_key','in','("supervisor","employee","testing_qa")')
+      .order('sort_order'),
+    getSupabase().from('profiles')
+      .select('id,full_name,role,id_division,id_region,id_district,id_area')
+      .eq('is_active',true)
+      .not('role','in','("supervisor","employee")')
+      .order('full_name'),
+  ]);
+
+  _allRolesForSwitcher = roles||[];
+  _allUsersForSwitcher = users||[];
+
+  const rolesList = document.getElementById('rsd-roles-list');
+  if(rolesList){
+    rolesList.innerHTML = _allRolesForSwitcher.map(r=>`
+      <div class="rsd-option" id="rsd-role-${r.role_key}"
+        onclick="selectImpersonateRole('${r.role_key}')">
+        <div style="flex:1">
+          <div class="rsd-option-role">${r.role_label}</div>
+        </div>
+        <span class="rsd-option-scope">${r.scope_type||'none'}</span>
+      </div>`).join('');
+  }
+  renderImpersonateUsers('');
+}
+
+function renderImpersonateUsers(filter){
+  const list = document.getElementById('rsd-users-list');
+  if(!list) return;
+  const lower = filter.toLowerCase();
+  const filtered = _allUsersForSwitcher.filter(u=>
+    !filter||u.full_name.toLowerCase().includes(lower));
+  if(!filtered.length){
+    list.innerHTML='<div class="rsd-no-results">No users match</div>'; return;
+  }
+  list.innerHTML=`
+    <div class="rsd-option${!_impersonatedUser?' active':''}" onclick="selectImpersonateUser(null)">
+      <div class="rsd-option-role" style="color:var(--text3);font-style:italic">— no specific user —</div>
+    </div>
+    ${filtered.map(u=>`
+    <div class="rsd-option${_impersonatedUser?.id===u.id?' active':''}"
+      onclick='selectImpersonateUser(${JSON.stringify(u)})'>
+      <div style="flex:1">
+        <div class="rsd-option-role">${u.full_name}</div>
+        <div class="rsd-option-user">${u.role}</div>
+      </div>
+    </div>`).join('')}`;
+}
+
+function filterImpersonateUsers(val){ renderImpersonateUsers(val); }
+
+function toggleRoleSwitcher(e){
+  e.stopPropagation();
+  const dd=document.getElementById('role-switcher-dropdown');
+  dd.classList.toggle('show');
+  if(dd.classList.contains('show')){
+    setTimeout(()=>document.addEventListener('click',closeRoleSwitcher,{once:true}),0);
+  }
+}
+
+function closeRoleSwitcher(){
+  document.getElementById('role-switcher-dropdown')?.classList.remove('show');
+}
+
+function selectImpersonateRole(roleKey){
+  document.querySelectorAll('[id^="rsd-role-"]').forEach(el=>el.classList.remove('active'));
+  document.getElementById('rsd-role-'+roleKey)?.classList.add('active');
+  _impersonatedRole = roleKey;
+  applyImpersonation();
+}
+
+function selectImpersonateUser(user){
+  _impersonatedUser = user;
+  renderImpersonateUsers(document.getElementById('rsd-user-search')?.value||'');
+  if(_impersonatedRole) applyImpersonation();
+}
+
+async function applyImpersonation(){
+  if(!_impersonatedRole) return;
+
+  // Save real state first time
+  if(!_impersonating){
+    _realPermissions = {..._userPermissions};
+    _realScopeType   = _userScopeType;
+  }
+
+  const roleDef = _allRolesForSwitcher.find(r=>r.role_key===_impersonatedRole);
+  if(!roleDef) return;
+
+  let perms = {...(roleDef.permissions||{})};
+  let scope = roleDef.scope_type||'none';
+
+  if(_impersonatedUser){
+    const {data:uProfile} = await getSupabase()
+      .from('profiles').select('*').eq('id',_impersonatedUser.id).maybeSingle();
+    if(uProfile){
+      const ov = uProfile.permissions_override||{};
+      Object.entries(ov).forEach(([k,v])=>{ if(k!=='qa_config'&&v===true) perms[k]=true; });
+      window._impersonatedProfile = uProfile;
+    }
+  } else {
+    window._impersonatedProfile = null;
+  }
+
+  _userPermissions = perms;
+  _userScopeType   = scope;
+  _impersonating   = true;
+
+  const userLabel = _impersonatedUser?` — ${_impersonatedUser.full_name}`:'';
+  document.getElementById('imp-banner-label').textContent =
+    `Impersonating: ${roleDef.role_label}${userLabel}`;
+  document.getElementById('impersonation-banner').classList.add('show');
+  document.getElementById('user-bar-role').textContent = roleDef.role_label+' (test)';
+  document.getElementById('user-bar-role').style.background = '#854f0b';
+
+  closeRoleSwitcher();
+  loadMgrTimesheets();
+}
+
+function exitImpersonation(){
+  if(!_impersonating) return;
+  _userPermissions = _realPermissions;
+  _userScopeType   = _realScopeType;
+  _impersonating   = false;
+  _impersonatedRole = null;
+  _impersonatedUser = null;
+  window._impersonatedProfile = null;
+
+  document.getElementById('impersonation-banner').classList.remove('show');
+  document.getElementById('user-bar-role').textContent = currentProfile?.role||'testing_qa';
+  document.getElementById('user-bar-role').style.background = '';
+  document.querySelectorAll('[id^="rsd-role-"]').forEach(el=>el.classList.remove('active'));
+
+  loadMgrTimesheets();
+}
+
 // ── Admin-only: delete timesheet and all related data ────────────────────────
 async function adminDeleteTimesheet(){
   const ts = _currentDetailTs;
