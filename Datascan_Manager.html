@@ -2948,7 +2948,7 @@ async function loadWizTimeCards(){
     .from('time_card_types').select('*').order('sort_order');
   if(error){ body.innerHTML=`<div style="color:var(--danger-text);padding:1rem"><i class="ti ti-alert-circle"></i> ${error.message}</div>`; return; }
   _tcTypes = types || [];
-  const NL = { top_level:'Top-level paid', inside_paid:'Inside paid block', between_paid:'Between paid blocks' };
+  const NL = { top_level:'Top-level paid', inside_paid:'Inside paid block', between_paid:'Between paid blocks', inside_or_between:'Inside paid block OR between paid blocks' };
   body.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
       <div>
@@ -3011,8 +3011,9 @@ async function saveSupervisorPin(){
 
 function _nestingHint(rule){
   if(rule==='top_level')    return '<i class="ti ti-info-circle"></i> <b>Top-level:</b> Cannot overlap any other paid block. Use for Count, Variance, Setup, Verifier.';
-  if(rule==='inside_paid')  return '<i class="ti ti-info-circle"></i> <b>Inside paid:</b> In/Out must fall entirely within a paid block. Use for Break.';
-  if(rule==='between_paid') return '<i class="ti ti-info-circle"></i> <b>Between paid:</b> Must abut a paid block on both sides exactly. Use for Lunch.';
+  if(rule==='inside_paid')        return '<i class="ti ti-info-circle"></i> <b>Inside paid:</b> In/Out must fall entirely within a paid block. Use for Break.';
+  if(rule==='between_paid')       return '<i class="ti ti-info-circle"></i> <b>Between paid:</b> Must abut a paid block on both sides exactly. Use for Lunch.';
+  if(rule==='inside_or_between')  return '<i class="ti ti-info-circle"></i> <b>Inside or between paid:</b> Must either fall entirely within a paid block, OR abut paid blocks on both sides. Use for Break Unpaid.';
   return '';
 }
 
@@ -3022,6 +3023,7 @@ function onNestingChange(){
   if(hint) hint.innerHTML = _nestingHint(v);
   if(v==='between_paid'){ const paid=document.getElementById('tc-paid');const abut=document.getElementById('tc-abut');if(paid)paid.checked=false;if(abut)abut.checked=true; }
   if(v==='inside_paid'){ const paid=document.getElementById('tc-paid');if(paid)paid.checked=false; }
+  if(v==='inside_or_between'){ const paid=document.getElementById('tc-paid');const abut=document.getElementById('tc-abut');if(paid)paid.checked=false;if(abut)abut.checked=true; }
   if(v==='top_level'){   const paid=document.getElementById('tc-paid');if(paid)paid.checked=true; }
 }
 
@@ -3037,9 +3039,10 @@ function _tcForm(t={}){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="wiz-modal-field"><label>Nesting rule <span style="color:var(--danger-text)">*</span></label>
         <select id="tc-nesting" onchange="onNestingChange()">
-          <option value="top_level"    ${(t.nesting_rule||'top_level')==='top_level'   ?'selected':''}>Top-level paid</option>
-          <option value="inside_paid"  ${t.nesting_rule==='inside_paid'  ?'selected':''}>Inside paid block</option>
-          <option value="between_paid" ${t.nesting_rule==='between_paid' ?'selected':''}>Between paid blocks</option>
+          <option value="top_level"         ${(t.nesting_rule||'top_level')==='top_level'        ?'selected':''}>Top-level paid</option>
+          <option value="inside_paid"        ${t.nesting_rule==='inside_paid'                     ?'selected':''}>Inside paid block</option>
+          <option value="between_paid"       ${t.nesting_rule==='between_paid'                    ?'selected':''}>Between paid blocks</option>
+          <option value="inside_or_between"  ${t.nesting_rule==='inside_or_between'               ?'selected':''}>Inside OR between paid blocks</option>
         </select></div>
       <div class="wiz-modal-field"><label>Sort order</label>
         <input type="number" id="tc-order" value="${t.sort_order||99}" min="1" max="999"/></div>
@@ -4158,7 +4161,7 @@ async function openDetailScreen(ts, isManager=false){
   (cardTypes||[]).forEach(ct=>{ ctMap[ct.key]=ct; });
 
   function ctOf(key){ return ctMap[key]||{key,label:key,is_paid:true,nesting_rule:'top_level',sort_order:99,color_hex:'#888'}; }
-  function isUnpaid(key){ const ct=ctOf(key); return !ct.is_paid || ct.nesting_rule==='inside_paid' || ct.nesting_rule==='between_paid'; }
+  function isUnpaid(key){ const ct=ctOf(key); return !ct.is_paid || ct.nesting_rule==='inside_paid' || ct.nesting_rule==='between_paid' || ct.nesting_rule==='inside_or_between'; }
   function isTravel(key){ return key==='travel'; }
 
   // ── Determine which block types actually appear in this timesheet ──
@@ -5374,7 +5377,7 @@ function openAddPersonPanel(){
   // Build block time entry cards for each unique paid block type used in this job
   const paidKeys = _detailUsedKeys.filter(k=>{
     const ct = _detailCardTypes.find(c=>c.key===k);
-    return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid';
+    return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between';
   });
 
   const blockCards = paidKeys.map(key=>{
@@ -5515,7 +5518,7 @@ async function saveAddPerson(){
     // 3. Insert time blocks for each paid block type that has at least one time entered
     const paidKeys = _detailUsedKeys.filter(k=>{
       const ct = _detailCardTypes.find(c=>c.key===k);
-      return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid';
+      return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between';
     });
 
     let blockOrder = 0;

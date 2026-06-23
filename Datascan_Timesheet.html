@@ -2052,6 +2052,37 @@ function validateEmployee(empId){
         }
       }
     }
+
+    // ── 5. inside_or_between: Break Unpaid rule ───────────────────
+    // Valid if EITHER:
+    //   (a) falls entirely inside a single paid block, OR
+    //   (b) abuts a paid block on each side (between two paid blocks)
+    if(nesting==='inside_or_between'){
+      const paid=paidSegs(b.blockId);
+      const enclosed = paid.some(s=>st>=s.in&&en<=s.out);
+      const prevPaid  = paid.find(s=>s.out===st);
+      const allPaidIns = blocks
+        .filter(x=>_ctIsPaid(x.type)&&x.blockId!==b.blockId&&x.inVal)
+        .map(x=>toMins(x.inVal)).filter(x=>x!==null);
+      const nextPaid = en!==null && allPaidIns.some(x=>x===en);
+      const between  = prevPaid && nextPaid;
+      if(!enclosed && !between){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){
+          em.textContent = typeLabel+' must either fall entirely within a paid period, or abut paid blocks on both sides';
+          em.classList.add('show');
+        }
+        empValid=false;
+      }
+      // No overlap with other blocks of the same type
+      const sameType=blocks.filter(x=>x.type===b.type&&x.blockId!==b.blockId)
+        .map(x=>({in:toMins(x.inVal),out:toMins(x.outVal)})).filter(x=>x.in!==null&&x.out!==null);
+      if(sameType.some(x=>st<x.out&&en>x.in)){
+        setInp('bin-'+b.blockId,'err',''); setInp('bout-'+b.blockId,'err','');
+        if(em){em.textContent='Overlaps with another '+typeLabel.toLowerCase(); em.classList.add('show');}
+        empValid=false;
+      }
+    }
   });
 
   // ── Totals & badges ───────────────────────────────────────────
@@ -2067,7 +2098,7 @@ function validateEmployee(empId){
   const noBreak=hasNoBreakWarning(empId);
   const empCard=document.querySelector('.emp-card[data-emp-id="'+empId+'"]');
   if(empCard) empCard.classList.toggle('no-break-warn',noBreak);
-  const brkBlock=(empBlocks[empId]||[]).find(b=>_ctNesting(b.type)==='inside_paid'&&b.isDefault);
+  const brkBlock=(empBlocks[empId]||[]).find(b=>(_ctNesting(b.type)==='inside_paid'||_ctNesting(b.type)==='inside_or_between')&&b.isDefault);
   if(brkBlock){
     const brkErr=document.getElementById('berr-'+brkBlock.blockId);
     if(brkErr){
@@ -2149,7 +2180,7 @@ function calcTotals(){
     const hasClockIn=primary&&primary.inVal;
     if(hasName&&hasClockIn){
       tp+=getPaidSegs(eid,null).reduce((s,p)=>s+(p.out-p.in),0);
-      tb+=blocks.filter(b=>_ctNesting(b.type)==='inside_paid').map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in).reduce((s,b)=>s+(b.out-b.in),0);
+      tb+=blocks.filter(b=>_ctNesting(b.type)==='inside_paid'||_ctNesting(b.type)==='inside_or_between').map(b=>({in:toMins(b.inVal),out:toMins(b.outVal)})).filter(b=>b.in!==null&&b.out!==null&&b.out>b.in).reduce((s,b)=>s+(b.out-b.in),0);
       cnt++;
     }
   });
@@ -2243,9 +2274,9 @@ function hasNoBreakWarning(empId){
   const longSpans = merged.filter(s => (s.out - s.in) >= 480);
   if(!longSpans.length) return false;
 
-  // Check if any break (inside_paid nesting) falls within a long span
+  // Check if any break (inside_paid or inside_or_between nesting) falls within a long span
   const brkSegs = blocks
-    .filter(b => _ctNesting(b.type)==='inside_paid' && b.inVal && b.outVal)
+    .filter(b => (_ctNesting(b.type)==='inside_paid'||_ctNesting(b.type)==='inside_or_between') && b.inVal && b.outVal)
     .map(b => { let i=toMins(b.inVal), o=toMins(b.outVal); if(o<i) o+=1440; return {in:i, out:o}; })
     .filter(b => b.in!==null && b.out!==null);
 
@@ -2269,7 +2300,10 @@ function _ctColor(typeKey){
   return legacy[typeKey]||'#888';
 }
 function _ctIsPaid(typeKey){
-  const t=_ct(typeKey); if(t) return !!t.is_paid;
+  const t=_ct(typeKey); if(t){
+    if(t.nesting_rule==='inside_paid'||t.nesting_rule==='between_paid'||t.nesting_rule==='inside_or_between') return false;
+    return !!t.is_paid;
+  }
   return typeKey!=='brk'&&typeKey!=='lunch';
 }
 function _ctNesting(typeKey){
