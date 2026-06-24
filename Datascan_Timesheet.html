@@ -470,16 +470,16 @@ input.dup-warn{border-color:#E24B4A!important;background:#FCEBEB!important;box-s
 .emp-card.dup-error{border-color:#E24B4A!important}
 .emp-card.dup-warning{border-color:#E24B4A!important}
 .dup-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin:4px 0 6px}
-.dup-badge.dup-error-badge{background:#FCEBEB;color:#A32D2D}
-.dup-badge.dup-warn-badge{background:#FCEBEB;color:#A32D2D}
+.dup-badge.dup-error-badge{background:#F7C1C1;color:#501313}
+.dup-badge.dup-warn-badge{background:#F7C1C1;color:#501313}
 .dup-badge.dup-verified{background:#EAF3DE;color:#3B6D11}
-.dup-override-box{background:#FCEBEB;border:0.5px solid #E24B4A;border-radius:6px;padding:8px 10px;margin:4px 0 6px}
-.dup-override-title{font-size:11px;font-weight:600;color:#A32D2D;margin-bottom:6px;display:flex;align-items:center;gap:4px}
-.dup-override-existing{font-size:11px;color:#7a1f1f;background:rgba(226,75,74,.1);border-radius:4px;padding:5px 8px;margin-bottom:7px}
-.dup-override-sub{font-size:11px;color:#A32D2D;margin-bottom:8px}
+.dup-override-box{background:#F7C1C1;border:1px solid #A32D2D;border-radius:6px;padding:8px 10px;margin:4px 0 6px}
+.dup-override-title{font-size:11px;font-weight:600;color:#501313;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.dup-override-existing{font-size:11px;color:#501313;background:rgba(163,45,45,.12);border-radius:4px;padding:5px 8px;margin-bottom:7px}
+.dup-override-sub{font-size:11px;color:#791F1F;margin-bottom:8px}
 .dup-override-btns{display:flex;gap:6px}
 .dup-btn-confirm{background:#185FA5;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
-.dup-btn-cancel{background:transparent;color:#A32D2D;border:0.5px solid #E24B4A;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.dup-btn-cancel{background:transparent;color:#791F1F;border:0.5px solid #A32D2D;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
 
 /* ── Auto-save & restore ─────────────────────────────────── */
 .autosave-bar{display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.55);margin-top:8px;min-height:20px;font-weight:500}
@@ -811,7 +811,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.60</div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.63</div>
   </div>
 </div>
 
@@ -4384,6 +4384,7 @@ async function _cancelNewTimesheet(){
   closeWizModal();
   if(currentTimesheetId){
     try{
+      await getSupabase().from('uat_feedback').delete().eq('timesheet_id', currentTimesheetId);
       await getSupabase().from('timesheets').delete().eq('id', currentTimesheetId);
       console.log('[cancelNewTimesheet] skeleton deleted');
     } catch(e){ console.warn('[cancelNewTimesheet] delete failed:', e.message); }
@@ -4791,13 +4792,25 @@ async function loadDraftTimesheet(tsId){
 
 async function confirmDeleteDraft(tsId){
   if(!confirm('Delete this draft timesheet? This cannot be undone.')) return;
-  // Delete blocks, employees, then timesheet
-  const {data:emps} = await getSupabase().from('employees').select('id').eq('timesheet_id', tsId);
-  const empIds = (emps||[]).map(e=>e.id);
-  if(empIds.length) await getSupabase().from('time_blocks').delete().in('employee_id', empIds);
-  await getSupabase().from('employees').delete().eq('timesheet_id', tsId);
-  await getSupabase().from('timesheets').delete().eq('id', tsId);
-  loadSubmissions();
+  try {
+    // Delete blocks, employees, then timesheet
+    const {data:emps, error:empsErr} = await getSupabase().from('employees').select('id').eq('timesheet_id', tsId);
+    if(empsErr) throw new Error('Could not fetch employees: ' + empsErr.message);
+    const empIds = (emps||[]).map(e=>e.id);
+    if(empIds.length){
+      const {error:blocksErr} = await getSupabase().from('time_blocks').delete().in('employee_id', empIds);
+      if(blocksErr) throw new Error('Could not delete time blocks: ' + blocksErr.message);
+    }
+    const {error:empsDelErr} = await getSupabase().from('employees').delete().eq('timesheet_id', tsId);
+    if(empsDelErr) throw new Error('Could not delete employees: ' + empsDelErr.message);
+    const {error:uatErr} = await getSupabase().from('uat_feedback').delete().eq('timesheet_id', tsId);
+    if(uatErr) throw new Error('Could not delete UAT feedback: ' + uatErr.message);
+    const {error:tsDelErr} = await getSupabase().from('timesheets').delete().eq('id', tsId);
+    if(tsDelErr) throw new Error('Could not delete timesheet: ' + tsDelErr.message);
+    loadSubmissions();
+  } catch(e) {
+    alert('Delete failed: ' + e.message + '\n\nThis is usually a permissions issue — check that your Supabase RLS policies allow DELETE on the timesheets, employees, and time_blocks tables.');
+  }
 }
 
 async function saveFormBeforeLeaving(){
