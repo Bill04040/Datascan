@@ -464,6 +464,23 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 .tsv-comment-box{background:var(--bg2);border-left:3px solid var(--danger-border);border-radius:0 var(--radius) var(--radius) 0;padding:.65rem .85rem;font-size:13px;color:var(--text2);margin-top:.5rem}
 .tsv-loading{text-align:center;padding:2rem;color:var(--text2);font-size:13px}
 
+/* ── Duplicate name validation ─────────────────────────────── */
+input.dup-err{border-color:#E24B4A!important;background:#FCEBEB!important;box-shadow:0 0 0 2px rgba(226,75,74,.2);color:#501313!important}
+input.dup-warn{border-color:#E24B4A!important;background:#FCEBEB!important;box-shadow:0 0 0 2px rgba(226,75,74,.2);color:#501313!important}
+.emp-card.dup-error{border-color:#E24B4A!important}
+.emp-card.dup-warning{border-color:#E24B4A!important}
+.dup-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin:4px 0 6px}
+.dup-badge.dup-error-badge{background:#FCEBEB;color:#A32D2D}
+.dup-badge.dup-warn-badge{background:#FCEBEB;color:#A32D2D}
+.dup-badge.dup-verified{background:#EAF3DE;color:#3B6D11}
+.dup-override-box{background:#FCEBEB;border:0.5px solid #E24B4A;border-radius:6px;padding:8px 10px;margin:4px 0 6px}
+.dup-override-title{font-size:11px;font-weight:600;color:#A32D2D;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.dup-override-existing{font-size:11px;color:#7a1f1f;background:rgba(226,75,74,.1);border-radius:4px;padding:5px 8px;margin-bottom:7px}
+.dup-override-sub{font-size:11px;color:#A32D2D;margin-bottom:8px}
+.dup-override-btns{display:flex;gap:6px}
+.dup-btn-confirm{background:#185FA5;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
+.dup-btn-cancel{background:transparent;color:#A32D2D;border:0.5px solid #E24B4A;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+
 /* ── Auto-save & restore ─────────────────────────────────── */
 .autosave-bar{display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.55);margin-top:8px;min-height:20px;font-weight:500}
 .autosave-bar.saving{color:#7ec8f4;font-style:italic}
@@ -794,7 +811,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.47</div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.60</div>
   </div>
 </div>
 
@@ -1651,14 +1668,23 @@ function checkSubmitReady(){
     if(isDnr && !hasNotes) dnrMissingNotes = true;
   });
 
-  btn.disabled = !(ready && !dnrMissingNotes);
+  // Duplicate name check
+  let hasDuplicates = false;
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const state = card.dataset.dupState;
+    if(state==='error') hasDuplicates = true;
+    if(state==='warn' && !_nameOverrides.has(card.dataset.empId)) hasDuplicates = true;
+  });
+
+  btn.disabled = !(ready && !dnrMissingNotes && !hasDuplicates);
   const missing=[];
   if(!jiOk)missing.push('all job info fields');
   if(!allHaveTimes||!noEmpErrors)missing.push('valid employee times');
   if(!hasSig)missing.push('supervisor signature');
   if(!hasScan)missing.push('at least one scan');
   if(dnrMissingNotes)missing.push('notes for DNR employees');
-  if(ready&&!dnrMissingNotes){
+  if(hasDuplicates)missing.push('duplicate name resolution');
+  if(ready&&!dnrMissingNotes&&!hasDuplicates){
     hint.innerHTML='<i class="ti ti-circle-check" style="color:#6abf3a"></i> <span style="color:#6abf3a">Ready to submit!</span>';
   } else {
     hint.innerHTML='<i class="ti ti-alert-circle" style="color:#f4c26a"></i> <span style="color:#f4c26a">Still needed: </span><span style="color:rgba(255,255,255,0.75)">'+missing.join(' &bull; ')+'</span>';
@@ -1757,6 +1783,19 @@ function checkMissingTimes(){
       const lnameEl = card.querySelectorAll('input[type=text]')[1];
       const name = [fnameEl?.value.trim(), lnameEl?.value.trim()].filter(Boolean).join(' ') || 'Employee';
       issues.push({ name, typeLabel:'DNR', missing:'notes required for DNR', present:'', isPrimary:false });
+    }
+  });
+
+  // Duplicate name check
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid = card.dataset.empId;
+    const state = card.dataset.dupState;
+    if(!state || state==='') return;
+    if(state==='error'||(state==='warn'&&!_nameOverrides.has(eid))){
+      const fn = document.getElementById('fname-'+eid)?.value.trim()||'';
+      const ln = document.getElementById('lname-'+eid)?.value.trim()||'';
+      const label = state==='error' ? 'duplicate name' : 'possible duplicate — confirmation required';
+      issues.push({name:(fn+' '+ln).trim()||'Employee', typeLabel:'Name', missing:label, present:'', isPrimary:false});
     }
   });
 
@@ -2470,9 +2509,19 @@ function addEmployee(role,loginOverride){
       </div>
     </div>
     <div class="emp-name-row">
-      <div class="field-group"><label>First name</label><input type="text" id="fname-${empId}" placeholder="First" oninput="calcTotals();onFormChange()"/></div>
-      <div class="field-group"><label>Last name</label><input type="text" placeholder="Last" onblur="onLastNameBlur(this,${empId})"/></div>
-      <div class="field-group"><label>Login / ID</label><input type="text" value="${loginDefault}" placeholder="Login"/></div>
+      <div class="field-group"><label>First name</label><input type="text" id="fname-${empId}" placeholder="First" oninput="calcTotals();onFormChange();checkDuplicateNames('${empId}')"/></div>
+      <div class="field-group"><label>Last name</label><input type="text" id="lname-${empId}" placeholder="Last" onblur="onLastNameBlur(this,${empId})" oninput="checkDuplicateNames('${empId}')"/></div>
+      <div class="field-group"><label>Login / ID</label><input type="text" id="loginid-${empId}" value="${loginDefault}" placeholder="Login" oninput="checkDuplicateNames('${empId}')"/></div>
+    </div>
+    <span id="dup-badge-${empId}" class="dup-badge" style="display:none"></span>
+    <div id="dup-override-${empId}" class="dup-override-box" style="display:none">
+      <div class="dup-override-title"><i class="ti ti-alert-circle"></i> Possible duplicate detected</div>
+      <div id="dup-override-existing-${empId}" class="dup-override-existing"></div>
+      <div class="dup-override-sub">Confirm this is a different person, or cancel to re-enter.</div>
+      <div class="dup-override-btns">
+        <button class="dup-btn-confirm" onclick="confirmDistinctEmployee('${empId}')"><i class="ti ti-check"></i> Yes, different employee</button>
+        <button class="dup-btn-cancel" onclick="cancelDistinctEmployee('${empId}')">Cancel</button>
+      </div>
     </div>
     <div id="blocks-${empId}"></div>
     <div class="add-block-row" id="add-block-row-${empId}"></div>
@@ -2610,7 +2659,161 @@ function onLastNameBlur(input, empId){
   }
 }
 
-// Auto-populate time on first focus if blank; allow edit on subsequent focus
+// Track supervisor-confirmed "verified distinct" overrides
+const _nameOverrides = new Set();
+
+// Normalise a name for comparison — uppercase, strip spaces and non-alpha chars
+function _normName(s){ return s.toUpperCase().replace(/[^A-Z]/g,''); }
+
+// Check if two normalised names are a near-match (one contains the other,
+// or they differ only by trailing digits/characters)
+function _isNearMatch(a, b){
+  if(!a||!b) return false;
+  if(a===b) return false; // exact match — handled separately
+  if(a.startsWith(b)||b.startsWith(a)) return true;
+  // Strip trailing digits/chars and compare cores
+  const core = s => s.replace(/\d+$/,'').replace(/[^A-Z]/g,'');
+  return core(a)===core(b) && core(a).length > 0;
+}
+
+function checkDuplicateNames(empId){
+  const thisCard = document.querySelector(`.emp-card[data-emp-id="${empId}"]`);
+  if(!thisCard) return;
+
+  const fn    = (document.getElementById('fname-'+empId)?.value||'').trim();
+  const ln    = (document.getElementById('lname-'+empId)?.value||'').trim();
+  const login = (document.getElementById('loginid-'+empId)?.value||'').trim();
+
+  const fnEl    = document.getElementById('fname-'+empId);
+  const lnEl    = document.getElementById('lname-'+empId);
+  const loginEl = document.getElementById('loginid-'+empId);
+  const ovr     = document.getElementById('dup-override-'+empId);
+  const badge   = document.getElementById('dup-badge-'+empId);
+
+  // ── Login/ID duplicate check ──
+  let loginDup = false;
+  if(login){
+    document.querySelectorAll('.emp-card').forEach(card=>{
+      const eid = card.dataset.empId;
+      if(eid===empId) return;
+      const oLogin = (document.getElementById('loginid-'+eid)?.value||'').trim();
+      if(oLogin && oLogin===login) loginDup=true;
+    });
+  }
+  if(loginDup){
+    fnEl?.classList.remove('dup-err','dup-warn');
+    lnEl?.classList.remove('dup-err','dup-warn');
+    if(ovr) ovr.style.display='none';
+    loginEl?.classList.add('dup-err');
+    thisCard.classList.remove('dup-warning');
+    thisCard.classList.add('dup-error');
+    thisCard.dataset.dupState='error';
+    if(badge){ badge.style.display=''; badge.className='dup-badge dup-error-badge'; badge.innerHTML='<i class="ti ti-alert-circle"></i> duplicate Login/ID'; }
+    checkSubmitReady(); return;
+  } else {
+    loginEl?.classList.remove('dup-err');
+  }
+
+  // ── Name check — requires BOTH first AND last name ──
+  if(!fn || !ln){
+    // Name incomplete — clear any name-based state but don't clear a persisted prompt
+    if(thisCard.dataset.dupState !== 'warn-confirmed'){
+      fnEl?.classList.remove('dup-err','dup-warn');
+      lnEl?.classList.remove('dup-err','dup-warn');
+      if(ovr) ovr.style.display='none';
+      if(badge) badge.style.display='none';
+      thisCard.classList.remove('dup-error','dup-warning');
+      thisCard.dataset.dupState='';
+    }
+    checkSubmitReady(); return;
+  }
+
+  const thisNorm = _normName(fn+ln);
+  if(thisNorm.length < 2){ checkSubmitReady(); return; }
+
+  // Already override-confirmed — show green badge
+  if(_nameOverrides.has(empId)){
+    fnEl?.classList.remove('dup-err','dup-warn');
+    lnEl?.classList.remove('dup-err','dup-warn');
+    thisCard.classList.remove('dup-error','dup-warning');
+    thisCard.dataset.dupState='verified';
+    if(ovr) ovr.style.display='none';
+    if(badge){ badge.style.display=''; badge.className='dup-badge dup-verified'; badge.innerHTML='<i class="ti ti-circle-check"></i> verified distinct'; }
+    checkSubmitReady(); return;
+  }
+
+  // Compare against all other cards
+  let exactMatch = false, nearMatch = false, matchName = '', matchLogin = '';
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid = card.dataset.empId;
+    if(eid===empId) return;
+    const ofn = (document.getElementById('fname-'+eid)?.value||'').trim();
+    const oln = (document.getElementById('lname-'+eid)?.value||'').trim();
+    if(!ofn||!oln) return;
+    const otherNorm = _normName(ofn+oln);
+    if(!otherNorm) return;
+    if(thisNorm===otherNorm){ exactMatch=true; matchName=ofn+' '+oln; matchLogin=(document.getElementById('loginid-'+eid)?.value||'').trim(); }
+    else if(_isNearMatch(thisNorm, otherNorm)&&!exactMatch){ nearMatch=true; matchName=ofn+' '+oln; matchLogin=(document.getElementById('loginid-'+eid)?.value||'').trim(); }
+  });
+
+  const existingEl = document.getElementById('dup-override-existing-'+empId);
+
+  if(exactMatch){
+    // Hard error — must make name distinguishably different, no override
+    fnEl?.classList.add('dup-err');
+    lnEl?.classList.add('dup-err');
+    fnEl?.classList.remove('dup-warn');
+    lnEl?.classList.remove('dup-warn');
+    thisCard.classList.add('dup-error');
+    thisCard.classList.remove('dup-warning');
+    thisCard.dataset.dupState='error';
+    if(ovr) ovr.style.display='none';
+    if(existingEl) existingEl.innerHTML=`<i class="ti ti-user"></i> <b>${matchName}</b>${matchLogin?' · Login/ID '+matchLogin:''} already exists on this timesheet`;
+    if(badge){ badge.style.display=''; badge.className='dup-badge dup-error-badge'; badge.innerHTML='<i class="ti ti-alert-circle"></i> exact duplicate — name must be distinguishably different'; }
+  } else if(nearMatch){
+    // Near match — show prompt, do NOT clear it once shown
+    fnEl?.classList.add('dup-warn');
+    lnEl?.classList.add('dup-warn');
+    fnEl?.classList.remove('dup-err');
+    lnEl?.classList.remove('dup-err');
+    thisCard.classList.add('dup-warning');
+    thisCard.classList.remove('dup-error');
+    thisCard.dataset.dupState='warn';
+    if(badge){ badge.style.display=''; badge.className='dup-badge dup-warn-badge'; badge.innerHTML='<i class="ti ti-alert-triangle"></i> possible duplicate'; }
+    // Only show override prompt if not already visible
+    if(ovr && ovr.style.display==='none'){
+      if(existingEl) existingEl.innerHTML=`<i class="ti ti-user"></i> <b>${matchName}</b>${matchLogin?' · Login/ID '+matchLogin:''} already exists on this timesheet`;
+      ovr.style.display='';
+    }
+  } else {
+    // No match — clear all state
+    fnEl?.classList.remove('dup-err','dup-warn');
+    lnEl?.classList.remove('dup-err','dup-warn');
+    if(ovr) ovr.style.display='none';
+    if(badge) badge.style.display='none';
+    thisCard.classList.remove('dup-error','dup-warning');
+    thisCard.dataset.dupState='';
+  }
+  checkSubmitReady();
+}
+
+function confirmDistinctEmployee(empId){
+  _nameOverrides.add(empId);
+  checkDuplicateNames(empId);
+}
+
+function cancelDistinctEmployee(empId){
+  // Clear first name, last name, reset login to default
+  _nameOverrides.delete(empId);
+  const fnEl    = document.getElementById('fname-'+empId);
+  const lnEl    = document.getElementById('lname-'+empId);
+  const loginEl = document.getElementById('loginid-'+empId);
+  if(fnEl)    fnEl.value    = '';
+  if(lnEl)    lnEl.value    = '';
+  if(loginEl) loginEl.value = empId; // reset to default (empId is the default login)
+  checkDuplicateNames(empId);
+  checkSubmitReady();
+}
 function onTimeFocus(input){
   if(!input.value){
     // First time — auto populate with current datetime
