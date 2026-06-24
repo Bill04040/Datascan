@@ -1119,7 +1119,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.40</div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.41</div>
   </div>
 </div>
 
@@ -4275,6 +4275,29 @@ async function openDetailScreen(ts, isManager=false){
           else            dayLaborMins+=m;
         }
       });
+
+      // Deduct inside_or_between (Break Unpaid) minutes when they fall inside a paid block
+      const paidDaySegs = dayBlocks
+        .filter(b=>!isUnpaid(b.block_type)&&!isTravel(b.block_type)&&b.time_in&&b.time_out)
+        .map(b=>{ const d1=new Date(b.time_in),d2=new Date(b.time_out); return {in:d1,out:d2,key:b.block_type}; })
+        .filter(s=>!isNaN(s.in)&&!isNaN(s.out)&&s.out>s.in);
+      dayBlocks
+        .filter(b=>ctOf(b.block_type).nesting_rule==='inside_or_between'&&b.time_in&&b.time_out)
+        .forEach(b=>{
+          const d1=new Date(b.time_in),d2=new Date(b.time_out);
+          if(isNaN(d1)||isNaN(d2)||d2<=d1) return;
+          // Only deduct if enclosed within a paid seg (inside case, not between)
+          const enclosed=paidDaySegs.some(s=>d1>=s.in&&d2<=s.out);
+          if(!enclosed) return;
+          const deductM=Math.round((d2-d1)/60000);
+          dayLaborMins=Math.max(0,dayLaborMins-deductM);
+          // Also deduct from the enclosing paid block type's total
+          const enclosing=paidDaySegs.find(s=>d1>=s.in&&d2<=s.out);
+          if(enclosing){
+            dayBlockMins[enclosing.key]=Math.max(0,(dayBlockMins[enclosing.key]||0)-deductM);
+            grandBlockMins[enclosing.key]=Math.max(0,(grandBlockMins[enclosing.key]||0)-deductM);
+          }
+        });
       laborMins+=dayLaborMins; travelMins+=dayTravelMins;
 
       // Build date label
