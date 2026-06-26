@@ -1320,7 +1320,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.65';
+const APP_VERSION = 'v1.0.66';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -3094,10 +3094,10 @@ async function refreshDebugPanel(){
       return;
     }
 
-    const {data:emps}   = await getSupabase().from('employees').select('id').eq('timesheet_id', currentTimesheetId);
+    const {data:emps}   = await getSupabase().from('employees').select('id').eq('timesheet_id', currentTimesheetId).eq('is_deleted', false);
     const empIds        = (emps||[]).map(e=>e.id);
     const {data:blocks} = empIds.length
-      ? await getSupabase().from('time_blocks').select('id').in('employee_id', empIds)
+      ? await getSupabase().from('time_blocks').select('id').in('employee_id', empIds).eq('is_deleted', false)
       : {data:[]};
 
     const row = (label, val, color) =>
@@ -4581,11 +4581,12 @@ async function loadDraftTimesheet(tsId){
   if(tsErr||!ts){ alert('Could not load timesheet: '+(tsErr?.message||'not found')); return; }
 
   const {data:emps,   error:empsErr}   = await getSupabase()
-    .from('employees').select('*').eq('timesheet_id', tsId).order('display_order', {ascending:true});
-  // time_blocks — fetch all for this timesheet via employee join
+    .from('employees').select('*').eq('timesheet_id', tsId).eq('is_deleted', false).order('display_order', {ascending:true});
+  // time_blocks — fetch all for this timesheet via employee join (active only)
   const {data:blocks, error:blocksErr} = await getSupabase()
     .from('time_blocks').select('*')
-    .in('employee_id', (await getSupabase().from('employees').select('id').eq('timesheet_id', tsId)).data?.map(e=>e.id)||[])
+    .in('employee_id', (await getSupabase().from('employees').select('id').eq('timesheet_id', tsId).eq('is_deleted', false)).data?.map(e=>e.id)||[])
+    .eq('is_deleted', false)
     .order('display_order', {ascending:true});
 
   console.log('[loadDraft] ts=',ts?.id,'emps=',emps?.length,'blocks=',blocks?.length);
@@ -5281,8 +5282,8 @@ async function openDetailScreen(ts, isManager=false){
     {data:adjs,      error:adjsErr}
   ] = await Promise.all([
     getSupabase().from('scan_attachments').select('id,file_name,mime_type,storage_path,created_at').eq('timesheet_id',ts.id).order('created_at'),
-    getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).order('display_order'),
-    getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).order('display_order'),
+    getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).eq('is_deleted',false).order('display_order'),
+    getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).eq('is_deleted',false).order('display_order'),
     getSupabase().from('pay_adjustments').select('*').eq('timesheet_id',ts.id).order('created_at'),
   ]);
   console.log('[detail] ts.id=',ts.id,'emps=',emps?.length,'empsErr=',empsErr,'blocks=',blocks?.length,'blocksErr=',blocksErr,'scansErr=',scansErr);
