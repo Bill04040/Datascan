@@ -811,7 +811,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.63</div>
+    <div id="login-version" style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em"></div>
   </div>
 </div>
 
@@ -1301,8 +1301,26 @@ function startTimesheetSubscription(){
     });
 }
 
-// ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.0.27';
+// ── App version ───────────────────────────────────────────────────────────
+// VERSIONING RULES — Claude must follow these automatically on every change:
+//
+//   1. APP_VERSION below is the single source of truth. Format: 'v1.0.XX'
+//   2. When ANY code change is made to this file, increment the patch number
+//      (the XX) by 1.  Never leave the version the same as the input file.
+//   3. The OUTPUT FILENAME must always match the version:
+//        APP_VERSION 'v1.0.65'  →  filename  Datascan_Timesheet_v1_0_65.html
+//        APP_VERSION 'v1.0.66'  →  filename  Datascan_Timesheet_v1_0_66.html
+//      Dots in the version become underscores in the filename.
+//   4. Do NOT add a separate version comment block or changelog — the filename
+//      and APP_VERSION string are the only version indicators needed.
+//   5. These rules apply even if the user does not mention versioning.
+//      Every delivered file must be self-consistent: version string = filename.
+//   6. NEVER hardcode a version string anywhere else in the file. The login
+//      screen version display uses id="login-version" and is populated
+//      dynamically from APP_VERSION by waitForSupabase(). Do not add or
+//      restore any static version text in the HTML body.
+//
+const APP_VERSION = 'v1.0.65';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -4899,19 +4917,22 @@ async function uploadScans(timesheetId){
 }
 
 async function saveTimesheet(statusVal, silent=false){
-  if(!currentUser){ alert('Please sign in first.'); return; }
-  // Prevent concurrent saves — only one save at a time
+  // ── Guard: one save at a time — must be FIRST before any async work ──────
   if(_savingInProgress){
     if(silent){ console.log('[save] skipped — save already in progress'); return; }
     // Non-silent (manual save/submit): wait up to 5s for in-progress save to finish
     let waited = 0;
     while(_savingInProgress && waited < 5000){ await new Promise(r=>setTimeout(r,200)); waited+=200; }
+    if(_savingInProgress){ console.warn('[save] gave up waiting for in-progress save'); return; }
   }
+  _savingInProgress = true;
+
+  if(!currentUser){ _savingInProgress = false; alert('Please sign in first.'); return; }
   if(!silent && statusVal === 'submitted' && !validateAll()){
+    _savingInProgress = false;
     alert('Please fix highlighted errors before submitting.');
     return;
   }
-  _savingInProgress = true;
 
   if(!silent) showSaving(statusVal === 'submitted' ? 'Submitting timesheet...' : 'Saving draft...');
 
@@ -5024,6 +5045,29 @@ async function saveTimesheet(statusVal, silent=false){
       if(tsErr) throw tsErr;
       timesheetId = ts.id;
       currentTimesheetId = timesheetId;
+    }
+
+    // ── Server-side duplicate name guard (runs even if client check was bypassed) ──
+    if(statusVal === 'submitted'){
+      const _seenNames = new Set();
+      const _seenLogins = new Set();
+      for(const card of document.querySelectorAll('.emp-card')){
+        const eid = card.dataset.empId;
+        const fn  = (document.getElementById('fname-'+eid)?.value||'').trim().toLowerCase();
+        const ln  = (card.querySelectorAll('input[type=text]')[1]?.value||'').trim().toLowerCase();
+        const lid = (card.querySelectorAll('input[type=text]')[2]?.value||'').trim().toLowerCase();
+        if(fn && ln){
+          const nameKey = fn + '|' + ln;
+          if(_seenNames.has(nameKey))
+            throw new Error(`Duplicate employee on this timesheet: ${fn} ${ln}. Please remove the duplicate card before submitting.`);
+          _seenNames.add(nameKey);
+        }
+        if(lid){
+          if(_seenLogins.has(lid))
+            throw new Error(`Duplicate Login/ID on this timesheet: ${lid}. Please resolve before submitting.`);
+          _seenLogins.add(lid);
+        }
+      }
     }
 
     // Insert employees + time blocks
