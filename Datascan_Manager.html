@@ -1063,14 +1063,36 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <span class="sb-link-label">Configuration</span>
     </button>
     <div class="sb-divider"></div>
-    <div class="sb-section-label">Finance</div>
+    <div class="sb-section-label" id="sb-section-finance">Finance</div>
     <button class="sb-link sb-future" id="sb-payroll" onclick="sbNavigate('payroll')" aria-label="Payroll" title="Coming soon">
       <i class="ti ti-cash" aria-hidden="true"></i>
       <span class="sb-link-label">Payroll</span>
     </button>
-    <button class="sb-link sb-future" id="sb-reports" onclick="sbNavigate('reports')" aria-label="Reports" title="Coming soon">
+    <div class="sb-divider" id="sb-divider-reports"></div>
+    <div class="sb-section-label" id="sb-section-reports">Reports</div>
+    <button class="sb-link" id="sb-rpt-supervisor" onclick="sbNavigate('rpt-supervisor')" aria-label="Approval Summary">
+      <i class="ti ti-clipboard-check" aria-hidden="true"></i>
+      <span class="sb-link-label">Approval Summary</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-audit" onclick="sbNavigate('rpt-audit')" aria-label="Audit Trail">
+      <i class="ti ti-history" aria-hidden="true"></i>
+      <span class="sb-link-label">Audit Trail</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-hours" onclick="sbNavigate('rpt-hours')" aria-label="Hours by Job">
       <i class="ti ti-chart-bar" aria-hidden="true"></i>
-      <span class="sb-link-label">Reports</span>
+      <span class="sb-link-label">Hours by Job</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-employee" onclick="sbNavigate('rpt-employee')" aria-label="Hours by Employee">
+      <i class="ti ti-user-check" aria-hidden="true"></i>
+      <span class="sb-link-label">Hours by Employee</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-outstanding" onclick="sbNavigate('rpt-outstanding')" aria-label="Outstanding Timesheets">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <span class="sb-link-label">Outstanding TS</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-changes" onclick="sbNavigate('rpt-changes')" aria-label="Timesheet Changes">
+      <i class="ti ti-pencil" aria-hidden="true"></i>
+      <span class="sb-link-label">TS Changes</span>
     </button>
   </nav>
 
@@ -1194,6 +1216,24 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
         <input type="date" id="mgr-f-to"/>
       </div>
       <div class="mgr-filter-group">
+        <label>Division</label>
+        <select id="mgr-f-division" onchange="_mgrCascadeOrg()">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="mgr-filter-group">
+        <label>Region</label>
+        <select id="mgr-f-region" onchange="_mgrCascadeOrg()">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="mgr-filter-group">
+        <label>District</label>
+        <select id="mgr-f-district">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="mgr-filter-group">
         <label>Status</label>
         <select id="mgr-f-status">
           <option value="">All</option>
@@ -1232,6 +1272,14 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <div id="mgr-list"></div>
   </div>
+</div>
+
+<!-- ── Reports screen ───────────────────────────────────────── -->
+<div id="report-screen" style="display:none;padding:16px;max-width:1200px;margin:0 auto">
+  <div id="report-header" style="margin-bottom:16px"></div>
+  <div id="report-filters" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px"></div>
+  <div id="report-actions" style="display:flex;gap:8px;margin-bottom:12px"></div>
+  <div id="report-body"></div>
 </div>
 
 <!-- ── UAT Feedback Review screen ──────────────────────────── -->
@@ -1701,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.49';
+const APP_VERSION = 'v1.0.64';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1863,8 +1911,9 @@ function initSidebar(){
 
   // Admin-only nav items — everyone else sees Timesheets only
   const isAdmin = can('setup_wizard') || can('manage_users') || can('manage_org');
+  const hasReports = can('reports') || can('build_reports');
   const adminOnlyIds = ['sb-employees','sb-scheduling','sb-uat',
-                        'sb-config','sb-settings','sb-payroll','sb-reports'];
+                        'sb-config','sb-settings','sb-payroll'];
   adminOnlyIds.forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = isAdmin ? '' : 'none';
@@ -1872,6 +1921,13 @@ function initSidebar(){
   // Config button specifically needs flex not block
   const cfgBtn = document.getElementById('sb-config');
   if(cfgBtn && isAdmin) cfgBtn.style.display = 'flex';
+  // Reports section — show if user has reports permission
+  const rptIds = ['sb-rpt-hours','sb-rpt-supervisor','sb-rpt-employee','sb-rpt-audit','sb-rpt-changes','sb-rpt-outstanding'];
+  rptIds.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=hasReports?'':'none'; });
+  const rptSection = document.getElementById('sb-section-reports');
+  const rptDivider = document.getElementById('sb-divider-reports');
+  if(rptSection) rptSection.style.display = hasReports ? '' : 'none';
+  if(rptDivider) rptDivider.style.display = hasReports ? '' : 'none';
 
   // User info
   if(currentProfile){
@@ -1943,8 +1999,10 @@ function sbNavigate(page){
     setTimeout(()=>wizardGoto('users'), 50);
   } else if(page === 'uat'){
     openUATScreen();
-  } else if(page==='scheduling'||page==='payroll'||page==='reports'){
+  } else if(page==='scheduling'||page==='payroll'){
     showComingSoon(page);
+  } else if(page==='rpt-hours'||page==='rpt-supervisor'||page==='rpt-employee'||page==='rpt-audit'||page==='rpt-changes'||page==='rpt-outstanding'){
+    openReportScreen(page);
   }
 }
 
@@ -1953,11 +2011,745 @@ function updateSidebarActive(page){
   const map = {
     'mgr':'sb-timesheets','dashboard':'sb-timesheets',
     'timesheets':'sb-timesheets','employees':'sb-employees',
-    'scheduling':'sb-scheduling','payroll':'sb-payroll','reports':'sb-reports',
-    'uat':'sb-uat'
+    'scheduling':'sb-scheduling','payroll':'sb-payroll',
+    'uat':'sb-uat',
+    'rpt-hours':'sb-rpt-hours','rpt-supervisor':'sb-rpt-supervisor',
+    'rpt-employee':'sb-rpt-employee','rpt-audit':'sb-rpt-audit',
+    'rpt-changes':'sb-rpt-changes',
+    'rpt-outstanding':'sb-rpt-outstanding'
   };
   const id = map[page||'timesheets'] || 'sb-timesheets';
   document.getElementById(id)?.classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+// REPORTS
+// ════════════════════════════════════════════════════════════
+
+const REPORT_DEFS = {
+  'rpt-hours':      { label:'Hours by Job',        icon:'ti-chart-bar' },
+  'rpt-supervisor': { label:'Approval Summary',     icon:'ti-clipboard-check' },
+  'rpt-employee':   { label:'Hours by Employee',    icon:'ti-user-check' },
+  'rpt-audit':      { label:'Audit Trail',          icon:'ti-history' },
+  'rpt-changes':     { label:'Timesheet Changes',       icon:'ti-pencil' },
+  'rpt-outstanding': { label:'Outstanding Timesheets',   icon:'ti-alert-triangle' },
+};
+
+let _currentReport = null;
+
+function openReportScreen(page){
+  _currentReport = page;
+  // Hide other screens
+  document.getElementById('mgr-screen')?.classList.remove('active');
+  document.getElementById('uat-screen') && (document.getElementById('uat-screen').style.display='none');
+  document.getElementById('status-screen')?.classList.remove('active');
+  document.getElementById('main-wrap') && (document.getElementById('main-wrap').style.display='none');
+  document.getElementById('nav-tabs') && (document.getElementById('nav-tabs').style.display='none');
+  const rpt = document.getElementById('report-screen');
+  if(!rpt) return;
+  rpt.style.display = '';
+  const def = REPORT_DEFS[page]||{label:page,icon:'ti-chart-bar'};
+  // Header
+  document.getElementById('report-header').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <i class="ti ${def.icon}" style="font-size:22px;color:var(--info-text)"></i>
+      <h2 style="margin:0;font-size:20px;font-weight:800">${def.label}</h2>
+    </div>`;
+  // Ensure org tree loaded before building filters
+  _ensureOrgTree().then(()=>{
+    _buildReportFilters(page);
+    // Restore saved filters for this report
+    try {
+      const saved = localStorage.getItem('rpt_filters_'+(currentUser?.id||'')+'_'+page);
+      if(saved){
+        const f = JSON.parse(saved);
+        setTimeout(()=>{
+          if(f.from)      { const el=document.getElementById('rpt-f-from');      if(el) el.value=f.from; }
+          if(f.to)        { const el=document.getElementById('rpt-f-to');        if(el) el.value=f.to; }
+          if(f.status)    { const el=document.getElementById('rpt-f-status');    if(el) el.value=f.status; }
+          if(f.customer)  { const el=document.getElementById('rpt-f-customer');  if(el) el.value=f.customer; }
+          if(f.division)  { const el=document.getElementById('rpt-f-division');  if(el){ el.value=f.division; _rptCascadeOrg(); } }
+          if(f.region)    { const el=document.getElementById('rpt-f-region');    if(el){ el.value=f.region;   _rptCascadeOrg(); } }
+          if(f.district)  { const el=document.getElementById('rpt-f-district');  if(el) el.value=f.district; }
+          if(f.area)      { const el=document.getElementById('rpt-f-area');      if(el) el.value=f.area; }
+          if(f.supervisor){ const el=document.getElementById('rpt-f-supervisor'); if(el) el.value=f.supervisor; }
+          if(f.esc_type)  { const el=document.getElementById('rpt-f-esc-type');  if(el) el.value=f.esc_type; }
+          if(f.esc_level) { const el=document.getElementById('rpt-f-esc-level'); if(el) el.value=f.esc_level; }
+        }, 100);
+      }
+    } catch(e){}
+  });
+  // Default date range: Sunday of current week → today (only if no saved filters)
+  const today = new Date();
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - today.getDay());
+  const fmt = d => d.toISOString().slice(0,10);
+  try {
+    const hasSaved = !!localStorage.getItem('rpt_filters_'+(currentUser?.id||'')+'_'+page);
+    if(!hasSaved){
+      setTimeout(()=>{
+        const fromEl = document.getElementById('rpt-f-from');
+        const toEl   = document.getElementById('rpt-f-to');
+        if(fromEl && !fromEl.value) fromEl.value = fmt(sunday);
+        if(toEl   && !toEl.value)   toEl.value   = fmt(today);
+      }, 50);
+    }
+  } catch(e){
+    setTimeout(()=>{
+      const fromEl = document.getElementById('rpt-f-from');
+      const toEl   = document.getElementById('rpt-f-to');
+      if(fromEl && !fromEl.value) fromEl.value = fmt(sunday);
+      if(toEl   && !toEl.value)   toEl.value   = fmt(today);
+    }, 50);
+  }
+  document.getElementById('report-body').innerHTML =
+    '<div style="color:var(--text3);font-size:13px;padding:20px 0">Set filters above and click Run Report.</div>';
+  document.getElementById('report-actions').innerHTML = `
+    <button class="wiz-btn primary" onclick="runReport('${page}')"><i class="ti ti-player-play"></i> Run Report</button>
+    <button class="wiz-btn secondary" onclick="exportReportCSV()"><i class="ti ti-download"></i> Export CSV</button>`;
+  updateSidebarActive(page);
+}
+
+function _buildReportFilters(page){
+  const wrap = document.getElementById('report-filters');
+
+  const dateRange = `
+    <div class="mgr-filter-group">
+      <label>From date</label>
+      <input type="date" id="rpt-f-from"/>
+    </div>
+    <div class="mgr-filter-group">
+      <label>To date</label>
+      <input type="date" id="rpt-f-to"/>
+    </div>`;
+
+  const statusFilter = `
+    <div class="mgr-filter-group">
+      <label>Status</label>
+      <select id="rpt-f-status">
+        <option value="">All</option>
+        <option value="submitted">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="draft">Draft</option>
+      </select>
+    </div>`;
+
+  const divOpts = (_orgTree.divisions||[]).map(d=>`<option value="${d.id_division}">${d.name}</option>`).join('');
+  const regOpts = (_orgTree.regions||[]).map(r=>`<option value="${r.id_region}">${r.name}</option>`).join('');
+  const distOpts= (_orgTree.districts||[]).map(d=>`<option value="${d.id_district}">${d.name}</option>`).join('');
+  const areaOpts= (_orgTree.areas||[]).map(a=>`<option value="${a.id_area}">${a.name}</option>`).join('');
+  const orgFilters = `
+    <div class="mgr-filter-group">
+      <label>Division</label>
+      <select id="rpt-f-division" onchange="_rptCascadeOrg()">
+        <option value="">All</option>${divOpts}
+      </select>
+    </div>
+    <div class="mgr-filter-group">
+      <label>Region</label>
+      <select id="rpt-f-region" onchange="_rptCascadeOrg()">
+        <option value="">All</option>${regOpts}
+      </select>
+    </div>
+    <div class="mgr-filter-group">
+      <label>District</label>
+      <select id="rpt-f-district" onchange="_rptCascadeOrg()">
+        <option value="">All</option>${distOpts}
+      </select>
+    </div>
+    <div class="mgr-filter-group">
+      <label>Office (Area)</label>
+      <select id="rpt-f-area">
+        <option value="">All</option>${areaOpts}
+      </select>
+    </div>`;
+
+  const supervisorFilter = `
+    <div class="mgr-filter-group">
+      <label>Supervisor</label>
+      <select id="rpt-f-supervisor">
+        <option value="">All</option>
+      </select>
+    </div>`;
+
+  const customerFilter = `
+    <div class="mgr-filter-group">
+      <label>Customer</label>
+      <input type="text" id="rpt-f-customer" placeholder="Any"/>
+    </div>`;
+
+  const escalationTypeFilter = `
+    <div class="mgr-filter-group">
+      <label>Type</label>
+      <select id="rpt-f-esc-type">
+        <option value="">All</option>
+        <option value="not_submitted">Not Submitted</option>
+        <option value="pending_approval">Pending Approval</option>
+      </select>
+    </div>`;
+
+  const escalationLevelFilter = `
+    <div class="mgr-filter-group">
+      <label>Escalation Level</label>
+      <select id="rpt-f-esc-level">
+        <option value="">All</option>
+        <option value="1">Level 1</option>
+        <option value="2">Level 2</option>
+        <option value="3">Level 3</option>
+      </select>
+    </div>`;
+
+  if(page==='rpt-hours'){
+    wrap.innerHTML = dateRange + orgFilters + statusFilter + customerFilter;
+  } else if(page==='rpt-supervisor'){
+    wrap.innerHTML = dateRange + orgFilters;
+  } else if(page==='rpt-employee'){
+    wrap.innerHTML = dateRange + orgFilters + statusFilter + supervisorFilter + customerFilter;
+  } else if(page==='rpt-audit'||page==='rpt-changes'){
+    wrap.innerHTML = dateRange + orgFilters + supervisorFilter;
+  } else if(page==='rpt-outstanding'){
+    wrap.innerHTML = orgFilters + escalationTypeFilter + escalationLevelFilter;
+  }
+
+  // Populate supervisor dropdown if present
+  if(document.getElementById('rpt-f-supervisor')){
+    _rptLoadSupervisors();
+  }
+}
+
+// Cascade org dropdowns Region→District→Area based on parent selection
+function _rptCascadeOrg(){
+  const divId  = document.getElementById('rpt-f-division')?.value||'';
+  const regId  = document.getElementById('rpt-f-region')?.value||'';
+  const distId = document.getElementById('rpt-f-district')?.value||'';
+
+  const regSel  = document.getElementById('rpt-f-region');
+  const distSel = document.getElementById('rpt-f-district');
+  const areaSel = document.getElementById('rpt-f-area');
+
+  if(regSel){
+    const regions = (_orgTree.regions||[]).filter(r=>!divId||r.id_division===divId);
+    regSel.innerHTML = '<option value="">All</option>' +
+      regions.map(r=>`<option value="${r.id_region}">${r.name}</option>`).join('');
+    if(regId && regions.find(r=>r.id_region===regId)) regSel.value = regId;
+  }
+  if(distSel){
+    const curReg = document.getElementById('rpt-f-region')?.value||'';
+    const dists = (_orgTree.districts||[]).filter(d=>!curReg||d.id_region===curReg);
+    distSel.innerHTML = '<option value="">All</option>' +
+      dists.map(d=>`<option value="${d.id_district}">${d.name}</option>`).join('');
+    if(distId && dists.find(d=>d.id_district===distId)) distSel.value = distId;
+  }
+  if(areaSel){
+    const curDist = document.getElementById('rpt-f-district')?.value||'';
+    const areas = (_orgTree.areas||[]).filter(a=>!curDist||a.id_district===curDist);
+    areaSel.innerHTML = '<option value="">All</option>' +
+      areas.map(a=>`<option value="${a.id_area}">${a.name}</option>`).join('');
+  }
+  // Reload supervisor list scoped to org selection
+  if(document.getElementById('rpt-f-supervisor')) _rptLoadSupervisors();
+}
+
+function _rptLoadSupervisors(){
+  const f = {
+    division: document.getElementById('rpt-f-division')?.value||'',
+    region:   document.getElementById('rpt-f-region')?.value||'',
+    district: document.getElementById('rpt-f-district')?.value||'',
+    area:     document.getElementById('rpt-f-area')?.value||'',
+  };
+  const ids = _resolveOrgSupIds(f);
+  const all = (_orgTree._allProfiles||[]).filter(p=>p.role!=='elt');
+  const filtered = ids ? all.filter(p=>ids.includes(p.id)) : all;
+  filtered.sort((a,b)=>a.full_name.localeCompare(b.full_name));
+  const sel = document.getElementById('rpt-f-supervisor');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">All</option>' +
+    filtered.map(p=>`<option value="${p.id}">${p.full_name}</option>`).join('');
+}
+
+function _rptFilters(){
+  return {
+    from:       document.getElementById('rpt-f-from')?.value||'',
+    to:         document.getElementById('rpt-f-to')?.value||'',
+    status:     document.getElementById('rpt-f-status')?.value||'',
+    supervisor: document.getElementById('rpt-f-supervisor')?.value||'',
+    customer:   document.getElementById('rpt-f-customer')?.value||'',
+    division:   document.getElementById('rpt-f-division')?.value||'',
+    region:     document.getElementById('rpt-f-region')?.value||'',
+    district:   document.getElementById('rpt-f-district')?.value||'',
+    area:       document.getElementById('rpt-f-area')?.value||'',
+    esc_type:   document.getElementById('rpt-f-esc-type')?.value||'',
+    esc_level:  document.getElementById('rpt-f-esc-level')?.value||'',
+  };
+}
+
+function _fmtHours(sec){ return sec>0?(sec/3600).toFixed(2):'—'; }
+function _blockMins(b){ return b.time_in&&b.time_out?(new Date(b.time_out)-new Date(b.time_in))/1000:0; }
+
+// Shared table renderer
+let _lastReportRows = [];
+let _lastReportCols = [];
+function _renderReportTable(cols, rows){
+  _lastReportCols = cols;
+  _lastReportRows = rows;
+  const body = document.getElementById('report-body');
+  if(!rows.length){ body.innerHTML='<div style="color:var(--text3);padding:20px 0;font-size:13px">No data found for the selected filters.</div>'; return; }
+  const STATUS_COLORS = {approved:'var(--success-text)',rejected:'var(--danger-text)',submitted:'var(--warn-text)',draft:'var(--text3)'};
+  const STATUS_LABELS = {approved:'Approved',rejected:'Rejected',submitted:'Pending',draft:'Draft'};
+  body.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg2);border-bottom:2px solid var(--border2)">
+            ${cols.map(c=>`<th style="padding:8px 10px;text-align:${c.right?'right':'left'};font-weight:700;white-space:nowrap;color:var(--text2)">${c.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr style="border-bottom:0.5px solid var(--border2);background:${i%2?'var(--bg2)':'var(--bg)'}">
+              ${cols.map(c=>{
+                let val = r[c.key]??'—';
+                if(c.key==='status') val=`<span style="font-weight:700;color:${STATUS_COLORS[val]||'var(--text)'}">${STATUS_LABELS[val]||val}</span>`;
+                return `<td style="padding:7px 10px;${c.right?'text-align:right;':''}white-space:nowrap">${val}</td>`;
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">${rows.length} row${rows.length===1?'':'s'}</div>
+    </div>`;
+}
+
+async function runReport(page){
+  const body = document.getElementById('report-body');
+  body.innerHTML = '<div style="padding:20px 0;color:var(--text3);font-size:13px"><i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Running...</div>';
+  const f = _rptFilters();
+  // Save filters for this report + user
+  try { localStorage.setItem('rpt_filters_'+(currentUser?.id||'')+'_'+page, JSON.stringify(f)); } catch(e){}
+  try {
+    if(page==='rpt-hours')      await _runHoursByJob(f);
+    if(page==='rpt-supervisor') await _runApprovalSummary(f);
+    if(page==='rpt-employee')   await _runHoursByEmployee(f);
+    if(page==='rpt-audit')      await _runAuditTrail(f);
+    if(page==='rpt-changes')    await _runTSChanges(f);
+    if(page==='rpt-outstanding') await _runOutstandingTimesheets(f);
+  } catch(e){
+    body.innerHTML = `<div style="color:var(--danger-text);padding:20px 0">${e.message}</div>`;
+  }
+}
+
+// ── Report 1: Hours by Job ────────────────────────────────────────────────────
+async function _runHoursByJob(f){
+  // Resolve org filter downward through hierarchy
+  const orgSupIds = _resolveOrgSupIds(f);
+  if(orgSupIds !== null && !orgSupIds.length){ _renderReportTable([],[]); return; }
+  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_name,supervisor_id');
+  if(f.from) tsQ = tsQ.gte('job_date', f.from);
+  if(f.to)   tsQ = tsQ.lte('job_date', f.to);
+  if(f.status) tsQ = tsQ.eq('status', f.status);
+  if(f.customer) tsQ = tsQ.ilike('client_name', '%'+f.customer+'%');
+  if(orgSupIds) tsQ = tsQ.in('supervisor_id', orgSupIds);
+  const {data:sheets, error:tsErr} = await tsQ.order('job_date', {ascending:false});
+  if(tsErr) throw tsErr;
+  if(!sheets?.length){ _renderReportTable([],[]); return; }
+
+  const ids = sheets.map(s=>s.id);
+  const {data:blocks} = await getSupabase().from('time_blocks')
+    .select('timesheet_id,employee_id,block_type,time_in,time_out,is_primary')
+    .in('timesheet_id', ids).eq('is_deleted', false);
+  const {data:emps} = await getSupabase().from('employees')
+    .select('id,timesheet_id,role_type,first_name,last_name')
+    .in('timesheet_id', ids).eq('is_deleted', false);
+
+  const rows = sheets.map(s=>{
+    const sBlocks = (blocks||[]).filter(b=>b.timesheet_id===s.id);
+    const sEmps   = (emps||[]).filter(e=>e.timesheet_id===s.id);
+    const byType  = (rt, bt) => sBlocks
+      .filter(b=>{ const emp=(emps||[]).find(e=>e.id===b.employee_id); return emp?.role_type===rt && b.block_type===bt; })
+      .reduce((a,b)=>a+_blockMins(b),0);
+    const distEmps = new Set(sEmps.filter(e=>e.role_type==='employee').map(e=>e.id)).size;
+    return {
+      job_date: s.job_date,
+      client_name: s.client_name||'—',
+      store_number: s.store_number||'—',
+      city: (s.city||'')+(s.state?', '+s.state:''),
+      status: s.status,
+      supervisor_name: s.supervisor_name||'—',
+      sup_count: _fmtHours(byType('supervisor','count')),
+      sup_variance: _fmtHours(byType('supervisor','variance')),
+      sup_setup: _fmtHours(byType('supervisor','setup')),
+      sup_precounts: _fmtHours(byType('supervisor','precounts')),
+      emp_count: _fmtHours(byType('employee','count')),
+      emp_variance: _fmtHours(byType('employee','variance')),
+      emp_setup: _fmtHours(byType('employee','setup')),
+      emp_precounts: _fmtHours(byType('employee','precounts')),
+      emp_distinct: distEmps||'—',
+    };
+  });
+  // Sort: date desc → customer → store → supervisor first → name
+  rows.sort((a,b)=>{
+    if(a.job_date > b.job_date) return -1;
+    if(a.job_date < b.job_date) return 1;
+    if(a.client_name < b.client_name) return -1;
+    if(a.client_name > b.client_name) return 1;
+    if(a.store_number < b.store_number) return -1;
+    if(a.store_number > b.store_number) return 1;
+    // supervisor before employee
+    const roleOrder = {supervisor:0, assistant:1, employee:2};
+    const ra = roleOrder[a.role_type]??3, rb = roleOrder[b.role_type]??3;
+    if(ra !== rb) return ra - rb;
+    return a.name.localeCompare(b.name);
+  });
+
+  _renderReportTable([
+    {key:'job_date',label:'Date'},{key:'client_name',label:'Customer'},
+    {key:'store_number',label:'Store'},{key:'city',label:'City/State'},
+    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
+    {key:'sup_count',label:'Sup Count',right:true},{key:'sup_variance',label:'Sup Variance',right:true},
+    {key:'sup_setup',label:'Sup Setup',right:true},{key:'sup_precounts',label:'Sup PreCounts',right:true},
+    {key:'emp_count',label:'Emp Count',right:true},{key:'emp_variance',label:'Emp Variance',right:true},
+    {key:'emp_setup',label:'Emp Setup',right:true},{key:'emp_precounts',label:'Emp PreCounts',right:true},
+    {key:'emp_distinct',label:'# Employees',right:true},
+  ], rows);
+}
+
+// ── Report 2: Approval Summary ────────────────────────────────────────────────
+async function _runApprovalSummary(f){
+  // Get supervisor profiles filtered by org — resolves downward through hierarchy
+  const filteredIds = _resolveOrgSupIds(f);
+  let profs;
+  if(filteredIds !== null){
+    if(!filteredIds.length){ _renderReportTable([],[]); return; }
+    profs = (_orgTree._allProfiles||[]).filter(p=>filteredIds.includes(p.id));
+  } else {
+    profs = (_orgTree._allProfiles||[]).filter(p=>p.role!=='elt');
+  }
+
+  // Build supervisor map with full org ancestry (walk up tree)
+  const supMap = {};
+  (profs||[]).forEach(p=>{
+    const org = _resolveOrgAncestry(p);
+    supMap[p.id] = {
+      supervisor_name: p.full_name,
+      region:   org.region,
+      district: org.district,
+      area:     org.area,
+      approved:0, rejected:0, submitted:0, draft:0, total:0
+    };
+  });
+
+  // Fetch timesheets filtered to these supervisors + date range
+  const supIds = Object.keys(supMap);
+  if(!supIds.length){ _renderReportTable([],[]); return; }
+
+  let q = getSupabase().from('timesheets').select('supervisor_id,status,job_date');
+  if(f.from) q = q.gte('job_date', f.from);
+  if(f.to)   q = q.lte('job_date', f.to);
+  const {data, error} = await q.in('supervisor_id', supIds);
+  if(error) throw error;
+
+  (data||[]).forEach(r=>{
+    if(!supMap[r.supervisor_id]) return;
+    supMap[r.supervisor_id][r.status] = (supMap[r.supervisor_id][r.status]||0)+1;
+    supMap[r.supervisor_id].total++;
+  });
+
+  const rows = Object.values(supMap)
+    .filter(r=>r.total>0)
+    .sort((a,b)=>a.supervisor_name.localeCompare(b.supervisor_name));
+
+  _renderReportTable([
+    {key:'supervisor_name', label:'Supervisor'},
+    {key:'region',          label:'Region'},
+    {key:'district',        label:'District'},
+    {key:'area',            label:'Office'},
+    {key:'total',           label:'Total',    right:true},
+    {key:'draft',           label:'Draft',    right:true},
+    {key:'submitted',       label:'Pending',  right:true},
+    {key:'rejected',        label:'Rejected', right:true},
+    {key:'approved',        label:'Approved', right:true},
+  ], rows);
+}
+
+// ── Report 3: Hours by Employee ───────────────────────────────────────────────
+async function _runHoursByEmployee(f){
+  // Resolve org filter downward
+  const orgSupIds = _resolveOrgSupIds(f);
+  if(orgSupIds !== null && !orgSupIds.length){ _renderReportTable([],[]); return; }
+
+  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name');
+  if(f.from) tsQ = tsQ.gte('job_date', f.from);
+  if(f.to)   tsQ = tsQ.lte('job_date', f.to);
+  if(f.status) tsQ = tsQ.eq('status', f.status);
+  if(f.supervisor) tsQ = tsQ.eq('supervisor_id', f.supervisor);
+  else if(orgSupIds) tsQ = tsQ.in('supervisor_id', orgSupIds);
+  if(f.customer) tsQ = tsQ.ilike('client_name', '%'+f.customer+'%');
+  const {data:sheets, error:tsErr} = await tsQ.order('job_date',{ascending:false});
+  if(tsErr) throw tsErr;
+  if(!sheets?.length){ _renderReportTable([],[]); return; }
+
+  const ids = sheets.map(s=>s.id);
+  const {data:emps}   = await getSupabase().from('employees').select('id,timesheet_id,role_type,first_name,last_name,login_id').in('timesheet_id',ids).eq('is_deleted',false);
+  const {data:blocks} = await getSupabase().from('time_blocks').select('employee_id,timesheet_id,block_type,time_in,time_out').in('timesheet_id',ids).eq('is_deleted',false);
+
+  // Flatten to one row per employee per timesheet
+  const rows = [];
+  (emps||[]).forEach(e=>{
+    const sheet = sheets.find(s=>s.id===e.timesheet_id);
+    if(!sheet) return;
+    // Skip blank-name employees
+    const empName = `${e.first_name||''} ${e.last_name||''}`.trim();
+    if(!empName) return;
+    const eBlocks = (blocks||[]).filter(b=>b.employee_id===e.id);
+    const hrs = bt => _fmtHours(eBlocks.filter(b=>b.block_type===bt).reduce((a,b)=>a+_blockMins(b),0));
+    const totalSecs = eBlocks.reduce((a,b)=>a+_blockMins(b),0);
+    rows.push({
+      job_date: sheet.job_date,
+      client_name: sheet.client_name||'—',
+      store_number: sheet.store_number||'—',
+      location: [sheet.city, sheet.state].filter(Boolean).join(', ')||'—',
+      status: sheet.status,
+      supervisor_name: sheet.supervisor_name||'—',
+      role_type: e.role_type,
+      name: empName||'—',
+      login_id: e.login_id||'—',
+      count: hrs('count'),
+      variance: hrs('variance'),
+      setup: hrs('setup'),
+      precounts: hrs('precounts'),
+      total_hours: _fmtHours(totalSecs),
+    });
+  });
+  // Sort: date desc → customer → store → supervisor first → name
+  rows.sort((a,b)=>{
+    if(a.job_date > b.job_date) return -1;
+    if(a.job_date < b.job_date) return 1;
+    if(a.client_name < b.client_name) return -1;
+    if(a.client_name > b.client_name) return 1;
+    if(a.store_number < b.store_number) return -1;
+    if(a.store_number > b.store_number) return 1;
+    // supervisor before employee
+    const roleOrder = {supervisor:0, assistant:1, employee:2};
+    const ra = roleOrder[a.role_type]??3, rb = roleOrder[b.role_type]??3;
+    if(ra !== rb) return ra - rb;
+    return a.name.localeCompare(b.name);
+  });
+
+  _renderReportTable([
+    {key:'job_date',label:'Date'},{key:'client_name',label:'Customer'},
+    {key:'store_number',label:'Store'},{key:'location',label:'City, State'},
+    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
+    {key:'role_type',label:'Role'},{key:'name',label:'Employee'},
+    {key:'login_id',label:'Login ID'},
+    {key:'count',label:'Count',right:true},{key:'variance',label:'Variance',right:true},
+    {key:'setup',label:'Setup',right:true},{key:'precounts',label:'PreCounts',right:true},
+    {key:'total_hours',label:'Total Hrs',right:true},
+  ], rows);
+}
+
+// ── Report 4: Audit Trail ─────────────────────────────────────────────────────
+async function _runAuditTrail(f){
+  let q = getSupabase().from('timesheet_edit_log')
+    .select('timesheet_id,block_id,field,old_value,new_value,changed_by_name,changed_by_role,changed_at')
+    .order('changed_at',{ascending:false});
+  if(f.from) q = q.gte('changed_at', f.from);
+  if(f.to)   q = q.lte('changed_at', f.to+'T23:59:59');
+  const {data, error} = await q;
+  if(error) throw error;
+
+  // Get timesheet info for context
+  const tsIds = [...new Set((data||[]).map(r=>r.timesheet_id))];
+  let sheets = [];
+  if(tsIds.length){
+    const {data:sd} = await getSupabase().from('timesheets')
+      .select('id,job_date,client_name,store_number,status,supervisor_name')
+      .in('id', tsIds);
+    sheets = sd||[];
+  }
+
+  const rows = (data||[]).map(r=>{
+    const s = sheets.find(x=>x.id===r.timesheet_id)||{};
+    if(f.supervisor && s.supervisor_id !== f.supervisor) return null;
+    return {
+      changed_at: new Date(r.changed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
+      client_name: s.client_name||'—',
+      store_number: s.store_number||'—',
+      job_date: s.job_date||'—',
+      status: s.status||'—',
+      supervisor_name: s.supervisor_name||'—',
+      changed_by: r.changed_by_name||'—',
+      role: r.changed_by_role||'—',
+      field: r.field||'—',
+      old_value: r.old_value||'—',
+      new_value: r.new_value||'—',
+    };
+  }).filter(Boolean);
+
+  _renderReportTable([
+    {key:'changed_at',label:'Changed At'},{key:'client_name',label:'Customer'},
+    {key:'store_number',label:'Store'},{key:'job_date',label:'Job Date'},
+    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
+    {key:'changed_by',label:'Changed By'},{key:'role',label:'Role'},
+    {key:'field',label:'Field'},{key:'old_value',label:'Old Value'},{key:'new_value',label:'New Value'},
+  ], rows);
+}
+
+// ── Report 5: Timesheet Changes ───────────────────────────────────────────────
+async function _runTSChanges(f){
+  let q = getSupabase().from('timesheet_changes')
+    .select('timesheet_id,changed_by,changed_at,field_name,employee_id,old_value,new_value')
+    .order('changed_at',{ascending:false});
+  if(f.from) q = q.gte('changed_at', f.from);
+  if(f.to)   q = q.lte('changed_at', f.to+'T23:59:59');
+  const {data, error} = await q;
+  if(error) throw error;
+
+  const tsIds = [...new Set((data||[]).map(r=>r.timesheet_id))];
+  let sheets = [];
+  if(tsIds.length){
+    const {data:sd} = await getSupabase().from('timesheets')
+      .select('id,job_date,client_name,store_number,status,supervisor_name,supervisor_id')
+      .in('id', tsIds);
+    sheets = sd||[];
+  }
+
+  // Get profile names for changed_by
+  const userIds = [...new Set((data||[]).map(r=>r.changed_by).filter(Boolean))];
+  let profiles = [];
+  if(userIds.length){
+    const {data:pd} = await getSupabase().from('profiles').select('id,full_name').in('id',userIds);
+    profiles = pd||[];
+  }
+
+  const rows = (data||[]).map(r=>{
+    const s = sheets.find(x=>x.id===r.timesheet_id)||{};
+    if(f.supervisor && s.supervisor_id !== f.supervisor) return null;
+    const changer = profiles.find(p=>p.id===r.changed_by);
+    return {
+      changed_at: new Date(r.changed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
+      client_name: s.client_name||'—',
+      store_number: s.store_number||'—',
+      job_date: s.job_date||'—',
+      status: s.status||'—',
+      supervisor_name: s.supervisor_name||'—',
+      changed_by: changer?.full_name||r.changed_by||'—',
+      field_name: r.field_name||'—',
+      old_value: r.old_value||'—',
+      new_value: r.new_value||'—',
+    };
+  }).filter(Boolean);
+
+  _renderReportTable([
+    {key:'changed_at',label:'Changed At'},{key:'client_name',label:'Customer'},
+    {key:'store_number',label:'Store'},{key:'job_date',label:'Job Date'},
+    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
+    {key:'changed_by',label:'Changed By'},{key:'field_name',label:'Field'},
+    {key:'old_value',label:'Old Value'},{key:'new_value',label:'New Value'},
+  ], rows);
+}
+
+// ── Report 6: Outstanding Timesheets ────────────────────────────────────────
+async function _runOutstandingTimesheets(f){
+  // Call the get_pending_escalations DB function
+  const {data, error} = await getSupabase().rpc('get_pending_escalations');
+  if(error) throw error;
+
+  const ESC_TYPE_LABELS = {
+    'not_submitted':  'Not Submitted',
+    'pending_approval': 'Pending Approval',
+  };
+  const LEVEL_COLORS = {
+    1: 'var(--success-text,#6abf3a)',
+    2: 'var(--warn-text,#b07a00)',
+    3: 'var(--danger-text,#ef4444)',
+  };
+
+  // Client-side filtering
+  let rows = (data||[]).filter(r=>{
+    if(f.division && r.division !== (_orgTree.divisions||[]).find(d=>d.id_division===f.division)?.name) return false;
+    if(f.region   && r.region   !== (_orgTree.regions||[]).find(x=>x.id_region===f.region)?.name)     return false;
+    if(f.district && r.district !== (_orgTree.districts||[]).find(x=>x.id_district===f.district)?.name) return false;
+    if(f.area     && r.area     !== (_orgTree.areas||[]).find(x=>x.id_area===f.area)?.name)            return false;
+    if(f.esc_type  && r.escalation_type !== f.esc_type)                return false;
+    if(f.esc_level && r.escalation_level !== parseInt(f.esc_level))    return false;
+    return true;
+  });
+
+  if(!rows.length){ _renderReportTable([],[]); return; }
+
+  // Custom render for this report — color coded escalation levels
+  _lastReportCols = [
+    {key:'escalation_type',  label:'Type'},
+    {key:'escalation_level', label:'Level'},
+    {key:'division',         label:'Division'},
+    {key:'region',           label:'Region'},
+    {key:'district',         label:'District'},
+    {key:'area',             label:'Office'},
+    {key:'supervisor_name',  label:'Supervisor'},
+    {key:'job_date',         label:'Job Date'},
+    {key:'client_name',      label:'Customer'},
+    {key:'store_number',     label:'Store'},
+    {key:'city',             label:'City'},
+    {key:'state',            label:'State'},
+    {key:'employee_count',   label:'# Employees', right:true},
+    {key:'total_hours',      label:'Total Hours',  right:true},
+    {key:'hours_since_created', label:'Hrs Since Created', right:true},
+    {key:'hours_since_submit',  label:'Hrs Since Submit',  right:true},
+    {key:'recipients',       label:'Notify'},
+  ];
+  _lastReportRows = rows;
+
+  const body = document.getElementById('report-body');
+  body.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg2);border-bottom:2px solid var(--border2)">
+            ${_lastReportCols.map(c=>`<th style="padding:8px 10px;text-align:${c.right?'right':'left'};font-weight:700;white-space:nowrap;color:var(--text2)">${c.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr style="border-bottom:0.5px solid var(--border2);background:${i%2?'var(--bg2)':'var(--bg)'}">
+              ${_lastReportCols.map(c=>{
+                let val = r[c.key]??'—';
+                if(c.key==='escalation_type'){
+                  val = `<span style="font-weight:700;color:${r.escalation_type==='not_submitted'?'var(--warn-text)':'var(--info-text)'}">
+                    ${ESC_TYPE_LABELS[r.escalation_type]||r.escalation_type}</span>`;
+                }
+                if(c.key==='escalation_level'){
+                  val = `<span style="font-weight:800;color:${LEVEL_COLORS[r.escalation_level]||'var(--text)'}">
+                    L${r.escalation_level}</span>`;
+                }
+                // Replace N/A with a styled left arrow for unassigned org levels
+                const isArrow = ['division','region','district','area'].includes(c.key) && val==='N/A';
+                if(isArrow){
+                  val = `<span style="font-size:22px;font-weight:700;color:#6366f1;line-height:1">&#8592;</span>`;
+                }
+                return `<td style="padding:7px 10px;${c.right?'text-align:right;':''}${isArrow?'text-align:center;':''}white-space:nowrap">${val}</td>`;
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">${rows.length} row${rows.length===1?'':'s'}</div>
+    </div>`;
+}
+
+// ── CSV Export ────────────────────────────────────────────────────────────────
+function exportReportCSV(){
+  if(!_lastReportRows.length){ alert('Run a report first.'); return; }
+  const headers = _lastReportCols.map(c=>c.label).join(',');
+  const rows = _lastReportRows.map(r=>
+    _lastReportCols.map(c=>{
+      const v = String(r[c.key]??'').replace(/<[^>]+>/g,'');
+      return v.includes(',') || v.includes('"') ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(',')
+  );
+  const csv = [headers, ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = (_currentReport||'report')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
 }
 
 function showComingSoon(page){
@@ -2398,7 +3190,105 @@ function _wizComingSoon(label){
 // ════════════════════════════════════════════════════════════
 // WIZARD TAB: ORGANIZATION
 // ════════════════════════════════════════════════════════════
-let _orgTree = {regions:[], districts:[], areas:[]};
+let _orgTree = {divisions:[], regions:[], districts:[], areas:[], managers:[]};
+
+async function _ensureOrgTree(){
+  if(_orgTree.divisions && _orgTree.divisions.length) return; // already loaded
+  const [{data:divisions},{data:regions},{data:districts},{data:areas},{data:allProfiles}] = await Promise.all([
+    getSupabase().from('divisions').select('*').order('name'),
+    getSupabase().from('regions').select('*').order('name'),
+    getSupabase().from('districts').select('*').order('name'),
+    getSupabase().from('areas').select('*').order('name'),
+    getSupabase().from('profiles').select('id,full_name,role,id_division,id_region,id_district,id_area')
+      .eq('is_active',true).not('role','in','("employee")'),
+  ]);
+  _orgTree.divisions    = divisions||[];
+  _orgTree.regions      = regions||[];
+  _orgTree.districts    = districts||[];
+  _orgTree.areas        = areas||[];
+  _orgTree._allProfiles = allProfiles||[];
+}
+
+// Resolve org filter downward — get all profile IDs under a given org level
+// e.g. selecting a region returns profiles assigned to that region OR
+// any district/area under that region
+function _resolveOrgSupIds(f){
+  const divId  = f.division;
+  const regId  = f.region;
+  const distId = f.district;
+  const areaId = f.area;
+
+  if(!divId && !regId && !distId && !areaId) return null; // no filter
+
+  // Collect matching IDs at each level by walking DOWN the tree
+  let matchRegIds  = new Set();
+  let matchDistIds = new Set();
+  let matchAreaIds = new Set();
+
+  if(areaId){
+    matchAreaIds.add(areaId);
+  } else if(distId){
+    matchDistIds.add(distId);
+    (_orgTree.areas||[]).filter(a=>a.id_district===distId).forEach(a=>matchAreaIds.add(a.id_area));
+  } else if(regId){
+    matchRegIds.add(regId);
+    (_orgTree.districts||[]).filter(d=>d.id_region===regId).forEach(d=>{
+      matchDistIds.add(d.id_district);
+      (_orgTree.areas||[]).filter(a=>a.id_district===d.id_district).forEach(a=>matchAreaIds.add(a.id_area));
+    });
+  } else if(divId){
+    (_orgTree.regions||[]).filter(r=>r.id_division===divId).forEach(r=>{
+      matchRegIds.add(r.id_region);
+      (_orgTree.districts||[]).filter(d=>d.id_region===r.id_region).forEach(d=>{
+        matchDistIds.add(d.id_district);
+        (_orgTree.areas||[]).filter(a=>a.id_district===d.id_district).forEach(a=>matchAreaIds.add(a.id_area));
+      });
+    });
+    // Also profiles assigned directly to division
+    matchRegIds.add(divId); // handled via id_division check below
+  }
+
+  // Match profiles at ANY level within the resolved set
+  return (_orgTree._allProfiles||[]).filter(p=>{
+    if(areaId  && p.id_area     === areaId)  return true;
+    if(distId  && p.id_district === distId)  return true;
+    if(regId   && p.id_region   === regId)   return true;
+    if(divId   && p.id_division === divId)   return true;
+    if(matchAreaIds.has(p.id_area))          return true;
+    if(matchDistIds.has(p.id_district))      return true;
+    if(matchRegIds.has(p.id_region))         return true;
+    return false;
+  }).map(p=>p.id);
+}
+
+// Walk up the org tree to get full ancestry for a profile
+function _resolveOrgAncestry(profile){
+  const out = {division:'—', region:'—', district:'—', area:'—'};
+  let areaId    = profile.id_area;
+  let distId    = profile.id_district;
+  let regId     = profile.id_region;
+  let divId     = profile.id_division;
+  if(areaId){
+    const a = _orgTree.areas.find(x=>x.id_area===areaId);
+    out.area = a?.name||'—';
+    if(!distId) distId = a?.id_district;
+  }
+  if(distId){
+    const d = _orgTree.districts.find(x=>x.id_district===distId);
+    out.district = d?.name||'—';
+    if(!regId) regId = d?.id_region;
+  }
+  if(regId){
+    const r = _orgTree.regions.find(x=>x.id_region===regId);
+    out.region = r?.name||'—';
+    if(!divId) divId = r?.id_division;
+  }
+  if(divId){
+    const d = _orgTree.divisions.find(x=>x.id_division===divId);
+    out.division = d?.name||'—';
+  }
+  return out;
+}
 
 async function loadWizOrg(){
   const body = document.getElementById('wizard-body');
@@ -4008,6 +4898,75 @@ function switchTab(tab){
 // ════════════════════════════════════════════════════════════
 // MANAGER DASHBOARD — review queue
 // ════════════════════════════════════════════════════════════
+// Populate and cascade org dropdowns on dashboard
+async function _mgrPopulateOrgFilters(){
+  await _ensureOrgTree();
+  const divSel  = document.getElementById('mgr-f-division');
+  const regSel  = document.getElementById('mgr-f-region');
+  const distSel = document.getElementById('mgr-f-district');
+  if(!divSel) return;
+  // Only repopulate if empty
+  if(divSel.options.length <= 1){
+    (_orgTree.divisions||[]).forEach(d=>{
+      const o=document.createElement('option'); o.value=d.id_division; o.textContent=d.name; divSel.appendChild(o);
+    });
+  }
+  if(regSel && regSel.options.length <= 1){
+    (_orgTree.regions||[]).forEach(r=>{
+      const o=document.createElement('option'); o.value=r.id_region; o.textContent=r.name; regSel.appendChild(o);
+    });
+  }
+  if(distSel && distSel.options.length <= 1){
+    (_orgTree.districts||[]).forEach(d=>{
+      const o=document.createElement('option'); o.value=d.id_district; o.textContent=d.name; distSel.appendChild(o);
+    });
+  }
+  // Restore saved filter values
+  _mgrRestoreFilters();
+}
+
+function _mgrCascadeOrg(){
+  const divId = document.getElementById('mgr-f-division')?.value||'';
+  const regId = document.getElementById('mgr-f-region')?.value||'';
+  const regSel  = document.getElementById('mgr-f-region');
+  const distSel = document.getElementById('mgr-f-district');
+  if(regSel){
+    const curReg = regSel.value;
+    regSel.innerHTML = '<option value="">All</option>';
+    (_orgTree.regions||[]).filter(r=>!divId||r.id_division===divId).forEach(r=>{
+      const o=document.createElement('option'); o.value=r.id_region; o.textContent=r.name; regSel.appendChild(o);
+    });
+    if(curReg) regSel.value = curReg;
+  }
+  if(distSel){
+    const curDist = distSel.value;
+    const curReg2 = document.getElementById('mgr-f-region')?.value||'';
+    distSel.innerHTML = '<option value="">All</option>';
+    (_orgTree.districts||[]).filter(d=>!curReg2||d.id_region===curReg2).forEach(d=>{
+      const o=document.createElement('option'); o.value=d.id_district; o.textContent=d.name; distSel.appendChild(o);
+    });
+    if(curDist) distSel.value = curDist;
+  }
+}
+
+function _mgrRestoreFilters(){
+  try {
+    const saved = localStorage.getItem('mgr_filters_'+(currentUser?.id||''));
+    if(!saved) return;
+    const f = JSON.parse(saved);
+    _mgrFilters = f;
+    if(f.from)     { const el=document.getElementById('mgr-f-from');     if(el) el.value=f.from; }
+    if(f.to)       { const el=document.getElementById('mgr-f-to');       if(el) el.value=f.to; }
+    if(f.division) { const el=document.getElementById('mgr-f-division'); if(el) el.value=f.division; _mgrCascadeOrg(); }
+    if(f.region)   { const el=document.getElementById('mgr-f-region');   if(el) el.value=f.region; _mgrCascadeOrg(); }
+    if(f.district) { const el=document.getElementById('mgr-f-district'); if(el) el.value=f.district; }
+    if(f.status)   { const el=document.getElementById('mgr-f-status');   if(el) el.value=f.status; }
+    if(f.customer) { const el=document.getElementById('mgr-f-customer'); if(el) el.value=f.customer; }
+    if(f.store)    { const el=document.getElementById('mgr-f-store');    if(el) el.value=f.store; }
+    if(f.supervisor){ const el=document.getElementById('mgr-f-supervisor'); if(el) el.value=f.supervisor; }
+  } catch(e){}
+}
+
 async function populateSupervisorFilter(){
   const sel = document.getElementById('mgr-f-supervisor');
   if(!sel || sel.options.length > 1) return; // already populated
@@ -4035,6 +4994,7 @@ async function populateSupervisorFilter(){
 
 async function loadMgrTimesheets(){
   await populateSupervisorFilter();
+  await _mgrPopulateOrgFilters();
   const loading   = document.getElementById('mgr-loading');
   const container = document.getElementById('mgr-list');
   const stats     = document.getElementById('mgr-stats');
@@ -4087,6 +5047,21 @@ async function loadMgrTimesheets(){
     }
   }
   if(_mgrFilters.store)    query = query.ilike('store_number', '%'+_mgrFilters.store+'%');
+  // Org filters — resolve supervisor IDs for selected org level
+  if(_mgrFilters.division || _mgrFilters.region || _mgrFilters.district){
+    const orgSupIds = _resolveOrgSupIds({
+      division: _mgrFilters.division,
+      region:   _mgrFilters.region,
+      district: _mgrFilters.district,
+      area:     '',
+    });
+    if(orgSupIds && orgSupIds.length) query = query.in('supervisor_id', orgSupIds);
+    else if(orgSupIds && !orgSupIds.length){
+      loading.style.display='none';
+      container.innerHTML='<div class="ts-empty"><i class="ti ti-filter-off"></i><p>No timesheets match the selected org filter</p></div>';
+      return;
+    }
+  }
 
   const {data, error} = await query;
   loading.style.display='none';
@@ -4182,23 +5157,29 @@ function applyMgrFilters(){
   const supSel = document.getElementById('mgr-f-supervisor');
   const supOpt = supSel?.options[supSel.selectedIndex];
   _mgrFilters = {
-    from:           document.getElementById('mgr-f-from').value,
-    to:             document.getElementById('mgr-f-to').value,
-    status:         document.getElementById('mgr-f-status').value,
-    customer:       document.getElementById('mgr-f-customer').value.trim(),
-    supervisor:     supSel?.value.trim() || '',
-    supervisorId:   supOpt?.dataset.id || null, // direct UUID match
-    store:          document.getElementById('mgr-f-store').value.trim(),
+    from:           document.getElementById('mgr-f-from')?.value||'',
+    to:             document.getElementById('mgr-f-to')?.value||'',
+    division:       document.getElementById('mgr-f-division')?.value||'',
+    region:         document.getElementById('mgr-f-region')?.value||'',
+    district:       document.getElementById('mgr-f-district')?.value||'',
+    status:         document.getElementById('mgr-f-status')?.value||'',
+    customer:       document.getElementById('mgr-f-customer')?.value.trim()||'',
+    supervisor:     supSel?.value.trim()||'',
+    supervisorId:   supOpt?.dataset.id||null,
+    store:          document.getElementById('mgr-f-store')?.value.trim()||'',
   };
+  // Persist filters for this user
+  try { localStorage.setItem('mgr_filters_'+( currentUser?.id||''), JSON.stringify(_mgrFilters)); } catch(e){}
   loadMgrTimesheets();
 }
 function clearMgrFilters(){
-  ['mgr-f-from','mgr-f-to','mgr-f-customer','mgr-f-store'].forEach(id=>{
+  ['mgr-f-from','mgr-f-to','mgr-f-customer','mgr-f-store',
+   'mgr-f-division','mgr-f-region','mgr-f-district',
+   'mgr-f-status','mgr-f-supervisor'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
-  const supSel=document.getElementById('mgr-f-supervisor'); if(supSel) supSel.value='';
-  document.getElementById('mgr-f-status').value='';
   _mgrFilters={};
+  try { localStorage.removeItem('mgr_filters_'+(currentUser?.id||'')); } catch(e){}
   loadMgrTimesheets();
 }
 
@@ -4524,7 +5505,8 @@ async function openDetailScreen(ts, isManager=false){
       </tr>`);
     });
 
-    if(laborMins>0||travelMins>0){ grandLaborMins+=laborMins; grandTravelMins+=travelMins; grandEmpCount++; }
+    const hasName = !!(e.first_name||e.last_name||'').trim() || !!(e.first_name||'').trim() || !!(e.last_name||'').trim();
+    if((laborMins>0||travelMins>0) && hasName){ grandLaborMins+=laborMins; grandTravelMins+=travelMins; grandEmpCount++; }
     return dayRows.join('');
   }
 
@@ -5488,8 +6470,12 @@ async function applyImpersonation(){
   document.getElementById('imp-banner-label').textContent =
     `Viewing as: ${uProfile.full_name} (${roleLabel})`;
   document.getElementById('impersonation-banner').classList.add('show');
-  document.getElementById('user-bar-role').textContent = uProfile.full_name + ' (test)';
+  document.getElementById('user-bar-name').textContent = uProfile.full_name + ' (test)';
+  document.getElementById('user-bar-role').textContent = roleLabel;
   document.getElementById('user-bar-role').style.background = '#854f0b';
+
+  // Re-render sidebar with impersonated permissions
+  initSidebar();
 
   closeRoleSwitcher();
   loadMgrTimesheets();
@@ -5505,10 +6491,14 @@ function exitImpersonation(){
   window._impersonatedProfile = null;
 
   document.getElementById('impersonation-banner').classList.remove('show');
-  document.getElementById('user-bar-role').textContent = currentProfile?.role||'testing_qa';
+  document.getElementById('user-bar-name').textContent = currentProfile?.full_name || currentUser?.email || '';
+  document.getElementById('user-bar-role').textContent = _pendingRoleLabel || currentProfile?.role || 'Manager';
   document.getElementById('user-bar-role').style.background = '';
   document.getElementById('rsd-user-search') && (document.getElementById('rsd-user-search').value='');
   renderImpersonateUsers('');
+
+  // Re-render sidebar with real permissions
+  initSidebar();
 
   loadMgrTimesheets();
 }
