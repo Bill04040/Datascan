@@ -7,28 +7,18 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+/* Force dark mode regardless of OS preference */
 :root{
-  --bg:#ffffff;--bg2:#f8f7f5;--bg3:#f0efe9;
-  --text:#1a1a1a;--text2:#6b6a66;--text3:#9e9d99;
-  --border:rgba(0,0,0,0.12);--border2:rgba(0,0,0,0.22);
-  --info-bg:#e6f1fb;--info-text:#185fa5;
-  --success-bg:#eaf3de;--success-text:#3b6d11;
-  --warn-bg:#faeeda;--warn-text:#854f0b;
-  --danger-bg:#fcebeb;--danger-text:#a32d2d;
+  --bg:#1e1e1c;--bg2:#282725;--bg3:#323230;
+  --text:#f0efe9;--text2:#a8a7a2;--text3:#6b6a66;
+  --border:rgba(255,255,255,0.12);--border2:rgba(255,255,255,0.22);
+  --info-bg:#042c53;--info-text:#85b7eb;
+  --success-bg:#173404;--success-text:#97c459;
+  --warn-bg:#412402;--warn-text:#fac775;
+  --danger-bg:#501313;--danger-text:#f09595;
   --danger-border:#e24b4a;--success-border:#639922;
   --radius:8px;--radius-lg:12px;
-}
-@media(prefers-color-scheme:dark){
-  :root{
-    --bg:#1e1e1c;--bg2:#282725;--bg3:#323230;
-    --text:#f0efe9;--text2:#a8a7a2;--text3:#6b6a66;
-    --border:rgba(255,255,255,0.12);--border2:rgba(255,255,255,0.22);
-    --info-bg:#042c53;--info-text:#85b7eb;
-    --success-bg:#173404;--success-text:#97c459;
-    --warn-bg:#412402;--warn-text:#fac775;
-    --danger-bg:#501313;--danger-text:#f09595;
-    --danger-border:#e24b4a;--success-border:#639922;
-  }
+  color-scheme: dark;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg3);color:var(--text);font-size:16px;padding:0 0 2rem}
 .page-header{background:#1a2e4a;border-bottom:3px solid #6abf3a;padding:.75rem 1.25rem;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -1749,7 +1739,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.64';
+const APP_VERSION = 'v1.0.81';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2284,8 +2274,52 @@ function _rptFilters(){
   };
 }
 
-function _fmtHours(sec){ return sec>0?(sec/3600).toFixed(2):'—'; }
-function _blockMins(b){ return b.time_in&&b.time_out?(new Date(b.time_out)-new Date(b.time_in))/1000:0; }
+// ── Hour Precision Utilities ─────────────────────────────────────────────────
+// BILLING PRECISION RULES — follow these in ALL reports:
+//
+//  1. _blockSec(block) → integer seconds. NEVER divide before all blocks summed.
+//  2. Accumulate raw seconds with .reduce((a,b) => a + _blockSec(b), 0)
+//  3. Format ONCE at the end with _fmtHours(totalSec) for display (2dp)
+//  4. Store 4dp export value alongside: (totalSec/3600).toFixed(4)
+//     Name it _exp_{columnKey} so exportReportCSV() picks it up automatically.
+//  5. NEVER sum already-formatted values — always sum raw seconds.
+//
+// Pattern for a new report row:
+//   const rawSec = blocks.filter(...).reduce((a,b)=>a+_blockSec(b), 0);
+//   row.my_hours     = _fmtHours(rawSec);       // display: 2dp
+//   row._exp_my_hours = _fmtHoursExport(rawSec); // export: 4dp
+
+function _blockSec(b){
+  // Returns whole integer seconds between time_in and time_out.
+  // Integer math only — no float division until final formatting.
+  if(!b.time_in || !b.time_out) return 0;
+  return Math.round((new Date(b.time_out) - new Date(b.time_in)) / 1000);
+}
+// Legacy alias — kept for compatibility
+const _blockMins = _blockSec;
+
+function _fmtHours(sec, dp=2){
+  // Format seconds as hours to dp decimal places for DISPLAY.
+  // Default 2dp. Always call this ONCE on the final summed seconds.
+  if(!sec || sec <= 0) return '—';
+  const factor = Math.pow(10, dp);
+  return (Math.round(sec / 3600 * factor) / factor).toFixed(dp);
+}
+
+function _fmtHoursExport(sec){
+  // 4dp precision for CSV export — preserves billing accuracy.
+  // Use alongside _fmtHours: store as row._exp_{key}
+  if(!sec || sec <= 0) return '';
+  return (sec / 3600).toFixed(4);
+}
+
+function _fmtHoursNum(sec){
+  // Returns numeric value (not string) for internal arithmetic.
+  if(!sec || sec <= 0) return 0;
+  return Math.round(sec / 3600 * 10000) / 10000;
+}
+
+// ── End Hour Precision Utilities ──────────────────────────────────────────────
 
 // Shared table renderer
 let _lastReportRows = [];
@@ -2354,20 +2388,66 @@ async function _runHoursByJob(f){
   if(!sheets?.length){ _renderReportTable([],[]); return; }
 
   const ids = sheets.map(s=>s.id);
-  const {data:blocks} = await getSupabase().from('time_blocks')
-    .select('timesheet_id,employee_id,block_type,time_in,time_out,is_primary')
-    .in('timesheet_id', ids).eq('is_deleted', false);
-  const {data:emps} = await getSupabase().from('employees')
-    .select('id,timesheet_id,role_type,first_name,last_name')
-    .in('timesheet_id', ids).eq('is_deleted', false);
+
+  // Fetch in batches of 200 timesheet IDs to avoid URL length limits
+  // and always request more than default 1000 row limit
+  async function fetchAllPages(table, selectStr, idField, idList, extraFilters=[]){
+    const BATCH = 200;
+    const PAGE  = 2000; // rows per request
+    let all = [];
+    for(let i=0; i<idList.length; i+=BATCH){
+      const chunk = idList.slice(i, i+BATCH);
+      let q = getSupabase().from(table).select(selectStr).in(idField, chunk).limit(PAGE);
+      extraFilters.forEach(([col,val])=>{ q = q.eq(col,val); });
+      const {data, error} = await q;
+      if(error) throw error;
+      if(data) all = all.concat(data);
+    }
+    return all;
+  }
+
+  // Employee count from timesheet_summary — already calculated correctly
+  // Scoped to the exact timesheet IDs we're reporting on
+  const {data:empCounts} = await getSupabase()
+    .from('timesheet_summary')
+    .select('id,employee_count')
+    .in('id', ids);
+
+  const empCountMap = {};
+  (empCounts||[]).forEach(r=>{
+    empCountMap[r.id] = r.employee_count || 0;
+  });
+
+  const [blocks, emps] = await Promise.all([
+    fetchAllPages('time_blocks','timesheet_id,employee_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
+    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name','timesheet_id',ids,[['is_deleted',false]]),
+  ]);
 
   const rows = sheets.map(s=>{
     const sBlocks = (blocks||[]).filter(b=>b.timesheet_id===s.id);
     const sEmps   = (emps||[]).filter(e=>e.timesheet_id===s.id);
-    const byType  = (rt, bt) => sBlocks
-      .filter(b=>{ const emp=(emps||[]).find(e=>e.id===b.employee_id); return emp?.role_type===rt && b.block_type===bt; })
-      .reduce((a,b)=>a+_blockMins(b),0);
-    const distEmps = new Set(sEmps.filter(e=>e.role_type==='employee').map(e=>e.id)).size;
+    const EMP_ROLES = new Set(['employee','assistant']);
+    const SUP = new Set(['supervisor']);
+    const empMap = {};
+    sEmps.forEach(e=>{ empMap[e.id]=e; });
+    const byTypeSec = (roleSet, bt) => sBlocks
+      .filter(b=>{ const e=empMap[b.employee_id]; return e && roleSet.has(e.role_type) && b.block_type===bt; })
+      .reduce((acc,b)=>acc+_blockSec(b), 0);
+    // Use DB-side count
+    const distEmps = empCountMap[s.id] || 0;
+    // Raw seconds per column
+    const _sc = byTypeSec(SUP,      'count');
+    const _sv = byTypeSec(SUP,      'variance');
+    const _ss = byTypeSec(SUP,      'setup');
+    const _sp = byTypeSec(SUP,      'precounts');
+    const _ec = byTypeSec(EMP_ROLES,'count');
+    const _ev = byTypeSec(EMP_ROLES,'variance');
+    const _es = byTypeSec(EMP_ROLES,'setup');
+    const _ep = byTypeSec(EMP_ROLES,'precounts');
+    // Total = sum of ALL raw seconds (excl lunch/break), rounded ONCE
+    const _totalSec = sBlocks
+      .filter(b=>!['lunch','break'].includes(b.block_type))
+      .reduce((acc,b)=>acc+_blockSec(b), 0);
     return {
       job_date: s.job_date,
       client_name: s.client_name||'—',
@@ -2375,15 +2455,28 @@ async function _runHoursByJob(f){
       city: (s.city||'')+(s.state?', '+s.state:''),
       status: s.status,
       supervisor_name: s.supervisor_name||'—',
-      sup_count: _fmtHours(byType('supervisor','count')),
-      sup_variance: _fmtHours(byType('supervisor','variance')),
-      sup_setup: _fmtHours(byType('supervisor','setup')),
-      sup_precounts: _fmtHours(byType('supervisor','precounts')),
-      emp_count: _fmtHours(byType('employee','count')),
-      emp_variance: _fmtHours(byType('employee','variance')),
-      emp_setup: _fmtHours(byType('employee','setup')),
-      emp_precounts: _fmtHours(byType('employee','precounts')),
-      emp_distinct: distEmps||'—',
+      sup_count:     _fmtHours(_sc),
+      sup_variance:  _fmtHours(_sv),
+      sup_setup:     _fmtHours(_ss),
+      sup_precounts: _fmtHours(_sp),
+      emp_count:     _fmtHours(_ec),
+      emp_variance:  _fmtHours(_ev),
+      emp_setup:     _fmtHours(_es),
+      emp_precounts: _fmtHours(_ep),
+      emp_distinct:  distEmps||'—',
+      // Total rounds raw seconds ONCE — authoritative billing figure
+      total_hours:   _fmtHours(_totalSec),
+      // Store raw seconds for potential future summing
+      // Export 4dp fields for Hours by Job
+      _exp_sup_count:     _fmtHoursExport(_sc),
+      _exp_sup_variance:  _fmtHoursExport(_sv),
+      _exp_sup_setup:     _fmtHoursExport(_ss),
+      _exp_sup_precounts: _fmtHoursExport(_sp),
+      _exp_emp_count:     _fmtHoursExport(_ec),
+      _exp_emp_variance:  _fmtHoursExport(_ev),
+      _exp_emp_setup:     _fmtHoursExport(_es),
+      _exp_emp_precounts: _fmtHoursExport(_ep),
+      _exp_total_hours:   _fmtHoursExport(_totalSec),
     };
   });
   // Sort: date desc → customer → store → supervisor first → name
@@ -2410,6 +2503,7 @@ async function _runHoursByJob(f){
     {key:'emp_count',label:'Emp Count',right:true},{key:'emp_variance',label:'Emp Variance',right:true},
     {key:'emp_setup',label:'Emp Setup',right:true},{key:'emp_precounts',label:'Emp PreCounts',right:true},
     {key:'emp_distinct',label:'# Employees',right:true},
+    {key:'total_hours', label:'Total Hours', right:true},
   ], rows);
 }
 
@@ -2489,8 +2583,10 @@ async function _runHoursByEmployee(f){
   if(!sheets?.length){ _renderReportTable([],[]); return; }
 
   const ids = sheets.map(s=>s.id);
-  const {data:emps}   = await getSupabase().from('employees').select('id,timesheet_id,role_type,first_name,last_name,login_id').in('timesheet_id',ids).eq('is_deleted',false);
-  const {data:blocks} = await getSupabase().from('time_blocks').select('employee_id,timesheet_id,block_type,time_in,time_out').in('timesheet_id',ids).eq('is_deleted',false);
+  const [emps, blocks] = await Promise.all([
+    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name,login_id','timesheet_id',ids,[['is_deleted',false]]),
+    fetchAllPages('time_blocks','employee_id,timesheet_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
+  ]);
 
   // Flatten to one row per employee per timesheet
   const rows = [];
@@ -2502,7 +2598,18 @@ async function _runHoursByEmployee(f){
     if(!empName) return;
     const eBlocks = (blocks||[]).filter(b=>b.employee_id===e.id);
     const hrs = bt => _fmtHours(eBlocks.filter(b=>b.block_type===bt).reduce((a,b)=>a+_blockMins(b),0));
-    const totalSecs = eBlocks.reduce((a,b)=>a+_blockMins(b),0);
+    // Total hours = paid work blocks only
+    // lunch = unpaid deduction, break = documentation only — both excluded
+    const excludedTypes = new Set(['lunch','break']);
+    // Sum raw seconds first to avoid accumulated rounding
+    const totalSecs = eBlocks
+      .filter(b=>!excludedTypes.has(b.block_type))
+      .reduce((acc,b)=>acc+_blockMins(b), 0);
+    // Raw seconds per block type — accumulate integers, format once
+    const _rawCount    = eBlocks.filter(b=>b.block_type==='count')    .reduce((a,b)=>a+_blockSec(b),0);
+    const _rawVariance = eBlocks.filter(b=>b.block_type==='variance') .reduce((a,b)=>a+_blockSec(b),0);
+    const _rawSetup    = eBlocks.filter(b=>b.block_type==='setup')    .reduce((a,b)=>a+_blockSec(b),0);
+    const _rawPre      = eBlocks.filter(b=>b.block_type==='precounts').reduce((a,b)=>a+_blockSec(b),0);
     rows.push({
       job_date: sheet.job_date,
       client_name: sheet.client_name||'—',
@@ -2513,11 +2620,18 @@ async function _runHoursByEmployee(f){
       role_type: e.role_type,
       name: empName||'—',
       login_id: e.login_id||'—',
-      count: hrs('count'),
-      variance: hrs('variance'),
-      setup: hrs('setup'),
-      precounts: hrs('precounts'),
+      // Display: 2dp
+      count:       _fmtHours(_rawCount),
+      variance:    _fmtHours(_rawVariance),
+      setup:       _fmtHours(_rawSetup),
+      precounts:   _fmtHours(_rawPre),
       total_hours: _fmtHours(totalSecs),
+      // Export: 4dp via _fmtHoursExport — exportReportCSV() picks up _exp_{key} automatically
+      _exp_count:       _fmtHoursExport(_rawCount),
+      _exp_variance:    _fmtHoursExport(_rawVariance),
+      _exp_setup:       _fmtHoursExport(_rawSetup),
+      _exp_precounts:   _fmtHoursExport(_rawPre),
+      _exp_total_hours: _fmtHoursExport(totalSecs),
     });
   });
   // Sort: date desc → customer → store → supervisor first → name
@@ -2537,7 +2651,7 @@ async function _runHoursByEmployee(f){
 
   _renderReportTable([
     {key:'job_date',label:'Date'},{key:'client_name',label:'Customer'},
-    {key:'store_number',label:'Store'},{key:'location',label:'City, State'},
+    {key:'store_number',label:'Store'},{key:'location',label:'City/State'},
     {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
     {key:'role_type',label:'Role'},{key:'name',label:'Employee'},
     {key:'login_id',label:'Login ID'},
@@ -2738,21 +2852,56 @@ async function _runOutstandingTimesheets(f){
 // ── CSV Export ────────────────────────────────────────────────────────────────
 function exportReportCSV(){
   if(!_lastReportRows.length){ alert('Run a report first.'); return; }
-  const headers = _lastReportCols.map(c=>c.label).join(',');
+  const headers = _lastReportCols.map(c=>{
+    const h = c.label;
+    return h.includes(',') || h.includes('"') ? '"' + h.replace(/"/g,'""') + '"' : h;
+  }).join(',');
   const rows = _lastReportRows.map(r=>
     _lastReportCols.map(c=>{
-      const v = String(r[c.key]??'').replace(/<[^>]+>/g,'');
-      return v.includes(',') || v.includes('"') ? '"' + v.replace(/"/g, '""') + '"' : v;
+      // Use 4dp precision export value if available (_exp_ prefix stores raw hours)
+      const expKey = '_exp_' + c.key;
+      const srcVal = (r[expKey] !== undefined) ? r[expKey] : r[c.key];
+      // Strip HTML tags, replace em-dash nulls with empty, clean unicode
+      let v = String(srcVal??'')
+        .replace(/<[^>]+>/g,'')  // strip HTML
+        .replace(/—/g,'')        // em dash → empty
+        .replace(/–/g,'')        // en dash → empty
+        .trim();
+      // Always quote if contains comma, quote, or newline
+      if(v.includes(',') || v.includes('"') || v.includes('\n')){
+        return '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
     }).join(',')
   );
+  // Build friendly filename: report label + active filters + date
+  const def = REPORT_DEFS[_currentReport]||{label:_currentReport||'report'};
+  const f = _rptFilters();
+  const filterParts = [
+    f.division  ? (_orgTree.divisions||[]).find(d=>d.id_division===f.division)?.name  : '',
+    f.region    ? (_orgTree.regions||[]).find(r=>r.id_region===f.region)?.name        : '',
+    f.district  ? (_orgTree.districts||[]).find(d=>d.id_district===f.district)?.name  : '',
+    f.status    ? f.status : '',
+    f.customer  ? f.customer : '',
+  ].filter(Boolean).join('-');
+  const dateStamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const safeName = def.label.replace(/[^a-z0-9]/gi,'_');
+  const fileName = [safeName, filterParts, dateStamp].filter(Boolean).join('_') + '.csv';
   const csv = [headers, ...rows].join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = (_currentReport||'report')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download = fileName;
   a.click();
 }
 
+// Hide report screen — call from any function that shows another screen
+function _hideReportScreen(){
+  const rpt = document.getElementById('report-screen');
+  if(rpt) rpt.style.display = 'none';
+}
+
 function showComingSoon(page){
+  _hideReportScreen();
   const label = page.charAt(0).toUpperCase()+page.slice(1);
   const mgrScreen = document.getElementById('mgr-screen');
   if(mgrScreen){
@@ -2777,6 +2926,7 @@ let _uatSearch = '';
 let _uatActiveTab = 'feedback';
 
 function openUATScreen(){
+  _hideReportScreen();
   document.getElementById('mgr-screen')?.classList.remove('active');
   document.getElementById('status-screen')?.classList.remove('active');
   document.getElementById('nav-tabs')?.style && (document.getElementById('nav-tabs').style.display = 'none');
@@ -3114,6 +3264,7 @@ let _allUsers = [];
 let _lastUserSearch = '';
 
 function openWizard(){
+  _hideReportScreen();
   document.getElementById('wizard-screen').classList.add('active');
   document.body.style.overflow = 'hidden';
   wizardGoto('users');
@@ -4882,7 +5033,8 @@ function switchTab(tab){
   const tabMgr    = document.getElementById('tab-mgr');
   mgrScreen.classList.remove('active');
   tabMgr&&tabMgr.classList.remove('active');
-  // Always hide UAT screen when switching to a tab
+  // Always hide report and UAT screens when switching to a tab
+  _hideReportScreen();
   document.getElementById('uat-screen')?.classList.remove('active');
   const navTabs = document.getElementById('nav-tabs');
   if(navTabs) navTabs.style.display = '';
@@ -5225,6 +5377,7 @@ function populateTopbarInfo(ts, empCount, totalPaidMins, totalBrkMins, avgHrs, s
 }
 
 async function openDetailScreen(ts, isManager=false){
+  _hideReportScreen();
   _currentDetailTs = ts;
   _previousTab = 'mgr';
   _scanRotation=0; _scanScale=1; _scanCurrentIdx=0; _scanPdfDoc=null; _scanPdfPage=1;
