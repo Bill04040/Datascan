@@ -1119,7 +1119,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.41</div>
+    <div id="login-version" style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em"></div>
   </div>
 </div>
 
@@ -1690,8 +1690,26 @@ function startTimesheetSubscription(){
     });
 }
 
-// ── App version — increment on every code change ──────────────────────────
-const APP_VERSION = 'v1.1.4';
+// ── App version ───────────────────────────────────────────────────────────
+// VERSIONING RULES — Claude must follow these automatically on every change:
+//
+//   1. APP_VERSION below is the single source of truth. Format: 'v1.0.XX'
+//   2. When ANY code change is made to this file, increment the patch number
+//      (the XX) by 1.  Never leave the version the same as the input file.
+//   3. The OUTPUT FILENAME must always match the version:
+//        APP_VERSION 'v1.0.42'  →  filename  Datascan_Manager_v1_0_42.html
+//        APP_VERSION 'v1.0.43'  →  filename  Datascan_Manager_v1_0_43.html
+//      Dots in the version become underscores in the filename.
+//   4. Do NOT add a separate version comment block or changelog — the filename
+//      and APP_VERSION string are the only version indicators needed.
+//   5. These rules apply even if the user does not mention versioning.
+//      Every delivered file must be self-consistent: version string = filename.
+//   6. NEVER hardcode a version string anywhere else in the file. The login
+//      screen version display uses id="login-version" and is populated
+//      dynamically from APP_VERSION by waitForSupabase(). Do not add or
+//      restore any static version text in the HTML body.
+//
+const APP_VERSION = 'v1.0.43';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -4101,8 +4119,8 @@ async function openDetailScreen(ts, isManager=false){
     {data:cardTypes}
   ] = await Promise.all([
     getSupabase().from('scan_attachments').select('id,file_name,mime_type,storage_path,created_at').eq('timesheet_id',ts.id).order('created_at'),
-    getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).order('display_order'),
-    getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).order('display_order'),
+    getSupabase().from('employees').select('*').eq('timesheet_id',ts.id).eq('is_deleted',false).order('display_order'),
+    getSupabase().from('time_blocks').select('*').eq('timesheet_id',ts.id).eq('is_deleted',false).order('display_order'),
     getSupabase().from('pay_adjustments').select('*').eq('timesheet_id',ts.id).order('created_at'),
     getSupabase().from('time_card_types').select('*').eq('is_active',true).order('sort_order'),
   ]);
@@ -4314,7 +4332,12 @@ async function openDetailScreen(ts, isManager=false){
         const groupSep = firstOfGroup && cIdx>0 ? ' tl-group-sep':'';
         const unpaidCls = col.unpaid?' tl-unpaid':'';
         const modDot = b&&b.modified_at?'<span class="tl-mod-dot"></span>':'';
-        return `<td class="tl-cell-in${groupSep}${unpaidCls}">${tlFmt(b?.time_in)}${modDot}</td><td class="tl-cell-out${unpaidCls}">${tlFmt(b?.time_out)}</td>`;
+        // data-* attributes are required by enterEditMode() to make cells editable
+        const blockId  = b?.id    || '';
+        const empId    = e.id     || '';
+        const inAttr   = blockId ? `data-block-id="${blockId}" data-field="in"  data-emp-id="${empId}" data-stored-val="${b?.time_in||''}"` : '';
+        const outAttr  = blockId ? `data-block-id="${blockId}" data-field="out" data-emp-id="${empId}" data-stored-val="${b?.time_out||''}"` : '';
+        return `<td class="tl-cell-in${groupSep}${unpaidCls}" ${inAttr}>${tlFmt(b?.time_in)}${modDot}</td><td class="tl-cell-out${unpaidCls}" ${outAttr}>${tlFmt(b?.time_out)}</td>`;
       }).join('');
 
       // Build per-block-type hours cells (one column per unique key used)
@@ -4744,7 +4767,7 @@ async function submitApproval(action){
 function openAdjustModal(){
   const ts=_currentDetailTs; if(!ts) return;
   // Load employees for this timesheet into a select
-  getSupabase().from('employees').select('id,first_name,last_name').eq('timesheet_id',ts.id).then(({data:emps})=>{
+  getSupabase().from('employees').select('id,first_name,last_name').eq('timesheet_id',ts.id).eq('is_deleted',false).then(({data:emps})=>{
     const empOpts=(emps||[]).filter(e=>e.first_name||e.last_name).map(e=>`<option value="${e.id}">${[e.first_name,e.last_name].filter(Boolean).join(' ')}</option>`).join('');
     openMgrModal('Add Pay Adjustment',`
       <div class="field-group">
@@ -5397,10 +5420,13 @@ function openAddPersonPanel(){
   // Build the panel body
   const jobDate = ts.job_date || new Date().toISOString().split('T')[0];
 
-  // Build block time entry cards for each unique paid block type used in this job
+  // Build block time entry cards — top-level paid blocks + Break Unpaid (inside_or_between)
   const paidKeys = _detailUsedKeys.filter(k=>{
     const ct = _detailCardTypes.find(c=>c.key===k);
-    return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between';
+    if(!ct) return false;
+    // Include top-level paid blocks and Break Unpaid; exclude Break (inside_paid) and Lunch (between_paid)
+    return (ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between')
+        || ct.nesting_rule==='inside_or_between';
   });
 
   const blockCards = paidKeys.map(key=>{
@@ -5515,6 +5541,7 @@ async function saveAddPerson(){
     const {data:existingEmps} = await getSupabase()
       .from('employees').select('display_order')
       .eq('timesheet_id', ts.id)
+      .eq('is_deleted', false)
       .order('display_order',{ascending:false}).limit(1);
     const nextOrder = ((existingEmps?.[0]?.display_order)||0) + 1;
 
@@ -5538,10 +5565,12 @@ async function saveAddPerson(){
 
     const empId = newEmp.id;
 
-    // 3. Insert time blocks for each paid block type that has at least one time entered
+    // 3. Insert time blocks — top-level paid blocks + Break Unpaid (inside_or_between)
     const paidKeys = _detailUsedKeys.filter(k=>{
       const ct = _detailCardTypes.find(c=>c.key===k);
-      return ct && ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between';
+      if(!ct) return false;
+      return (ct.is_paid && ct.nesting_rule!=='inside_paid' && ct.nesting_rule!=='between_paid' && ct.nesting_rule!=='inside_or_between')
+          || ct.nesting_rule==='inside_or_between';
     });
 
     let blockOrder = 0;
