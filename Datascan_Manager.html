@@ -1165,24 +1165,16 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
   <!-- Role switcher — only visible for testing_qa users -->
   <div class="role-switcher-wrap" id="role-switcher-wrap" style="display:none">
     <button class="role-switcher-btn" onclick="toggleRoleSwitcher(event)">
-      <i class="ti ti-theater"></i> Switch role
+      <i class="ti ti-users"></i> Switch user
       <i class="ti ti-chevron-down" style="font-size:10px"></i>
     </button>
     <div class="role-switcher-dropdown" id="role-switcher-dropdown">
-      <div class="rsd-header">Impersonate a role for testing</div>
-      <div class="rsd-section">
-        <div class="rsd-section-label">Select role</div>
-        <div id="rsd-roles-list"></div>
+      <div class="rsd-header">Switch to another user</div>
+      <div class="rsd-user-search">
+        <input type="text" id="rsd-user-search" placeholder="Search by name…"
+          oninput="filterImpersonateUsers(this.value)"/>
       </div>
-      <div class="rsd-divider"></div>
-      <div class="rsd-section">
-        <div class="rsd-section-label">Optionally impersonate specific user</div>
-        <div class="rsd-user-search">
-          <input type="text" id="rsd-user-search" placeholder="Search by name…"
-            oninput="filterImpersonateUsers(this.value)"/>
-        </div>
-        <div class="rsd-users" id="rsd-users-list"></div>
-      </div>
+      <div class="rsd-users" id="rsd-users-list"></div>
     </div>
   </div>
   <button class="logout-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
@@ -1709,7 +1701,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.43';
+const APP_VERSION = 'v1.0.49';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2357,10 +2349,11 @@ function openWizModal(title, bodyHtml){
 }
 function closeWizModal(){
   document.getElementById('wiz-modal-overlay').classList.remove('open');
+  _pendingDriverStatus = null;
+  _pendingDriverUserId = null;
 }
-document.getElementById('wiz-modal-overlay').addEventListener('click', e=>{
-  if(e.target === document.getElementById('wiz-modal-overlay')) closeWizModal();
-});
+// wiz-modal-overlay: click-outside intentionally disabled
+// Users editing/creating users or resetting passwords should not lose work by accident
 
 function wizardGoto(tab){
   _wizardTab = tab;
@@ -3230,20 +3223,19 @@ async function openNewUserModal(){
       </div>
       <p style="font-size:11px;color:var(--text2);margin:.3rem 0 0">User will be required to change on first login</p>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="wiz-modal-field"><label>Role <span style="color:var(--danger-text)">*</span></label>
-        <select id="nu-role">${roleOpts}</select></div>
-      <div class="wiz-modal-field"><label>Group</label>
-        <select id="nu-group"><option value="">— none —</option>${groupOpts}</select></div>
-    </div>
+    <div class="wiz-modal-field"><label>Role <span style="color:var(--danger-text)">*</span></label>
+      <select id="nu-role">${roleOpts}</select></div>
+    <input type="hidden" id="nu-group" value=""/>
     <div class="wiz-modal-field"><label>Job title</label>
       <input type="text" id="nu-title" placeholder="e.g. Area Manager"/></div>
     <div class="wiz-modal-field" id="nu-org-wrap">
-      <label>Org assignment</label>
-      <div class="org-tree-picker" id="nu-org-tree"><em style="color:var(--text3);font-size:12px">Loading org structure...</em></div>
+      <label>Org assignment <span style="color:var(--danger-text)">*</span></label>
+      <div id="nu-org-selected" style="font-size:12px;color:var(--text3);margin:.2rem 0 .3rem;padding:6px 8px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
+        <i class="ti ti-map-pin"></i> No org selected
+      </div>
+      <div class="org-tree-picker" id="nu-org-tree" style="max-height:220px;overflow-y:auto;margin-top:4px"><em style="color:var(--text3);font-size:12px">Loading org structure...</em></div>
       <input type="hidden" id="nu-org-id" value=""/>
       <input type="hidden" id="nu-org-type" value=""/>
-      <p id="nu-org-selected" style="font-size:12px;color:var(--info-text);margin:.3rem 0 0"></p>
     </div>
     <div class="wiz-modal-btns">
       <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
@@ -3271,6 +3263,7 @@ async function createUser(){
   const orgId = document.getElementById('nu-org-id')?.value;
   const orgType=document.getElementById('nu-org-type')?.value;
   if(!name||!email||!pass||!role){ alert('Please fill in all required fields.'); return; }
+  if(!orgId){ alert('Please select an org assignment before creating the user.'); return; }
   if(pass.length<8){ alert('Password must be at least 8 characters.'); return; }
 
   // Create auth user via Supabase Admin API isn't available client-side
@@ -3371,12 +3364,9 @@ async function openEditUserModal(userId){
     <div class="wiz-modal-field"><label>Email</label>
       <input type="email" id="eu-email" value="${profile.email||''}" data-original="${profile.email||''}"/>
       <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-info-circle"></i> Changing email updates both login and profile.</p></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="wiz-modal-field"><label>Role</label>
-        <select id="eu-role">${roleOpts}</select></div>
-      <div class="wiz-modal-field"><label>Group</label>
-        <select id="eu-group">${groupOpts}</select></div>
-    </div>
+    <div class="wiz-modal-field"><label>Role</label>
+      <select id="eu-role">${roleOpts}</select></div>
+    <input type="hidden" id="eu-group" value="${profile.id_group||''}"/>
     <div class="wiz-modal-field"><label>Job title</label>
       <input type="text" id="eu-title" value="${profile.job_title||''}"/></div>
     <div class="wiz-modal-field">
@@ -3387,30 +3377,68 @@ async function openEditUserModal(userId){
       <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-info-circle"></i> The user will be prompted to set a new password immediately after signing in.</p>
     </div>
     <div class="wiz-modal-field">
-      <label>Org assignment</label>
-      <div class="org-tree-picker" id="eu-org-tree"></div>
+      <label>Org assignment <span style="color:var(--danger-text)">*</span></label>
+      <div id="eu-org-selected" style="font-size:12px;color:var(--text3);margin:.2rem 0 .3rem;padding:6px 8px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
+        <i class="ti ti-map-pin"></i> No org selected
+      </div>
+      <div class="org-tree-picker" id="eu-org-tree" style="max-height:220px;overflow-y:auto;margin-top:4px"></div>
       <input type="hidden" id="eu-org-id" value="${profile.id_area||profile.id_district||profile.id_region||profile.id_division||''}"/>
       <input type="hidden" id="eu-org-type" value="${profile.id_area?'area':profile.id_district?'district':profile.id_region?'region':profile.id_division?'division':''}"/>
-      <p id="eu-org-selected" style="font-size:12px;color:var(--info-text);margin:.3rem 0 0"></p>
     </div>
     <div class="wiz-modal-field" style="margin-top:1rem">
       <label style="display:flex;align-items:center;justify-content:space-between">
-        <span>Permission overrides</span>
-        <span style="font-size:10px;color:var(--text3);font-weight:400">Overrides add to or remove from role defaults</span>
+        <span>Permissions</span>
+        <span style="font-size:10px;color:var(--text3);font-weight:400">Role defaults · override per-user below</span>
       </label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:180px;overflow-y:auto;padding:8px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2);margin-top:4px">
+
+      <!-- Role permissions summary (read-only badges) -->
+      <div style="padding:8px 10px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2);margin-top:4px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+          <i class="ti ti-shield-check"></i> Role: ${(roles||[]).find(r=>r.role_key===profile.role)?.role_label||profile.role}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${Object.entries(PERM_LABELS).map(([key,label])=>{
+            const roleHas = (roles||[]).find(r=>r.role_key===profile.role)?.permissions?.[key];
+            const on = roleHas===true||roleHas==='true';
+            return `<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:${on?'rgba(106,179,58,.15)':'var(--bg3,rgba(255,255,255,.06))'};color:${on?'var(--success-text,#6abf3a)':'var(--text3)'}">
+              ${on?'✓':'–'} ${label}
+            </span>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Per-user overrides: only show dropdown when user wants to deviate -->
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+        <i class="ti ti-adjustments-horizontal"></i> Per-user overrides
+        <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px">(leave as "Role default" unless you need to deviate)</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
         ${Object.entries(PERM_LABELS).map(([key,label])=>{
           const roleHas  = (roles||[]).find(r=>r.role_key===profile.role)?.permissions?.[key];
+          const roleOn   = roleHas===true||roleHas==='true';
           const override = profile.permissions_override?.[key];
-          const isOn = override===true||override==='true' ? true : override===false ? false : (roleHas===true||roleHas==='true');
-          const isOverridden = override!==undefined&&override!==null&&override!=='';
-          return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:3px 4px;border-radius:4px;${isOverridden?'background:var(--warn-bg)':''}" title="${isOverridden?'Overridden':'From role'}">
-            <input type="checkbox" id="uo-${key}" ${isOn?'checked':''} style="accent-color:#6abf3a;width:14px;height:14px"/>
-            <span style="${isOverridden?'color:var(--warn-text)':''}">${label}</span>
-          </label>`;
+          const isOverridden = override===true||override===false;
+          const selVal   = override===true ? 'on' : override===false ? 'off' : 'role';
+          const selStyle = isOverridden
+            ? (override===true
+                ? 'background:rgba(106,179,58,.15);color:var(--success-text,#6abf3a);border-color:rgba(106,179,58,.4)'
+                : 'background:rgba(239,68,68,.12);color:var(--danger-text,#ef4444);border-color:rgba(239,68,68,.35)')
+            : '';
+          return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0">
+            <span style="flex:1;color:var(--text2)">${label}</span>
+            <select id="uo-${key}" data-role-on="${roleOn}" data-perm-key="${key}"
+              onchange="_onPermOverrideChange(this)"
+              style="font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid var(--border2);background:var(--bg);color:var(--text);cursor:pointer;${selStyle}">
+              <option value="role" ${selVal==='role'?'selected':''}>Role default (${roleOn?'ON':'OFF'})</option>
+              <option value="on"   ${selVal==='on'  ?'selected':''}>Force ON</option>
+              <option value="off"  ${selVal==='off' ?'selected':''}>Force OFF</option>
+            </select>
+          </div>`;
         }).join('')}
       </div>
-      <p style="font-size:11px;color:var(--text3);margin:.3rem 0 0"><i class="ti ti-alert-triangle" style="color:var(--warn-text)"></i> Highlighted = overridden from role default</p>
+      <p style="font-size:11px;color:var(--text3);margin:.4rem 0 0">
+        <i class="ti ti-info-circle"></i> "Force ON/OFF" overrides the role. Returning to "Role default" removes the override entirely.
+      </p>
     </div>
     <div style="margin-top:1rem;border-top:0.5px solid var(--border2);padding-top:1rem" id="eu-driver-section">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
@@ -3418,30 +3446,41 @@ async function openEditUserModal(userId){
         <span style="font-size:13px;font-weight:700;color:var(--text)">Travel Log — Driver Approval</span>
       </div>
       <div id="eu-driver-status-display" style="margin-bottom:.75rem"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:.75rem">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="eu-drv-fleet"   style="accent-color:#6abf3a"/> Fleet vehicles
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="eu-drv-rental"  style="accent-color:#6abf3a"/> Rental vehicles
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="eu-drv-personal" style="accent-color:#6abf3a"/> Personal vehicles
-        </label>
+      <!-- Vehicle types (checkboxes) -->
+      <div style="margin-bottom:.75rem">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Approved vehicle types</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <label id="eu-drv-fleet-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;transition:all .15s" onclick="_toggleVehicle('eu-drv-fleet')">
+            <input type="checkbox" id="eu-drv-fleet" style="display:none"/>
+            <i class="ti ti-truck" style="font-size:15px"></i> Fleet
+          </label>
+          <label id="eu-drv-rental-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;transition:all .15s" onclick="_toggleVehicle('eu-drv-rental')">
+            <input type="checkbox" id="eu-drv-rental" style="display:none"/>
+            <i class="ti ti-car" style="font-size:15px"></i> Rental
+          </label>
+          <label id="eu-drv-personal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;transition:all .15s" onclick="_toggleVehicle('eu-drv-personal')">
+            <input type="checkbox" id="eu-drv-personal" style="display:none"/>
+            <i class="ti ti-steering-wheel" style="font-size:15px"></i> Personal
+          </label>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="wiz-btn success" onclick="setDriverStatus('${profile.id}','approved')"
-          style="font-size:12px;padding:5px 12px">
-          <i class="ti ti-circle-check"></i> Approve driver
-        </button>
-        <button type="button" class="wiz-btn" onclick="setDriverStatus('${profile.id}','suspended')"
-          style="font-size:12px;padding:5px 12px;background:var(--warn-bg);color:var(--warn-text);border-color:var(--warn-text)">
-          <i class="ti ti-pause-circle"></i> Suspend
-        </button>
-        <button type="button" class="wiz-btn danger" onclick="setDriverStatus('${profile.id}','revoked')"
-          style="font-size:12px;padding:5px 12px">
-          <i class="ti ti-circle-x"></i> Revoke
-        </button>
+      <!-- Driver status (radio-style, only one active) -->
+      <div style="margin-bottom:.5rem">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Driver status</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div id="eu-drv-status-approved" onclick="_selectDriverStatus('${profile.id}','approved')"
+            style="cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;text-align:center;transition:all .15s">
+            <i class="ti ti-circle-check" style="font-size:15px;display:block;margin-bottom:3px"></i> Approve
+          </div>
+          <div id="eu-drv-status-suspended" onclick="_selectDriverStatus('${profile.id}','suspended')"
+            style="cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;text-align:center;transition:all .15s">
+            <i class="ti ti-pause-circle" style="font-size:15px;display:block;margin-bottom:3px"></i> Suspend
+          </div>
+          <div id="eu-drv-status-revoked" onclick="_selectDriverStatus('${profile.id}','revoked')"
+            style="cursor:pointer;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);font-size:12px;font-weight:600;text-align:center;transition:all .15s">
+            <i class="ti ti-circle-x" style="font-size:15px;display:block;margin-bottom:3px"></i> Revoke
+          </div>
+        </div>
       </div>
       <p style="font-size:11px;color:var(--text3);margin-top:.5rem">
         <i class="ti ti-info-circle"></i> Approved drivers can access the Datascan Travel Log app. Suspended/revoked drivers see a blocked screen on login.
@@ -3527,29 +3566,30 @@ async function openEditUserModal(userId){
   // Populate driver approval section
   const drvStatusEl = document.getElementById('eu-driver-status-display');
   if(drvStatusEl){
+    // The status display div is no longer used as primary UI — clear it
+    drvStatusEl.innerHTML = '';
     if(drvApproval){
-      const sColors = {approved:'var(--success-text,#6abf3a)',suspended:'var(--warn-text,#b07a00)',revoked:'var(--danger-text)'};
-      const sIcons  = {approved:'ti-circle-check',suspended:'ti-pause-circle',revoked:'ti-circle-x'};
-      const col = sColors[drvApproval.status]||'var(--text2)';
-      const ico = sIcons[drvApproval.status]||'ti-question-mark';
-      const approvedAt = drvApproval.approved_at
-        ? new Date(drvApproval.approved_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-        : '';
-      drvStatusEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border2)">
-        <i class="ti ${ico}" style="color:${col};font-size:16px"></i>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:${col}">${drvApproval.status.charAt(0).toUpperCase()+drvApproval.status.slice(1)}</div>
-          ${approvedAt?`<div style="font-size:11px;color:var(--text3)">Since ${approvedAt}</div>`:''}
-        </div>
-      </div>`;
+      // Highlight the active status card
+      _highlightDriverStatus(drvApproval.status);
+      // Check vehicle type cards
       const classes = drvApproval.vehicle_classes||[];
-      const fe=document.getElementById('eu-drv-fleet'), re=document.getElementById('eu-drv-rental'), pe=document.getElementById('eu-drv-personal');
-      if(fe) fe.checked=classes.includes('fleet');
-      if(re) re.checked=classes.includes('rental');
-      if(pe) pe.checked=classes.includes('personal');
-    } else {
-      drvStatusEl.innerHTML='<div style="font-size:13px;color:var(--text3);padding:6px 0"><i class="ti ti-steering-wheel-off"></i> Not approved as a driver — use the buttons below to approve.</div>';
+      ['fleet','rental','personal'].forEach(v=>{
+        const cb = document.getElementById('eu-drv-'+v);
+        if(cb){ cb.checked = classes.includes(v); _syncVehicleLabel('eu-drv-'+v); }
+      });
     }
+  }
+}
+
+// Permission override dropdown — live style update on change
+function _onPermOverrideChange(sel){
+  const val = sel.value;
+  if(val === 'role'){
+    sel.style.cssText = 'font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid var(--border2);background:var(--bg);color:var(--text);cursor:pointer;';
+  } else if(val === 'on'){
+    sel.style.cssText = 'font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid rgba(106,179,58,.4);background:rgba(106,179,58,.15);color:var(--success-text,#6abf3a);cursor:pointer;';
+  } else {
+    sel.style.cssText = 'font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid rgba(239,68,68,.35);background:rgba(239,68,68,.12);color:var(--danger-text,#ef4444);cursor:pointer;';
   }
 }
 
@@ -3564,6 +3604,7 @@ async function saveEditUser(userId){
   const group   = document.getElementById('eu-group')?.value;
   const orgId   = document.getElementById('eu-org-id')?.value;
   const orgType = document.getElementById('eu-org-type')?.value;
+  if(!orgId){ alert('Please select an org assignment before saving.'); return; }
   if(group) updates.id_group = group;
   updates.id_division=null; updates.id_region=null; updates.id_district=null; updates.id_area=null;
   if(orgId){
@@ -3573,19 +3614,15 @@ async function saveEditUser(userId){
     if(orgType==='area')     updates.id_area     = orgId;
   }
 
-  // Collect permission overrides
-  // Only save overrides that differ from the role defaults
-  const {data:roleDef} = await getSupabase()
-    .from('role_definitions').select('permissions').eq('role_key', updates.role).single();
-  const rolePerms = roleDef?.permissions||{};
+  // Collect permission overrides from dropdowns
+  // 'role' = no override (remove key), 'on' = force true, 'off' = force false
   const overrides = {};
   Object.keys(PERM_LABELS).forEach(key=>{
-    const checkbox = document.getElementById('uo-'+key);
-    if(!checkbox) return;
-    const checked = checkbox.checked;
-    const roleHas = rolePerms[key]===true||rolePerms[key]==='true';
-    // Only store override if it differs from role default
-    if(checked !== roleHas) overrides[key] = checked;
+    const sel = document.getElementById('uo-'+key);
+    if(!sel) return;
+    if(sel.value === 'on')  overrides[key] = true;
+    if(sel.value === 'off') overrides[key] = false;
+    // 'role' → don't add to overrides (removes any existing override for this key)
   });
   updates.permissions_override = overrides;
 
@@ -3624,6 +3661,9 @@ async function saveEditUser(userId){
     }
   };
 
+  // Persist driver status change if one was selected in the modal
+  await _flushDriverStatus();
+
   const {data:updatedRow, error} = await getSupabase()
     .from('profiles')
     .update(updates)
@@ -3643,13 +3683,19 @@ async function saveEditUser(userId){
 function openResetPasswordModal(userId, userName){
   openWizModal('Reset password — '+userName, `
     <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
-      Set a new temporary password. The user will be required to change it on next login.
+      Set a new temporary password for this user.
     </p>
     <div class="wiz-modal-field"><label>New temp password <span style="color:var(--danger-text)">*</span></label>
       <div style="display:flex;gap:6px">
         <input type="text" id="rp-pass" style="flex:1" placeholder="Min 8 characters"/>
         <button class="wiz-btn secondary" onclick="document.getElementById('rp-pass').value=genPass()"><i class="ti ti-refresh"></i> Generate</button>
       </div>
+    </div>
+    <div class="wiz-modal-field" style="margin-top:.5rem">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+        <input type="checkbox" id="rp-must-change" checked style="accent-color:#6abf3a;width:15px;height:15px"/>
+        <span>Require password change on next login</span>
+      </label>
     </div>
     <div class="wiz-modal-btns">
       <button class="wiz-btn secondary" onclick="closeWizModal()">Cancel</button>
@@ -3666,16 +3712,81 @@ async function resetPassword(userId){
   if(!pass||pass.length<8){ alert('Password must be at least 8 characters.'); return; }
   const {error} = await getSupabase().rpc('reset_user_password',{p_user_id:userId, p_password:pass});
   if(error){ alert('Error: '+error.message); return; }
-  const {error:flagErr} = await getSupabase()
-    .from('profiles')
-    .update({must_change_password:true})
-    .eq('id', userId)
-    .select('id').maybeSingle();
-  if(flagErr) console.warn('[resetPassword] could not flag must_change_password:', flagErr.message);
+  const mustChange = document.getElementById('rp-must-change')?.checked !== false;
+  if(mustChange){
+    const {error:flagErr} = await getSupabase()
+      .from('profiles')
+      .update({must_change_password:true})
+      .eq('id', userId)
+      .select('id').maybeSingle();
+    if(flagErr) console.warn('[resetPassword] could not flag must_change_password:', flagErr.message);
+  }
   closeWizModal();
-  alert('✓ Password reset successfully. The user will be required to set a new password on next login. Share the temporary password with them securely.');
+  const changeNote = mustChange ? ' They will be required to set a new password on next login.' : '';
+  alert('✓ Password reset successfully.' + changeNote + ' Share the temporary password with them securely.');
 }
 // ── Driver approval management ────────────────────────────────────────────────
+
+// Vehicle type toggle (checkbox card styling)
+function _toggleVehicle(id){
+  const cb = document.getElementById(id);
+  if(!cb) return;
+  cb.checked = !cb.checked;
+  _syncVehicleLabel(id);
+}
+function _syncVehicleLabel(id){
+  const cb = document.getElementById(id);
+  const label = document.getElementById(id+'-label');
+  if(!cb||!label) return;
+  if(cb.checked){
+    label.style.borderColor = 'var(--success-text,#6abf3a)';
+    label.style.background  = 'rgba(106,179,58,.12)';
+    label.style.color       = 'var(--success-text,#6abf3a)';
+  } else {
+    label.style.borderColor = 'var(--border2)';
+    label.style.background  = 'var(--bg2)';
+    label.style.color       = 'var(--text)';
+  }
+}
+
+// Driver status radio-style (only one active) — just highlights, does NOT write DB
+// The actual save happens when saveEditUser() calls _flushDriverStatus()
+let _pendingDriverStatus = null;
+let _pendingDriverUserId = null;
+function _selectDriverStatus(userId, status){
+  _pendingDriverStatus = status;
+  _pendingDriverUserId = userId;
+  _highlightDriverStatus(status);
+}
+function _highlightDriverStatus(status){
+  const styles = {
+    approved: {border:'var(--success-text,#6abf3a)',bg:'rgba(106,179,58,.12)',color:'var(--success-text,#6abf3a)'},
+    suspended:{border:'var(--warn-text,#b07a00)',  bg:'rgba(176,122,0,.12)',  color:'var(--warn-text,#b07a00)'},
+    revoked:  {border:'var(--danger-text)',        bg:'rgba(239,68,68,.12)',  color:'var(--danger-text)'},
+  };
+  ['approved','suspended','revoked'].forEach(s=>{
+    const el = document.getElementById('eu-drv-status-'+s);
+    if(!el) return;
+    if(s === status){
+      el.style.borderColor = styles[s].border;
+      el.style.background  = styles[s].bg;
+      el.style.color       = styles[s].color;
+    } else {
+      el.style.borderColor = 'var(--border2)';
+      el.style.background  = 'var(--bg2)';
+      el.style.color       = 'var(--text)';
+    }
+  });
+}
+
+// Called by saveEditUser to persist driver status if it was changed in the modal
+async function _flushDriverStatus(){
+  if(!_pendingDriverStatus || !_pendingDriverUserId) return;
+  await setDriverStatus(_pendingDriverUserId, _pendingDriverStatus);
+  _pendingDriverStatus = null;
+  _pendingDriverUserId = null;
+}
+
 async function setDriverStatus(userId, newStatus){
   const classes = [];
   if(document.getElementById('eu-drv-fleet')?.checked)    classes.push('fleet');
@@ -3746,6 +3857,17 @@ async function toggleUserActive(userId, currentlyActive){
 // ════════════════════════════════════════════════════════════
 // ORG TREE PICKER (used in user modal)
 // ════════════════════════════════════════════════════════════
+// Global org-picker chevron toggle — plain name, safe in inline onclick
+function _orgPickerToggle(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const isNowCollapsed = el.classList.toggle('collapsed');
+  const btn = document.querySelector('[data-tog="'+id+'"]');
+  if(btn) btn.innerHTML = isNowCollapsed
+    ? '<i class="ti ti-chevron-right"></i>'
+    : '<i class="ti ti-chevron-down"></i>';
+}
+
 async function renderOrgTreePicker(containerId, idField, typeField, labelId, currentProfile=null){
   const container = document.getElementById(containerId);
   if(!container) return;
@@ -3758,67 +3880,100 @@ async function renderOrgTreePicker(containerId, idField, typeField, labelId, cur
 
   const ICONS = {division:'building-skyscraper', region:'building-community', district:'map', area:'map-pin'};
 
-  function nodeHtml(id, type, name, indent=0){
-    const typeClass = 'org-type-'+type;
-    const isCurrent = currentProfile && (
-      (type==='division' && currentProfile.id_division===id) ||
-      (type==='region'   && currentProfile.id_region===id)   ||
-      (type==='district' && currentProfile.id_district===id) ||
-      (type==='area'     && currentProfile.id_area===id)
-    );
-    return `<div class="org-node-row ${isCurrent?'selected':''}" style="margin-left:${indent*16}px"
+  // Determine currently selected node for pre-highlight
+  const selId   = currentProfile ? (currentProfile.id_area||currentProfile.id_district||currentProfile.id_region||currentProfile.id_division||'') : '';
+  const selType = currentProfile ? (currentProfile.id_area?'area':currentProfile.id_district?'district':currentProfile.id_region?'region':currentProfile.id_division?'division':'') : '';
+
+  // Determine which parents need to be pre-expanded to show the selected node
+  const expandIds = new Set();
+  if(selId && currentProfile){
+    if(currentProfile.id_area){
+      const a = (areas||[]).find(x=>x.id_area===currentProfile.id_area);
+      if(a?.id_district) expandIds.add('district-'+a.id_district);
+      const d = (districts||[]).find(x=>x.id_district===a?.id_district);
+      if(d?.id_region) expandIds.add('region-'+d.id_region);
+      const r = (regions||[]).find(x=>x.id_region===d?.id_region);
+      if(r?.id_division) expandIds.add('division-'+r.id_division);
+    } else if(currentProfile.id_district){
+      const d = (districts||[]).find(x=>x.id_district===currentProfile.id_district);
+      if(d?.id_region) expandIds.add('region-'+d.id_region);
+      const r = (regions||[]).find(x=>x.id_region===d?.id_region);
+      if(r?.id_division) expandIds.add('division-'+r.id_division);
+    } else if(currentProfile.id_region){
+      const r = (regions||[]).find(x=>x.id_region===currentProfile.id_region);
+      if(r?.id_division) expandIds.add('division-'+r.id_division);
+    }
+  }
+
+  function togId(type, id){ return 'ptp-'+containerId+'-'+type+'-'+id; }
+
+  // _orgPickerToggle is a plain global — no hyphens in the name, safe in onclick strings
+
+  function nodeRow(id, type, name, hasChildren){
+    const isSel = (id === selId && type === selType);
+    const cid = togId(type, id);
+    const isOpen = expandIds.has(type+'-'+id);
+    const tog = hasChildren
+      ? `<button class="org-tog" onclick="event.stopPropagation();toggleOrgNode(this,'${cid}')">${isOpen?'−':'+'}</button>`
+      : `<button class="org-tog leaf" tabindex="-1">+</button>`;
+    return `<div class="org-node-row${isSel?' selected':''}"
       onclick="pickOrgNode('${id}','${type}','${name}','${idField}','${typeField}','${labelId}',this)">
-      <i class="ti ti-${ICONS[type]}"></i>
-      <span>${name}</span>
-      <span class="org-type-badge ${typeClass}">${type}</span>
+      ${tog}<i class="ti ti-${ICONS[type]}" style="font-size:13px;flex-shrink:0"></i>
+      <span style="flex:1">${name}</span>
+      <span class="org-type-badge org-type-${type}">${type}</span>
     </div>`;
+  }
+
+  function childrenWrap(type, id, innerHtml){
+    const isOpen = expandIds.has(type+'-'+id);
+    return `<div class="org-children${isOpen?'':' collapsed'}" id="${togId(type,id)}">${innerHtml}</div>`;
   }
 
   let html = '';
   (divisions||[]).forEach(dv=>{
-    html += nodeHtml(dv.id_division,'division',dv.name,0);
-    (regions||[]).filter(r=>r.id_division===dv.id_division).forEach(r=>{
-      html += nodeHtml(r.id_region,'region',r.name,1);
-      (districts||[]).filter(d=>d.id_region===r.id_region).forEach(d=>{
-        html += nodeHtml(d.id_district,'district',d.name,2);
-        (areas||[]).filter(a=>a.id_district===d.id_district).forEach(a=>{
-          html += nodeHtml(a.id_area,'area',a.name,3);
-        });
+    const dregions = (regions||[]).filter(r=>r.id_division===dv.id_division);
+    let inner = '';
+    dregions.forEach(r=>{
+      const ddists = (districts||[]).filter(d=>d.id_region===r.id_region);
+      let rinner = '';
+      ddists.forEach(d=>{
+        const dareas = (areas||[]).filter(a=>a.id_district===d.id_district);
+        let dinner = dareas.map(a=>`<div class="org-node">${nodeRow(a.id_area,'area',a.name,false)}</div>`).join('');
+        rinner += `<div class="org-node">${nodeRow(d.id_district,'district',d.name,dareas.length>0)}${dareas.length?childrenWrap('district',d.id_district,dinner):''}</div>`;
       });
+      inner += `<div class="org-node">${nodeRow(r.id_region,'region',r.name,ddists.length>0)}${ddists.length?childrenWrap('region',r.id_region,rinner):''}</div>`;
     });
+    html += `<div class="org-node">${nodeRow(dv.id_division,'division',dv.name,dregions.length>0)}${dregions.length?childrenWrap('division',dv.id_division,inner):''}</div>`;
   });
   // Regions without a division
   (regions||[]).filter(r=>!r.id_division).forEach(r=>{
-    html += nodeHtml(r.id_region,'region',r.name,0);
-    (districts||[]).filter(d=>d.id_region===r.id_region).forEach(d=>{
-      html += nodeHtml(d.id_district,'district',d.name,1);
-      (areas||[]).filter(a=>a.id_district===d.id_district).forEach(a=>{
-        html += nodeHtml(a.id_area,'area',a.name,2);
-      });
+    const ddists = (districts||[]).filter(d=>d.id_region===r.id_region);
+    let rinner = '';
+    ddists.forEach(d=>{
+      const dareas = (areas||[]).filter(a=>a.id_district===d.id_district);
+      let dinner = dareas.map(a=>`<div class="org-node">${nodeRow(a.id_area,'area',a.name,false)}</div>`).join('');
+      rinner += `<div class="org-node">${nodeRow(d.id_district,'district',d.name,dareas.length>0)}${dareas.length?childrenWrap('district',d.id_district,dinner):''}</div>`;
     });
+    html += `<div class="org-node">${nodeRow(r.id_region,'region',r.name,ddists.length>0)}${ddists.length?childrenWrap('region',r.id_region,rinner):''}</div>`;
   });
   // Districts without a region
   (districts||[]).filter(d=>!d.id_region).forEach(d=>{
-    html += nodeHtml(d.id_district,'district',d.name,0);
-    (areas||[]).filter(a=>a.id_district===d.id_district).forEach(a=>{
-      html += nodeHtml(a.id_area,'area',a.name,1);
-    });
+    const dareas = (areas||[]).filter(a=>a.id_district===d.id_district);
+    let dinner = dareas.map(a=>`<div class="org-node">${nodeRow(a.id_area,'area',a.name,false)}</div>`).join('');
+    html += `<div class="org-node">${nodeRow(d.id_district,'district',d.name,dareas.length>0)}${dareas.length?childrenWrap('district',d.id_district,dinner):''}</div>`;
   });
 
-  container.innerHTML = html || '<em style="color:var(--text3);font-size:12px">No org structure yet. Add divisions/regions/districts/areas first.</em>';
+  container.innerHTML = html || '<em style="color:var(--text3);font-size:12px">No org structure yet.</em>';
 
-  if(currentProfile){
-    const selId = currentProfile.id_area||currentProfile.id_district||currentProfile.id_region||currentProfile.id_division;
-    const selType = currentProfile.id_area?'area':currentProfile.id_district?'district':currentProfile.id_region?'region':currentProfile.id_division?'division':'';
-    if(selId && selType){
-      const name = selType==='area'
-        ? (areas||[]).find(a=>a.id_area===selId)?.name
-        : selType==='district'
-          ? (districts||[]).find(d=>d.id_district===selId)?.name
-          : selType==='region'
-            ? (regions||[]).find(r=>r.id_region===selId)?.name
-            : (divisions||[]).find(dv=>dv.id_division===selId)?.name;
-      if(name) document.getElementById(labelId).textContent = '✓ Currently: '+name+' ('+selType+')';
+  // Update the selected display pill
+  if(selId && selType){
+    const selName = selType==='area'?(areas||[]).find(a=>a.id_area===selId)?.name
+      :selType==='district'?(districts||[]).find(d=>d.id_district===selId)?.name
+      :selType==='region'?(regions||[]).find(r=>r.id_region===selId)?.name
+      :(divisions||[]).find(dv=>dv.id_division===selId)?.name;
+    if(selName){
+      const el = document.getElementById(labelId);
+      if(el) el.innerHTML = `<i class="ti ti-map-pin" style="color:var(--info-text)"></i> <strong style="color:var(--text)">${selName}</strong> <span class="org-type-badge org-type-${selType}">${selType}</span>`;
     }
   }
 }
@@ -3828,7 +3983,8 @@ function pickOrgNode(id, type, name, idField, typeField, labelId, el){
   el.classList.add('selected');
   document.getElementById(idField).value = id;
   document.getElementById(typeField).value = type;
-  document.getElementById(labelId).textContent = '✓ Selected: '+name+' ('+type+')';
+  const labelEl = document.getElementById(labelId);
+  if(labelEl) labelEl.innerHTML = `<i class="ti ti-map-pin" style="color:var(--info-text)"></i> <strong style="color:var(--text)">${name}</strong> <span class="org-type-badge org-type-${type}">${type}</span>`;
 }
 
 function switchTab(tab){
@@ -5240,33 +5396,14 @@ async function initRoleSwitcher(){
   if(!can('role_switcher')) return;
   document.getElementById('role-switcher-wrap').style.display = 'block';
 
-  const [{data:roles},{data:users}] = await Promise.all([
-    getSupabase().from('role_definitions')
-      .select('role_key,role_label,scope_type,permissions')
-      .eq('is_active',true)
-      .not('role_key','in','("supervisor","employee","testing_qa")')
-      .order('sort_order'),
-    getSupabase().from('profiles')
-      .select('id,full_name,role,id_division,id_region,id_district,id_area')
-      .eq('is_active',true)
-      .not('role','in','("supervisor","employee")')
-      .order('full_name'),
-  ]);
+  const {data:users} = await getSupabase().from('profiles')
+    .select('id,full_name,role,id_division,id_region,id_district,id_area')
+    .eq('is_active',true)
+    .neq('id', currentUser.id)
+    .not('role','in','("supervisor","employee","testing_qa")')
+    .order('full_name');
 
-  _allRolesForSwitcher = roles||[];
   _allUsersForSwitcher = users||[];
-
-  const rolesList = document.getElementById('rsd-roles-list');
-  if(rolesList){
-    rolesList.innerHTML = _allRolesForSwitcher.map(r=>`
-      <div class="rsd-option" id="rsd-role-${r.role_key}"
-        onclick="selectImpersonateRole('${r.role_key}')">
-        <div style="flex:1">
-          <div class="rsd-option-role">${r.role_label}</div>
-        </div>
-        <span class="rsd-option-scope">${r.scope_type||'none'}</span>
-      </div>`).join('');
-  }
   renderImpersonateUsers('');
 }
 
@@ -5279,18 +5416,14 @@ function renderImpersonateUsers(filter){
   if(!filtered.length){
     list.innerHTML='<div class="rsd-no-results">No users match</div>'; return;
   }
-  list.innerHTML=`
-    <div class="rsd-option${!_impersonatedUser?' active':''}" onclick="selectImpersonateUser(null)">
-      <div class="rsd-option-role" style="color:var(--text3);font-style:italic">— no specific user —</div>
-    </div>
-    ${filtered.map(u=>`
+  list.innerHTML=filtered.map(u=>`
     <div class="rsd-option${_impersonatedUser?.id===u.id?' active':''}"
       onclick='selectImpersonateUser(${JSON.stringify(u)})'>
       <div style="flex:1">
         <div class="rsd-option-role">${u.full_name}</div>
-        <div class="rsd-option-user">${u.role}</div>
+        <div class="rsd-option-user" style="font-size:11px;color:var(--text3)">${u.role}</div>
       </div>
-    </div>`).join('')}`;
+    </div>`).join('');
 }
 
 function filterImpersonateUsers(val){ renderImpersonateUsers(val); }
@@ -5308,21 +5441,16 @@ function closeRoleSwitcher(){
   document.getElementById('role-switcher-dropdown')?.classList.remove('show');
 }
 
-function selectImpersonateRole(roleKey){
-  document.querySelectorAll('[id^="rsd-role-"]').forEach(el=>el.classList.remove('active'));
-  document.getElementById('rsd-role-'+roleKey)?.classList.add('active');
-  _impersonatedRole = roleKey;
-  applyImpersonation();
-}
+// selectImpersonateRole removed — switcher is user-only now
 
 function selectImpersonateUser(user){
   _impersonatedUser = user;
   renderImpersonateUsers(document.getElementById('rsd-user-search')?.value||'');
-  if(_impersonatedRole) applyImpersonation();
+  applyImpersonation();
 }
 
 async function applyImpersonation(){
-  if(!_impersonatedRole) return;
+  if(!_impersonatedUser) return;
 
   // Save real state first time
   if(!_impersonating){
@@ -5330,33 +5458,37 @@ async function applyImpersonation(){
     _realScopeType   = _userScopeType;
   }
 
-  const roleDef = _allRolesForSwitcher.find(r=>r.role_key===_impersonatedRole);
-  if(!roleDef) return;
+  // Load the full profile + role definition for the selected user
+  const {data:uProfile} = await getSupabase()
+    .from('profiles').select('*').eq('id',_impersonatedUser.id).maybeSingle();
+  if(!uProfile) return;
 
-  let perms = {...(roleDef.permissions||{})};
-  let scope = roleDef.scope_type||'none';
+  const {data:roleDef} = await getSupabase()
+    .from('role_definitions')
+    .select('permissions,scope_type,role_label')
+    .eq('role_key', uProfile.role)
+    .maybeSingle();
 
-  if(_impersonatedUser){
-    const {data:uProfile} = await getSupabase()
-      .from('profiles').select('*').eq('id',_impersonatedUser.id).maybeSingle();
-    if(uProfile){
-      const ov = uProfile.permissions_override||{};
-      Object.entries(ov).forEach(([k,v])=>{ if(k!=='qa_config'&&v===true) perms[k]=true; });
-      window._impersonatedProfile = uProfile;
-    }
-  } else {
-    window._impersonatedProfile = null;
-  }
+  let perms = {...(roleDef?.permissions||{})};
+  // Apply the user's own overrides
+  const ov = uProfile.permissions_override||{};
+  Object.entries(ov).forEach(([k,v])=>{
+    if(k==='qa_config') return;
+    if(v===true)  perms[k] = true;
+    if(v===false) delete perms[k];
+  });
 
-  _userPermissions = perms;
-  _userScopeType   = scope;
-  _impersonating   = true;
+  window._impersonatedProfile = uProfile;
+  _impersonatedRole  = uProfile.role;
+  _userPermissions   = perms;
+  _userScopeType     = roleDef?.scope_type||'none';
+  _impersonating     = true;
 
-  const userLabel = _impersonatedUser?` — ${_impersonatedUser.full_name}`:'';
+  const roleLabel = roleDef?.role_label || uProfile.role;
   document.getElementById('imp-banner-label').textContent =
-    `Impersonating: ${roleDef.role_label}${userLabel}`;
+    `Viewing as: ${uProfile.full_name} (${roleLabel})`;
   document.getElementById('impersonation-banner').classList.add('show');
-  document.getElementById('user-bar-role').textContent = roleDef.role_label+' (test)';
+  document.getElementById('user-bar-role').textContent = uProfile.full_name + ' (test)';
   document.getElementById('user-bar-role').style.background = '#854f0b';
 
   closeRoleSwitcher();
@@ -5375,7 +5507,8 @@ function exitImpersonation(){
   document.getElementById('impersonation-banner').classList.remove('show');
   document.getElementById('user-bar-role').textContent = currentProfile?.role||'testing_qa';
   document.getElementById('user-bar-role').style.background = '';
-  document.querySelectorAll('[id^="rsd-role-"]').forEach(el=>el.classList.remove('active'));
+  document.getElementById('rsd-user-search') && (document.getElementById('rsd-user-search').value='');
+  renderImpersonateUsers('');
 
   loadMgrTimesheets();
 }
