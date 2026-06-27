@@ -1739,7 +1739,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.81';
+const APP_VERSION = 'v1.0.82';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2015,6 +2015,23 @@ function updateSidebarActive(page){
 // ════════════════════════════════════════════════════════════
 // REPORTS
 // ════════════════════════════════════════════════════════════
+
+// Global batch fetcher — bypasses Supabase 1000 row default limit
+// Batches IDs in groups of 200 to avoid URL length limits
+async function fetchAllPages(table, selectStr, idField, idList, extraFilters=[]){
+  const BATCH = 200;
+  const PAGE  = 2000;
+  let all = [];
+  for(let i=0; i<idList.length; i+=BATCH){
+    const chunk = idList.slice(i, i+BATCH);
+    let q = getSupabase().from(table).select(selectStr).in(idField, chunk).limit(PAGE);
+    extraFilters.forEach(([col,val])=>{ q = q.eq(col,val); });
+    const {data, error} = await q;
+    if(error) throw error;
+    if(data) all = all.concat(data);
+  }
+  return all;
+}
 
 const REPORT_DEFS = {
   'rpt-hours':      { label:'Hours by Job',        icon:'ti-chart-bar' },
@@ -2389,23 +2406,6 @@ async function _runHoursByJob(f){
 
   const ids = sheets.map(s=>s.id);
 
-  // Fetch in batches of 200 timesheet IDs to avoid URL length limits
-  // and always request more than default 1000 row limit
-  async function fetchAllPages(table, selectStr, idField, idList, extraFilters=[]){
-    const BATCH = 200;
-    const PAGE  = 2000; // rows per request
-    let all = [];
-    for(let i=0; i<idList.length; i+=BATCH){
-      const chunk = idList.slice(i, i+BATCH);
-      let q = getSupabase().from(table).select(selectStr).in(idField, chunk).limit(PAGE);
-      extraFilters.forEach(([col,val])=>{ q = q.eq(col,val); });
-      const {data, error} = await q;
-      if(error) throw error;
-      if(data) all = all.concat(data);
-    }
-    return all;
-  }
-
   // Employee count from timesheet_summary — already calculated correctly
   // Scoped to the exact timesheet IDs we're reporting on
   const {data:empCounts} = await getSupabase()
@@ -2778,14 +2778,29 @@ async function _runOutstandingTimesheets(f){
     3: 'var(--danger-text,#ef4444)',
   };
 
-  // Client-side filtering
+  // Scope filter — restrict to supervisors visible to current user
+  let visibleSupEmails = null;
+  if(_userScopeType && _userScopeType !== 'none'){
+    const scopeUserId = window._impersonatedProfile?.id || currentUser?.id;
+    const {data:supIds} = await getSupabase().rpc('visible_supervisor_ids', {p_id_user: scopeUserId});
+    const visIds = (supIds||[]).map(r=>typeof r==='string'?r:r.visible_supervisor_ids);
+    if(visIds.length){
+      const {data:supProfiles} = await getSupabase().from('profiles').select('email').in('id', visIds);
+      visibleSupEmails = new Set((supProfiles||[]).map(p=>p.email));
+    }
+  }
+
+  // Client-side filtering — scope + user filters
   let rows = (data||[]).filter(r=>{
+    // Scope filter — only show timesheets for supervisors visible to this user
+    if(visibleSupEmails && !visibleSupEmails.has(r.supervisor_email)) return false;
+    // Org filter from dropdowns
     if(f.division && r.division !== (_orgTree.divisions||[]).find(d=>d.id_division===f.division)?.name) return false;
-    if(f.region   && r.region   !== (_orgTree.regions||[]).find(x=>x.id_region===f.region)?.name)     return false;
+    if(f.region   && r.region   !== (_orgTree.regions||[]).find(x=>x.id_region===f.region)?.name)      return false;
     if(f.district && r.district !== (_orgTree.districts||[]).find(x=>x.id_district===f.district)?.name) return false;
-    if(f.area     && r.area     !== (_orgTree.areas||[]).find(x=>x.id_area===f.area)?.name)            return false;
-    if(f.esc_type  && r.escalation_type !== f.esc_type)                return false;
-    if(f.esc_level && r.escalation_level !== parseInt(f.esc_level))    return false;
+    if(f.area     && r.area     !== (_orgTree.areas||[]).find(x=>x.id_area===f.area)?.name)             return false;
+    if(f.esc_type  && r.escalation_type !== f.esc_type)             return false;
+    if(f.esc_level && r.escalation_level !== parseInt(f.esc_level)) return false;
     return true;
   });
 
