@@ -1740,7 +1740,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.85';
+const APP_VERSION = 'v1.0.86';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2419,10 +2419,16 @@ async function _runHoursByJob(f){
     empCountMap[r.id] = r.employee_count || 0;
   });
 
-  const [blocks, emps] = await Promise.all([
+  const [blocks, emps, {data:cardTypesR1}] = await Promise.all([
     fetchAllPages('time_blocks','timesheet_id,employee_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
     fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name','timesheet_id',ids,[['is_deleted',false]]),
+    getSupabase().from('time_card_types').select('key,is_paid,nesting_rule').eq('is_active',true),
   ]);
+  // Build card type lookup for nesting-aware hour calculation
+  const _r1CtMap = {};
+  (cardTypesR1||[]).forEach(ct=>{ _r1CtMap[ct.key]=ct; });
+  const _r1IsPaidTop = key => { const ct=_r1CtMap[key]; return ct ? (ct.is_paid && ct.nesting_rule==='top_level') : false; };
+  const _r1IsDeduct  = key => { const ct=_r1CtMap[key]; return ct ? ct.nesting_rule==='inside_or_between' : false; };
 
   const rows = sheets.map(s=>{
     const sBlocks = (blocks||[]).filter(b=>b.timesheet_id===s.id);
@@ -2445,10 +2451,24 @@ async function _runHoursByJob(f){
     const _ev = byTypeSec(EMP_ROLES,'variance');
     const _es = byTypeSec(EMP_ROLES,'setup');
     const _ep = byTypeSec(EMP_ROLES,'precounts');
-    // Total = sum of ALL raw seconds (excl lunch/break), rounded ONCE
-    const _totalSec = sBlocks
-      .filter(b=>!['lunch','break'].includes(b.block_type))
+    // Total = gross paid (top-level) minus unpaid breaks enclosed within paid spans
+    // Uses timeline-merge clipping to match Datascan_Timesheet logic
+    const _paidSegsR1 = sBlocks
+      .filter(b=>_r1IsPaidTop(b.block_type)&&b.time_in&&b.time_out)
+      .map(b=>({ in:new Date(b.time_in), out:new Date(b.time_out) }))
+      .filter(s=>!isNaN(s.in)&&s.out>s.in);
+    const _grossSec = sBlocks
+      .filter(b=>_r1IsPaidTop(b.block_type))
       .reduce((acc,b)=>acc+_blockSec(b), 0);
+    const _deductSec = sBlocks
+      .filter(b=>_r1IsDeduct(b.block_type)&&b.time_in&&b.time_out)
+      .reduce((acc,b)=>{
+        const d1=new Date(b.time_in),d2=new Date(b.time_out);
+        if(isNaN(d1)||isNaN(d2)||d2<=d1) return acc;
+        const enclosed=_paidSegsR1.some(p=>d1>=p.in&&d2<=p.out);
+        return enclosed ? acc+_blockSec(b) : acc;
+      },0);
+    const _totalSec = Math.max(0, _grossSec - _deductSec);
     return {
       job_date: s.job_date,
       client_name: s.client_name||'—',
@@ -2584,10 +2604,16 @@ async function _runHoursByEmployee(f){
   if(!sheets?.length){ _renderReportTable([],[]); return; }
 
   const ids = sheets.map(s=>s.id);
-  const [emps, blocks] = await Promise.all([
+  const [emps, blocks, {data:cardTypesR3}] = await Promise.all([
     fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name,login_id','timesheet_id',ids,[['is_deleted',false]]),
     fetchAllPages('time_blocks','employee_id,timesheet_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
+    getSupabase().from('time_card_types').select('key,is_paid,nesting_rule').eq('is_active',true),
   ]);
+  // Build card type lookup for nesting-aware hour calculation
+  const _r3CtMap = {};
+  (cardTypesR3||[]).forEach(ct=>{ _r3CtMap[ct.key]=ct; });
+  const _r3IsPaidTop = key => { const ct=_r3CtMap[key]; return ct ? (ct.is_paid && ct.nesting_rule==='top_level') : false; };
+  const _r3IsDeduct  = key => { const ct=_r3CtMap[key]; return ct ? ct.nesting_rule==='inside_or_between' : false; };
 
   // Flatten to one row per employee per timesheet
   const rows = [];
@@ -2599,13 +2625,24 @@ async function _runHoursByEmployee(f){
     if(!empName) return;
     const eBlocks = (blocks||[]).filter(b=>b.employee_id===e.id);
     const hrs = bt => _fmtHours(eBlocks.filter(b=>b.block_type===bt).reduce((a,b)=>a+_blockMins(b),0));
-    // Total hours = paid work blocks only
-    // lunch = unpaid deduction, break = documentation only — both excluded
-    const excludedTypes = new Set(['lunch','break']);
-    // Sum raw seconds first to avoid accumulated rounding
-    const totalSecs = eBlocks
-      .filter(b=>!excludedTypes.has(b.block_type))
-      .reduce((acc,b)=>acc+_blockMins(b), 0);
+    // Total hours = gross paid (top-level) minus unpaid breaks enclosed within paid spans
+    // Uses timeline-merge clipping to match Datascan_Timesheet logic
+    const _paidSegsR3 = eBlocks
+      .filter(b=>_r3IsPaidTop(b.block_type)&&b.time_in&&b.time_out)
+      .map(b=>({ in:new Date(b.time_in), out:new Date(b.time_out) }))
+      .filter(s=>!isNaN(s.in)&&s.out>s.in);
+    const _grossSec = eBlocks
+      .filter(b=>_r3IsPaidTop(b.block_type))
+      .reduce((acc,b)=>acc+_blockSec(b), 0);
+    const _deductSec = eBlocks
+      .filter(b=>_r3IsDeduct(b.block_type)&&b.time_in&&b.time_out)
+      .reduce((acc,b)=>{
+        const d1=new Date(b.time_in),d2=new Date(b.time_out);
+        if(isNaN(d1)||isNaN(d2)||d2<=d1) return acc;
+        const enclosed=_paidSegsR3.some(p=>d1>=p.in&&d2<=p.out);
+        return enclosed ? acc+_blockSec(b) : acc;
+      },0);
+    const totalSecs = Math.max(0, _grossSec - _deductSec);
     // Raw seconds per block type — accumulate integers, format once
     const _rawCount    = eBlocks.filter(b=>b.block_type==='count')    .reduce((a,b)=>a+_blockSec(b),0);
     const _rawVariance = eBlocks.filter(b=>b.block_type==='variance') .reduce((a,b)=>a+_blockSec(b),0);
@@ -5650,58 +5687,100 @@ async function loadMgrTimesheets(){
   console.log('[loadSubmissions] found', data.length, 'timesheets for', currentUser.id);
   data.forEach(ts=> console.log('  ts:', ts.id, 'supervisor_id:', ts.supervisor_id, 'status:', ts.status, 'match:', ts.supervisor_id===currentUser.id));
 
+  // Group timesheets by job_date
+  const grouped = {};
+  const dateOrder = [];
   data.forEach(ts=>{
-    const s=statusMap[ts.status]||{cls:'ts-pill-draft',label:ts.status,icon:'ti-clock'};
-    const jobDate=ts.job_date?new Date(ts.job_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
-    const submitted=new Date(ts.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const d = ts.job_date || 'Unknown';
+    if(!grouped[d]){ grouped[d]=[]; dateOrder.push(d); }
+    grouped[d].push(ts);
+  });
 
-    // Qualified employee count: only employees with a name AND a clock-in time
-    const qualifiedCount = ts.qualified_employee_count != null ? ts.qualified_employee_count : (ts.employee_count||0);
+  const STATUS_BAR = {
+    submitted: '#185fa5',
+    approved:  '#3b6d11',
+    rejected:  '#a32d2d',
+    draft:     'var(--text3)',
+  };
+  const BADGE_CLS = {
+    submitted: 'ts-pill-submitted',
+    approved:  'ts-pill-approved',
+    rejected:  'ts-pill-rejected',
+    draft:     'ts-pill-draft',
+  };
+  const BADGE_LABEL = {
+    submitted: 'Pending',
+    approved:  'Approved',
+    rejected:  'Rejected',
+    draft:     'Draft',
+  };
 
-    // Upload / stale timestamp — how long ago was the record last updated
-    const updatedAt = ts.updated_at ? new Date(ts.updated_at) : null;
-    let staleLabel = '';
-    if(updatedAt){
-      const diffMs  = Date.now() - updatedAt.getTime();
-      const diffMin = Math.floor(diffMs / 60000);
-      const diffHr  = Math.floor(diffMin / 60);
-      const diffDay = Math.floor(diffHr / 24);
-      if(diffMin < 1)       staleLabel = 'Updated just now';
-      else if(diffMin < 60) staleLabel = `Updated ${diffMin}m ago`;
-      else if(diffHr < 24)  staleLabel = `Updated ${diffHr}h ago`;
-      else                  staleLabel = `Updated ${diffDay}d ago`;
-    }
-    const uploadTs = updatedAt
-      ? updatedAt.toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'})
-      : '—';
+  dateOrder.forEach(dateKey=>{
+    const sheets = grouped[dateKey];
+    const dayDate = dateKey !== 'Unknown'
+      ? new Date(dateKey+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})
+      : 'Unknown date';
 
-    const card=document.createElement('div');
-    card.className=`mgr-card status-${ts.status}`;
-    card.onclick=()=>openDetailScreen(ts, true);
-    card.innerHTML=`
-      <div class="mgr-card-header">
-        <div class="mgr-card-title">${ts.client_name||'Unknown'}</div>
-        <span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>
-      </div>
-      <div class="mgr-card-meta">
-        <span class="mgr-meta-item"><i class="ti ti-calendar"></i>${jobDate}</span>
-        <span class="mgr-meta-item"><i class="ti ti-building-store"></i>Store ${ts.store_number||'—'}</span>
-        <span class="mgr-meta-item"><i class="ti ti-map-pin"></i>${ts.city||''}${ts.state?', '+ts.state:''}</span>
-        <span class="mgr-meta-item"><i class="ti ti-users"></i>${qualifiedCount} employees</span>
-      </div>
-      <div class="mgr-card-footer">
-        <span style="font-size:11px;color:var(--text2)"><i class="ti ti-user" style="font-size:11px"></i> ${ts.supervisor_name||'—'} · ${submitted}</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          ${ts.has_adjustments?'<span class="mgr-adj-badge"><i class="ti ti-alert-triangle"></i> ADJ</span>':''}
-          ${ts.scan_count>0?`<span style="font-size:11px;color:var(--text3)"><i class="ti ti-paperclip"></i> ${ts.scan_count}</span>`:''}
-          <i class="ti ti-chevron-right" style="color:var(--text3)"></i>
-        </div>
-      </div>
-      <div style="margin-top:.35rem;padding-top:.35rem;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:11px;color:var(--text3)"><i class="ti ti-cloud-upload" style="font-size:11px"></i> ${uploadTs}</span>
-        <span style="font-size:11px;color:var(--text3);font-style:italic">${staleLabel}</span>
-      </div>`;
-    container.appendChild(card);
+    // Day summary counts
+    const dayCounts = {submitted:0,approved:0,rejected:0,draft:0};
+    sheets.forEach(t=>{ if(dayCounts[t.status]!==undefined) dayCounts[t.status]++; });
+    const dayParts = [];
+    if(dayCounts.submitted) dayParts.push('<span style="color:#185fa5">'+dayCounts.submitted+' pending</span>');
+    if(dayCounts.approved)  dayParts.push('<span style="color:#3b6d11">'+dayCounts.approved+' approved</span>');
+    if(dayCounts.rejected)  dayParts.push('<span style="color:#a32d2d">'+dayCounts.rejected+' rejected</span>');
+    if(dayCounts.draft)     dayParts.push('<span style="color:var(--text3)">'+dayCounts.draft+' draft</span>');
+
+    // Date group header
+    const grp = document.createElement('div');
+    grp.style.cssText = 'margin-bottom:12px';
+    grp.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--border);margin-bottom:4px">'
+      +'<span style="font-size:12px;font-weight:700;color:var(--text)">'+dayDate+'</span>'
+      +'<span style="font-size:11px;color:var(--text2)">'+dayParts.join(' &nbsp;·&nbsp; ')+'</span>'
+      +'</div>';
+
+    // Rows
+    sheets.forEach(ts=>{
+      const qualifiedCount = ts.qualified_employee_count != null ? ts.qualified_employee_count : (ts.employee_count||0);
+      const loc = [ts.city, ts.state].filter(Boolean).join(', ') || '—';
+      const barColor = STATUS_BAR[ts.status] || 'var(--text3)';
+      const badgeCls = BADGE_CLS[ts.status] || 'ts-pill-draft';
+      const badgeLabel = BADGE_LABEL[ts.status] || ts.status;
+
+      // Stale label
+      const updatedAt = ts.updated_at ? new Date(ts.updated_at) : null;
+      let staleLabel = '';
+      if(updatedAt){
+        const diffMs  = Date.now() - updatedAt.getTime();
+        const diffMin = Math.floor(diffMs/60000);
+        const diffHr  = Math.floor(diffMin/60);
+        const diffDay = Math.floor(diffHr/24);
+        if(diffMin<1)        staleLabel='just now';
+        else if(diffMin<60)  staleLabel=diffMin+'m ago';
+        else if(diffHr<24)   staleLabel=diffHr+'h ago';
+        else                 staleLabel=diffDay+'d ago';
+      }
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:4px;cursor:pointer;border-bottom:0.5px solid var(--border2)';
+      row.onmouseenter = ()=>{ row.style.background='var(--bg2)'; };
+      row.onmouseleave = ()=>{ row.style.background=''; };
+      row.onclick = ()=>openDetailScreen(ts, true);
+      row.innerHTML = '<div style="width:3px;height:32px;background:'+barColor+';flex-shrink:0;border-radius:0"></div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            +( ts.client_name||'Unknown')+'<span style="font-weight:400;color:var(--text3);font-size:11px"> &nbsp;· Store '+(ts.store_number||'—')+'</span>'
+          +'</div>'
+          +'<div style="font-size:10px;color:var(--text2);margin-top:1px">'+(ts.supervisor_name||'—')+(staleLabel?' &nbsp;· '+staleLabel:'')+'</div>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--text2);width:110px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+loc+'</div>'
+        +'<div style="font-size:11px;color:var(--text2);width:44px;text-align:right;flex-shrink:0">'+qualifiedCount+' emp</div>'
+        +(ts.has_adjustments?'<span class="mgr-adj-badge" style="flex-shrink:0"><i class="ti ti-alert-triangle"></i></span>':'')
+        +'<span class="ts-status-pill '+badgeCls+'" style="flex-shrink:0;font-size:10px;min-width:72px;text-align:center">'+badgeLabel+'</span>';
+
+      grp.appendChild(row);
+    });
+
+    container.appendChild(grp);
   });
 }
 
