@@ -1740,7 +1740,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.86';
+const APP_VERSION = 'v1.0.88';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -4820,6 +4820,7 @@ function loadWizImport(){
       <h3 style="font-size:16px;font-weight:700;margin-bottom:4px">Bulk Import</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1.5rem">
         Import multiple users at once from a CSV file. Choose the import type, download the template, fill it in, then upload.
+        <br><strong>Note:</strong> the <code>district</code> and <code>area</code> columns must contain the District/Area <strong>Number</strong> (the code shown next to the name in Org Setup), not the name.
       </p>
 
       <!-- Import type selector -->
@@ -4898,11 +4899,11 @@ function _selectImportType(type){
 function _downloadTemplate(type){
   const cols  = type==='manager' ? MANAGER_COLS : SUPERVISOR_COLS;
   const row1  = type==='manager'
-    ? 'John Smith,jsmith@datascan.com,district,,IS,Chris Lupas,'
-    : 'Bob Jones,bjones@datascan.com,Chris Lupas,,';
+    ? 'John Smith,jsmith@datascan.com,district,,IS,12,'
+    : 'Bob Jones,bjones@datascan.com,12,34,';
   const row2  = type==='manager'
     ? 'Jane Doe,jdoe@datascan.com,regional,,IS,,Tmp#2026'
-    : 'Sarah Lee,slee@datascan.com,Dexy Kam,Irving TX,';
+    : 'Sarah Lee,slee@datascan.com,12,56,';
   const sample = row1 + '\n' + row2;
   const csv   = cols.join(',') + '\n' + sample;
   const a     = document.createElement('a');
@@ -4981,9 +4982,10 @@ function _validateImportRow(row){
 
 function _resolveImportOrg(row){
   // Try most specific first: area > district > region > division
-  const area = row.area ? (_orgTree.areas||[]).find(a=>a.name.toLowerCase()===row.area.toLowerCase()) : null;
+  // District and area are matched by their "Number" (code) field; region/division still by name.
+  const area = row.area ? (_orgTree.areas||[]).find(a=>String(a.code||'').trim()===String(row.area).trim()) : null;
   if(area) return {id: area.id_area, type:'area'};
-  const dist = row.district ? (_orgTree.districts||[]).find(d=>d.name.toLowerCase()===row.district.toLowerCase()) : null;
+  const dist = row.district ? (_orgTree.districts||[]).find(d=>String(d.code||'').trim()===String(row.district).trim()) : null;
   if(dist) return {id: dist.id_district, type:'district'};
   const reg  = row.region ? (_orgTree.regions||[]).find(r=>r.name.toLowerCase()===row.region.toLowerCase()) : null;
   if(reg)  return {id: reg.id_region, type:'region'};
@@ -5024,7 +5026,10 @@ function _renderImportPreview(){
               : '<span style="color:var(--danger-text);font-weight:700" title="'+r._errors.join(' | ')+'"><i class="ti ti-alert-circle"></i> Error</span>';
             const dataCells = cols.map(c=>'<td style="padding:7px 10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c==='temp_password'?'••••••••':(r[c]||'—'))+'</td>').join('');
             const orgColor  = r._org_id ? 'var(--success-text)' : 'var(--danger-text)';
-            const orgText   = r._org_id ? (r._org_type+': '+(r[r._org_type]||r.district||r.region||r.division||'')) : '✗ not found';
+            const orgName   = r._org_type==='district' ? (_orgTree.districts||[]).find(x=>x.id_district===r._org_id)?.name
+                             : r._org_type==='area'     ? (_orgTree.areas||[]).find(x=>x.id_area===r._org_id)?.name
+                             : '';
+            const orgText   = r._org_id ? (r._org_type+': '+(r[r._org_type]||r.region||r.division||'')+(orgName?' ('+orgName+')':'')) : '✗ not found';
             const orgCell   = '<td style="padding:7px 10px;font-size:11px;color:'+orgColor+'">'+orgText+'</td>';
             const errorRow  = r._status==='error'
               ? '<tr style="background:rgba(239,68,68,.07)"><td></td><td colspan="'+(cols.length+1)+'" style="padding:3px 10px 7px;font-size:11px;color:var(--danger-text)">'+r._errors.join(' · ')+'</td></tr>'
