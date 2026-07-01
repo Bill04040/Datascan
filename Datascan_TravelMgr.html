@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Datascan · Travel Manager</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Inter',Arial,sans-serif;background:#0b1929;color:#e8f0f8;overflow:hidden}
+:root{
+  --blue:#1E5FAE;--blue2:#2572cc;--green:#6AB34F;--green2:#82cc63;
+  --amber:#F4A93A;--red:#f87171;--purple:#a855f7;
+  --bg1:#0b1929;--bg2:#111f33;--bg3:#162840;--bg4:#1c3452;
+  --border:rgba(255,255,255,.09);--border2:rgba(255,255,255,.14);
+  --text1:#e8f0f8;--text2:rgba(232,240,248,.60);--text3:rgba(232,240,248,.35);
+  --radius:10px;--radius-sm:7px;--shadow:0 4px 24px rgba(0,0,0,.45);
+}
+
+/* ── Login ───────────────────────────────────────────────────────────────── */
+#login-screen{position:fixed;inset:0;background:var(--bg1);display:flex;
+  align-items:center;justify-content:center;z-index:1000}
+#login-screen.hidden{display:none}
+.login-card{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;
+  padding:2rem 2.25rem;width:340px;box-shadow:var(--shadow)}
+.login-logo-title{font-size:13px;font-weight:800;letter-spacing:.12em;color:var(--green);
+  text-transform:uppercase;text-align:center;margin-bottom:4px}
+.login-logo-sub{font-size:11px;color:var(--text3);text-align:center;margin-bottom:1.5rem}
+.login-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.04em;
+  text-transform:uppercase;margin-bottom:5px;display:block}
+.login-input{width:100%;padding:.625rem .75rem;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--radius-sm);color:var(--text1);font-size:14px;font-family:inherit;margin-bottom:.875rem}
+.login-input:focus{outline:none;border-color:var(--blue)}
+.login-btn{width:100%;padding:.75rem;background:var(--green);border:none;border-radius:var(--radius-sm);
+  color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:.25rem}
+.login-btn:hover{background:var(--green2)}
+.login-btn:disabled{opacity:.6;cursor:not-allowed}
+.login-err{font-size:12px;color:var(--red);text-align:center;margin-top:.75rem;min-height:18px}
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+#app{display:none;height:100vh;flex-direction:column;overflow:hidden}
+
+/* ── Topbar / filter bar ─────────────────────────────────────────────────── */
+#topbar{display:flex;align-items:center;gap:8px;padding:.5rem .875rem;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  flex-shrink:0;flex-wrap:wrap;z-index:50}
+.tb-brand{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--green);
+  text-transform:uppercase;white-space:nowrap}
+.tb-sub{font-size:10px;color:var(--text3);letter-spacing:.05em;white-space:nowrap;margin-right:4px}
+.tb-sep{width:1px;height:18px;background:var(--border2);flex-shrink:0}
+.tb-label{font-size:11px;color:var(--text3);white-space:nowrap}
+.filter-input{padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:6px;color:var(--text1);font-size:12px;font-family:inherit}
+.filter-input:focus{outline:none;border-color:var(--blue)}
+select.filter-input{cursor:pointer}
+.tb-user{font-size:12px;color:var(--text2);white-space:nowrap;margin-left:auto}
+.tb-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;
+  background:var(--bg3);border:1px solid var(--border2);border-radius:6px;
+  color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.tb-btn:hover{background:var(--bg4);color:var(--text1)}
+
+/* ── Stats strip (below topbar) ─────────────────────────────────────────── */
+#stats-bar{display:flex;gap:1px;background:var(--border);flex-shrink:0;
+  border-bottom:1px solid var(--border)}
+.stat-cell{flex:1;padding:.3rem .5rem;background:var(--bg2);text-align:center;min-width:0}
+.stat-num{font-size:14px;font-weight:700;color:var(--text1);line-height:1.2}
+.stat-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.stat-num.green{color:var(--green)}
+.stat-num.amber{color:var(--amber)}
+.stat-num.red{color:var(--red)}
+.stat-num.blue{color:#7eb8f7}
+#live-badge{display:none;align-items:center;gap:4px;font-size:10px;color:var(--green);
+  padding:.3rem .75rem;background:var(--bg2);border-left:1px solid var(--border);flex-shrink:0}
+
+/* ── Main area ───────────────────────────────────────────────────────────── */
+#main{flex:1;position:relative;overflow:hidden}
+
+/* ── Fleet map ───────────────────────────────────────────────────────────── */
+#fleet-map{position:absolute;inset:0;z-index:1}
+.leaflet-container{background:#0b1929}
+
+/* Bigger zoom controls */
+.leaflet-control-zoom{margin-left:12px !important;margin-bottom:60px !important}
+.leaflet-control-zoom a{width:34px !important;height:34px !important;
+  line-height:34px !important;font-size:18px !important}
+
+/* ── Trips FAB — sits next to zoom controls ──────────────────────────────── */
+#trips-fab{position:absolute;bottom:10px;left:12px;z-index:150;
+  display:flex;align-items:center;gap:6px;padding:8px 14px;
+  background:var(--bg2);border:1px solid var(--border2);border-radius:20px;
+  color:var(--text1);font-size:12px;font-weight:600;cursor:pointer;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:inherit}
+#trips-fab:hover{background:var(--bg3)}
+.fab-badge{font-size:10px;font-weight:800;padding:1px 6px;
+  border-radius:8px;background:var(--blue);color:#fff;min-width:18px;text-align:center}
+
+/* ── Map legend ──────────────────────────────────────────────────────────── */
+#map-legend{position:absolute;bottom:10px;right:10px;z-index:150;
+  background:rgba(17,31,51,.92);border:1px solid var(--border2);
+  border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text3);
+  backdrop-filter:blur(4px)}
+.legend-row{display:flex;align-items:center;gap:7px;padding:2px 0}
+.legend-dot{width:12px;height:12px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.6);flex-shrink:0}
+
+/* ── Refresh indicator ───────────────────────────────────────────────────── */
+#refresh-ring{position:absolute;top:8px;right:8px;z-index:150;
+  font-size:10px;color:var(--green);background:rgba(17,31,51,.9);
+  border:1px solid rgba(106,179,79,.3);border-radius:6px;
+  padding:4px 10px;display:none;align-items:center;gap:5px}
+
+/* ── Trips drawer ────────────────────────────────────────────────────────── */
+#trips-drawer{position:absolute;top:0;left:-380px;width:380px;height:100%;
+  background:var(--bg2);border-right:1px solid var(--border2);
+  z-index:200;display:flex;flex-direction:column;
+  transition:left .25s cubic-bezier(.4,0,.2,1);
+  box-shadow:4px 0 24px rgba(0,0,0,.4)}
+#trips-drawer.open{left:0}
+.drawer-header{display:flex;align-items:center;justify-content:space-between;
+  padding:.75rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.drawer-title{font-size:14px;font-weight:700;color:var(--text1);
+  display:flex;align-items:center;gap:8px}
+.drawer-close{background:none;border:none;cursor:pointer;color:var(--text3);
+  font-size:20px;padding:2px 4px;line-height:1}
+.drawer-close:hover{color:var(--text1)}
+.drawer-search{padding:.625rem .875rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.drawer-search input{width:100%;padding:7px 10px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:6px;font-size:12px;
+  color:var(--text1);font-family:inherit}
+.drawer-search input:focus{outline:none;border-color:var(--blue)}
+.drawer-actions{display:flex;gap:8px;padding:.625rem .875rem;
+  border-bottom:1px solid var(--border);flex-shrink:0}
+.drawer-btn{flex:1;padding:8px;border-radius:6px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;display:flex;align-items:center;
+  justify-content:center;gap:5px;transition:background .1s}
+.dbtn-primary{background:rgba(30,95,174,.2);border:1px solid rgba(30,95,174,.4);color:#7eb8f7}
+.dbtn-primary:hover{background:rgba(30,95,174,.35)}
+.dbtn-secondary{background:var(--bg3);border:1px solid var(--border2);color:var(--text2)}
+.dbtn-secondary:hover{background:var(--bg4)}
+.drawer-body{flex:1;overflow-y:auto}
+
+/* ── Job groups in drawer ────────────────────────────────────────────────── */
+.job-group{border-bottom:1px solid var(--border)}
+.job-header{padding:.625rem .875rem .4rem;background:var(--bg3);sticky:top;
+  font-size:11px;color:var(--text3)}
+.job-header-name{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:1px}
+.trip-row{display:flex;align-items:flex-start;gap:10px;padding:.625rem .875rem;
+  cursor:pointer;transition:background .1s;border-left:3px solid transparent}
+.trip-row:hover{background:rgba(255,255,255,.04)}
+.trip-row.selected{background:rgba(30,95,174,.1);border-left-color:var(--blue)}
+.trip-row-cb{margin-top:2px;flex-shrink:0;accent-color:var(--blue);
+  width:15px;height:15px;cursor:pointer}
+.trip-row-content{flex:1;min-width:0}
+.trip-row-top{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+.trip-driver{font-size:12px;font-weight:700;color:var(--text1)}
+.trip-leg-badge{font-size:10px;color:var(--text3);background:var(--bg4);
+  padding:1px 6px;border-radius:4px;white-space:nowrap}
+.trip-time{font-size:10px;color:var(--text3);margin-left:auto;white-space:nowrap}
+.trip-row-detail{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.trip-pax-count{font-size:11px;display:flex;align-items:center;gap:3px;
+  color:var(--green);font-weight:600}
+.trip-pax-names{font-size:10px;color:var(--text3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+
+/* ── RAG + status pills ──────────────────────────────────────────────────── */
+.rag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.rag-green{background:rgba(106,179,79,.15);color:#82cc63;border:0.5px solid rgba(106,179,79,.3)}
+.rag-amber{background:rgba(244,169,58,.15);color:#FAC775;border:0.5px solid rgba(244,169,58,.3)}
+.rag-red{background:rgba(248,113,113,.15);color:#f87171;border:0.5px solid rgba(248,113,113,.3)}
+.rag-blue{background:rgba(30,95,174,.2);color:#85B7EB;border:0.5px solid rgba(30,95,174,.35)}
+.rag-gray{background:rgba(136,135,128,.15);color:#B4B2A9;border:0.5px solid rgba(136,135,128,.25)}
+.sp-boarding{background:rgba(30,95,174,.2);color:#85B7EB;border:0.5px solid rgba(30,95,174,.35)}
+.sp-enroute{background:rgba(106,179,79,.15);color:#82cc63;border:0.5px solid rgba(106,179,79,.3)}
+.sp-destinated{background:rgba(136,135,128,.15);color:#B4B2A9;border:0.5px solid rgba(136,135,128,.25)}
+.status-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+
+/* ── Map overlay card ────────────────────────────────────────────────────── */
+.map-card{position:absolute;z-index:300;background:rgba(17,31,51,.96);
+  border:1px solid var(--border2);border-radius:var(--radius);
+  box-shadow:0 8px 32px rgba(0,0,0,.7);width:240px;padding:12px 14px;
+  backdrop-filter:blur(8px)}
+.map-card-close{position:absolute;top:8px;right:8px;background:none;border:none;
+  cursor:pointer;color:var(--text3);font-size:18px;padding:2px 4px;line-height:1}
+.map-card-close:hover{color:var(--text1)}
+.map-card-name{font-size:14px;font-weight:700;color:var(--text1);margin-bottom:2px;padding-right:20px}
+.map-card-job{font-size:11px;color:var(--text3);margin-bottom:8px}
+.map-card-divider{height:0.5px;background:var(--border2);margin:8px 0}
+.map-card-row{display:flex;justify-content:space-between;align-items:center;
+  padding:3px 0;font-size:11px}
+.map-card-lbl{color:var(--text3)}
+.map-card-val{color:var(--text1);font-weight:500;text-align:right}
+.map-card-btn{width:100%;margin-top:10px;padding:8px;border-radius:6px;
+  background:rgba(30,95,174,.2);border:1px solid rgba(30,95,174,.4);
+  color:#7eb8f7;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.map-card-btn:hover{background:rgba(30,95,174,.35)}
+
+/* ── Multi-trip color legend overlay ────────────────────────────────────── */
+#trip-color-legend{position:absolute;bottom:10px;right:10px;z-index:150;
+  background:rgba(17,31,51,.92);border:1px solid var(--border2);
+  border-radius:8px;padding:8px 12px;font-size:11px;display:none;
+  backdrop-filter:blur(4px);max-width:200px}
+#trip-color-legend.show{display:block}
+.tcl-row{display:flex;align-items:center;gap:7px;padding:2px 0}
+.tcl-line{width:20px;height:3px;border-radius:2px;flex-shrink:0}
+.tcl-label{color:var(--text2);font-size:10px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+
+@media(max-width:600px){
+  #topbar{padding:.4rem .625rem;gap:6px}
+  .tb-sub,.tb-sep:first-of-type{display:none}
+  #trips-drawer{width:100%;left:-100%}
+  #trips-drawer.open{left:0}
+  .stat-lbl{font-size:8px}
+  .stat-num{font-size:13px}
+}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div style="text-align:center;margin-bottom:1.25rem">
+      <img src="https://bill04040.github.io/Datascan_LTI_Logo_Round_Dark.png"
+        style="width:72px;height:72px;border-radius:50%;object-fit:cover" alt="Datascan"/>
+    </div>
+    <div class="login-logo-title">Datascan</div>
+    <div class="login-logo-sub">Travel Manager · Sign in to continue</div>
+    <label class="login-label">Email address</label>
+    <input class="login-input" type="email" id="login-email" placeholder="you@datascan.com" autocomplete="email"/>
+    <label class="login-label">Password</label>
+    <input class="login-input" type="password" id="login-password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">
+      <i class="ti ti-login"></i> Sign in
+    </button>
+    <div class="login-err" id="login-err"></div>
+    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:rgba(232,240,248,.25);letter-spacing:.04em">v1.0.7</div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+
+  <!-- Filter bar -->
+  <div id="topbar">
+    <span class="tb-brand">Datascan</span>
+    <span class="tb-sub">Travel Manager</span>
+    <div class="tb-sep"></div>
+    <span class="tb-label">Date</span>
+    <input type="date" id="filter-date" class="filter-input" onchange="onDateChange()"/>
+    <div class="tb-sep"></div>
+    <span class="tb-label">Vehicle</span>
+    <select id="filter-vehicle" class="filter-input" onchange="applyFilters()">
+      <option value="">All</option>
+    </select>
+    <span class="tb-label">Leg</span>
+    <select id="filter-leg" class="filter-input" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="outbound">Outbound</option>
+      <option value="return">Return</option>
+      <option value="job_to_job">Job to Job</option>
+    </select>
+    <span class="tb-label">Status</span>
+    <select id="filter-status" class="filter-input" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="active">Active</option>
+      <option value="completed">Completed</option>
+      <option value="setup">Boarding</option>
+    </select>
+    <span class="tb-user" id="tb-user">—</span>
+    <button class="tb-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+  </div>
+
+  <!-- Stats strip -->
+  <div id="stats-bar">
+    <div class="stat-cell"><div class="stat-num" id="st-total">—</div><div class="stat-lbl">Trips</div></div>
+    <div class="stat-cell"><div class="stat-num blue" id="st-active">—</div><div class="stat-lbl">Active</div></div>
+    <div class="stat-cell"><div class="stat-num green" id="st-ontime">—</div><div class="stat-lbl">On Time</div></div>
+    <div class="stat-cell"><div class="stat-num amber" id="st-late">—</div><div class="stat-lbl">A Little Late</div></div>
+    <div class="stat-cell"><div class="stat-num red" id="st-reallylate">—</div><div class="stat-lbl">Really Late</div></div>
+    <div class="stat-cell"><div class="stat-num" id="st-drivers">—</div><div class="stat-lbl">Drivers</div></div>
+    <div id="live-badge"><i class="ti ti-radar" style="font-size:12px"></i> Live</div>
+  </div>
+
+  <!-- Main map area -->
+  <div id="main">
+
+    <!-- Fleet map -->
+    <div id="fleet-map"></div>
+
+    <!-- Refresh indicator -->
+    <div id="refresh-ring">
+      <i class="ti ti-refresh" style="font-size:11px"></i>
+      <span id="refresh-label">Refreshing…</span>
+    </div>
+
+    <!-- Multi-trip color legend -->
+    <div id="trip-color-legend"></div>
+
+    <!-- Trips FAB — sits next to zoom controls bottom-left -->
+    <button id="trips-fab" onclick="toggleDrawer()">
+      <i class="ti ti-list" style="font-size:14px"></i>
+      Trips <span class="fab-badge" id="fab-badge">0</span>
+    </button>
+
+    <!-- Map legend — bottom right -->
+    <div id="map-legend">
+      <div class="legend-row"><div class="legend-dot" style="background:#6AB34F"></div> On time</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#F4A93A"></div> A little late</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f87171"></div> Really late</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#7eb8f7"></div> Boarding</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#888780"></div> Completed</div>
+    </div>
+
+    <!-- Trips drawer -->
+    <div id="trips-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <i class="ti ti-list" style="font-size:16px;color:var(--text3)"></i>
+          Trips
+          <span class="fab-badge" id="drawer-count">0</span>
+        </div>
+        <button class="drawer-close" onclick="toggleDrawer()"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="drawer-search">
+        <input type="search" id="drawer-search" placeholder="Search driver, customer…"
+          oninput="renderDrawer(this.value)"/>
+      </div>
+      <div class="drawer-actions">
+        <button class="drawer-btn dbtn-primary" onclick="viewSelectedOnMap()">
+          <i class="ti ti-map-pin"></i> View on map
+        </button>
+        <button class="drawer-btn dbtn-secondary" onclick="clearSelections()">
+          <i class="ti ti-x"></i> Clear
+        </button>
+        <button class="drawer-btn dbtn-secondary" onclick="toggleDrawer()">
+          <i class="ti ti-arrow-left"></i> Back
+        </button>
+      </div>
+      <div class="drawer-body" id="drawer-body">
+        <div style="padding:2rem;text-align:center;color:var(--text3);font-size:12px">Loading…</div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ── Trip palette for multi-trip view ──────────────────────────────────────
+const TRIP_PALETTE = [
+  '#4A9EFF','#FF7B4A','#A855F7','#22D3EE','#F59E0B',
+  '#EC4899','#34D399','#F97316','#818CF8','#10B981'
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════════════════════
+let _sb = null;
+let currentUser = null, currentProfile = null, _userPermissions = {};
+let _allLogs = [], _filtered = [], _selected = new Set();
+let _sortCol = 'started_at', _sortAsc = false;
+let _fleetMap = null, _fleetMarkers = {};
+let _overlayLayers = [];   // all layers added for route/ping overlays
+let _mapCard = null;
+let _refreshTimer = null, _isToday = true, _lastRefresh = null;
+let _drawerOpen = false;
+
+// ════════════════════════════════════════════════════════════════════════════
+// SUPABASE
+// ════════════════════════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
+
+function waitForSB(cb){ if(window.supabase) cb(); else setTimeout(()=>waitForSB(cb),50); }
+function getSB(){ return _sb; }
+
+waitForSB(()=>{
+  _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  getSB().auth.getSession().then(async({data})=>{
+    if(data.session?.user) await onSignedIn(data.session.user);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════════════════════
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-password').value;
+  const btn=document.getElementById('login-btn');
+  const err=document.getElementById('login-err');
+  err.textContent='';
+  if(!email||!pass){err.textContent='Email and password required.';return;}
+  btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Signing in…';
+  const {data,error}=await getSB().auth.signInWithPassword({email,password:pass});
+  if(error){err.textContent=error.message;btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> Sign in';return;}
+  await onSignedIn(data.user);
+}
+
+async function onSignedIn(user){
+  currentUser=user;
+  const {data:profile}=await getSB().from('profiles').select('*').eq('id',user.id).maybeSingle();
+  currentProfile=profile||{full_name:user.email,role:'unknown'};
+  const {data:roleDef}=await getSB().from('role_definitions')
+    .select('permissions,scope_type,role_label').eq('role_key',currentProfile?.role||'supervisor').maybeSingle();
+  const rp=roleDef?.permissions||{}, ov=currentProfile?.permissions_override||{}, eff={};
+  Object.entries(ov).forEach(([k,v])=>{if(k==='qa_config')eff[k]=v;else if(v===true)eff[k]=true;});
+  _userPermissions={...rp,...eff};
+  if(!_userPermissions['app_travel_mgr']){
+    await getSB().auth.signOut();
+    document.getElementById('login-err').textContent='Access denied — your role does not have Travel Manager access.';
+    document.getElementById('login-btn').disabled=false;
+    document.getElementById('login-btn').innerHTML='<i class="ti ti-login"></i> Sign in';
+    return;
+  }
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').style.display='flex';
+  document.getElementById('tb-user').textContent=currentProfile.full_name||user.email;
+  const today=new Date().toISOString().split('T')[0];
+  document.getElementById('filter-date').value=today;
+  _isToday=true;
+  initFleetMap();
+  await loadTrips();
+  startAutoRefresh();
+}
+
+async function doLogout(){
+  stopAutoRefresh();
+  await getSB().auth.signOut();
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('app').style.display='none';
+  currentUser=null;currentProfile=null;_allLogs=[];_filtered=[];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOAD DATA
+// ════════════════════════════════════════════════════════════════════════════
+async function loadTrips(){
+  const dateVal=document.getElementById('filter-date').value;
+  if(!dateVal) return;
+  const fromISO=dateVal+'T00:00:00.000Z', toISO=dateVal+'T23:59:59.999Z';
+
+  const {data:logs}=await getSB().from('travel_logs')
+    .select(`id,timesheet_id,status,leg_type,vehicle_plate,
+             miles_start,miles_end,started_at,completed_at,
+             origin_lat,origin_lng,dest_lat,dest_lng,dest_address,
+             driver_id,driver_name,planned_route,
+             session_health,last_ping_at,deviation_status`)
+    .gte('started_at',fromISO).lte('started_at',toISO)
+    .order('started_at',{ascending:true});
+
+  // Timesheets
+  const tsIds=[...new Set((logs||[]).map(l=>l.timesheet_id).filter(Boolean))];
+  let tsMap={};
+  if(tsIds.length){
+    const {data:tsList}=await getSB().from('timesheets')
+      .select('id,client_name,store_number,city,state').in('id',tsIds);
+    (tsList||[]).forEach(ts=>{tsMap[ts.id]=ts;});
+  }
+
+  // Passengers
+  const logIds=(logs||[]).map(l=>l.id);
+  let paxMap={};
+  if(logIds.length){
+    const {data:paxList}=await getSB().from('travel_passengers')
+      .select('travel_log_id,full_name').in('travel_log_id',logIds);
+    (paxList||[]).forEach(p=>{
+      if(!paxMap[p.travel_log_id]) paxMap[p.travel_log_id]=[];
+      paxMap[p.travel_log_id].push(p);
+    });
+  }
+
+  // Last ping per log
+  let pingMap={};
+  if(logIds.length){
+    await Promise.all(logIds.map(async id=>{
+      const {data:lp}=await getSB().from('gps_pings')
+        .select('lat,lng,speed,recorded_at,ping_health,deviation_m,trip_status,geofence_hit')
+        .eq('travel_log_id',id).order('recorded_at',{ascending:false}).limit(1).maybeSingle();
+      if(lp) pingMap[id]=lp;
+    }));
+  }
+
+  _allLogs=(logs||[]).map(l=>({...l,_ts:tsMap[l.timesheet_id]||{},_pax:paxMap[l.id]||[],_lastPing:pingMap[l.id]||null}));
+
+  // Populate vehicle filter
+  const vehicles=[...new Set(_allLogs.map(l=>l.vehicle_plate).filter(Boolean))].sort();
+  const vSel=document.getElementById('filter-vehicle');
+  const curV=vSel.value;
+  vSel.innerHTML='<option value="">All</option>'+vehicles.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(curV) vSel.value=curV;
+
+  applyFilters();
+  _lastRefresh=new Date();
+  updateRefreshLabel();
+}
+
+function applyFilters(){
+  const v=document.getElementById('filter-vehicle').value;
+  const leg=document.getElementById('filter-leg').value;
+  const st=document.getElementById('filter-status').value;
+
+  _filtered=_allLogs.filter(l=>{
+    if(v&&l.vehicle_plate!==v) return false;
+    if(leg&&l.leg_type!==leg) return false;
+    if(st){
+      if(st==='active'&&l.status!=='active') return false;
+      if(st==='completed'&&l.status!=='completed') return false;
+      if(st==='setup'&&l.status!=='setup') return false;
+    }
+    return true;
+  });
+
+  renderStats();
+  renderFleetMarkers();
+  renderDrawer();
+  document.getElementById('fab-badge').textContent=_filtered.length;
+  document.getElementById('drawer-count').textContent=_filtered.length;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// HEALTH
+// ════════════════════════════════════════════════════════════════════════════
+function calcTripHealth(log){
+  if(log._lastPing?.ping_health) return log._lastPing.ping_health;
+  if(!log.started_at||!log.planned_route?.duration_seconds) return 'gray';
+  const expectedMs=new Date(log.started_at).getTime()+log.planned_route.duration_seconds*1000;
+  const compareMs=log.completed_at?new Date(log.completed_at).getTime():Date.now();
+  const lateSecs=(compareMs-expectedMs)/1000;
+  if(lateSecs>=15*60) return 'red';
+  if(lateSecs>=1*60)  return 'amber';
+  return 'green';
+}
+
+function tripStatusLabel(log){
+  if(log.status==='setup') return 'Boarding';
+  if(log.status==='completed') return 'Destinated';
+  if(log._lastPing?.geofence_hit) return 'Destinated';
+  return 'En Route';
+}
+
+function healthLabel(h){
+  return {red:'Really late',amber:'A little late',green:'On time',gray:'—'}[h]||'—';
+}
+
+function ragClass(h){
+  return {red:'rag-red',amber:'rag-amber',green:'rag-green',gray:'rag-gray',blue:'rag-blue'}[h]||'rag-gray';
+}
+
+function dotColor(log){
+  const s=tripStatusLabel(log);
+  if(s==='Boarding')   return '#7eb8f7';
+  if(s==='Destinated') return '#888780';
+  const h=calcTripHealth(log);
+  return {red:'#f87171',amber:'#F4A93A',green:'#6AB34F'}[h]||'#6AB34F';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STATS
+// ════════════════════════════════════════════════════════════════════════════
+function renderStats(){
+  const f=_filtered;
+  const active=f.filter(l=>l.status==='active').length;
+  const drivers=[...new Set(f.map(l=>l.driver_id).filter(Boolean))].length;
+  let on=0,al=0,rl=0;
+  f.filter(l=>l.status!=='setup').forEach(l=>{
+    const h=calcTripHealth(l);
+    if(h==='green')on++;else if(h==='amber')al++;else if(h==='red')rl++;
+  });
+  document.getElementById('st-total').textContent=f.length;
+  document.getElementById('st-active').textContent=active;
+  document.getElementById('st-ontime').textContent=on;
+  document.getElementById('st-late').textContent=al;
+  document.getElementById('st-reallylate').textContent=rl;
+  document.getElementById('st-drivers').textContent=drivers;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FLEET MAP
+// ════════════════════════════════════════════════════════════════════════════
+function initFleetMap(){
+  if(_fleetMap) return;
+  const mapEl=document.getElementById('fleet-map');
+  if(!mapEl) return;
+  _fleetMap=L.map(mapEl,{zoomControl:true,attributionControl:false}).setView([37,-95.7],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_fleetMap);
+  _fleetMap.on('click',()=>closeMapCard());
+}
+
+function renderFleetMarkers(){
+  if(!_fleetMap) return;
+  Object.values(_fleetMarkers).forEach(m=>m.remove());
+  _fleetMarkers={};
+
+  _filtered.forEach(log=>{
+    const ping=log._lastPing;
+    const lat=parseFloat(ping?.lat||log.origin_lat);
+    const lng=parseFloat(ping?.lng||log.origin_lng);
+    if(!lat||!lng||isNaN(lat)||isNaN(lng)) return;
+
+    const color=dotColor(log);
+    const isActive=log.status==='active';
+
+    // Larger dots — 18px diameter with glow for active
+    const icon=L.divIcon({
+      html:`<div style="
+        width:18px;height:18px;border-radius:50%;
+        background:${color};
+        border:3px solid rgba(255,255,255,.9);
+        box-shadow:${isActive?`0 0 0 4px ${color}35,`:''} 0 2px 8px rgba(0,0,0,.6);
+        cursor:pointer;transition:transform .1s"
+        onmouseenter="this.style.transform='scale(1.3)'"
+        onmouseleave="this.style.transform='scale(1)'">
+      </div>`,
+      className:'',iconAnchor:[9,9]
+    });
+
+    const m=L.marker([lat,lng],{icon}).addTo(_fleetMap);
+    m.on('click',e=>{L.DomEvent.stopPropagation(e);showMapCard(log,lat,lng,e);});
+    _fleetMarkers[log.id]=m;
+  });
+
+  if(!_mapCard){
+    const pts=Object.values(_fleetMarkers).map(m=>m.getLatLng());
+    if(pts.length>1) _fleetMap.fitBounds(L.latLngBounds(pts),{padding:[60,60]});
+    else if(pts.length===1) _fleetMap.setView(pts[0],12);
+  }
+}
+
+// ── Map card ──────────────────────────────────────────────────────────────
+function showMapCard(log,lat,lng,e){
+  closeMapCard();
+  const s=tripStatusLabel(log), h=calcTripHealth(log), ts=log._ts||{};
+  const pax=log._pax||[];
+  const spClass={Boarding:'sp-boarding','En Route':'sp-enroute',Destinated:'sp-destinated'}[s]||'sp-enroute';
+
+  let etaText='—';
+  if(log.started_at&&log.planned_route?.duration_seconds){
+    const eta=new Date(new Date(log.started_at).getTime()+log.planned_route.duration_seconds*1000);
+    etaText=fmtTime(eta.toISOString());
+  }
+
+  const el=document.createElement('div');
+  el.className='map-card';
+  el.id='active-map-card';
+  el.innerHTML=`
+    <button class="map-card-close" onclick="closeMapCard()">×</button>
+    <div style="margin-bottom:8px">
+      <span class="status-pill ${spClass}">${s}</span>
+    </div>
+    <div class="map-card-name">${log.driver_name||'Driver'}</div>
+    <div class="map-card-job">${ts.client_name||'—'}${ts.store_number?' · Store '+ts.store_number:''}${ts.city?' · '+ts.city:''}</div>
+    <div class="map-card-divider"></div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Leg</span>
+      <span class="map-card-val">${{outbound:'Outbound',return:'Return',job_to_job:'Job→Job'}[log.leg_type]||'—'}</span>
+    </div>
+    ${s==='En Route'?`
+    <div class="map-card-row">
+      <span class="map-card-lbl">Health</span>
+      <span class="rag ${ragClass(h)}">${healthLabel(h)}</span>
+    </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">ETA</span>
+      <span class="map-card-val">${etaText}</span>
+    </div>`:''}
+    ${s==='Destinated'&&log.completed_at?`
+    <div class="map-card-row">
+      <span class="map-card-lbl">Arrived</span>
+      <span class="map-card-val">${fmtTime(log.completed_at)}</span>
+    </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Result</span>
+      <span class="rag ${ragClass(h)}">${healthLabel(h)}</span>
+    </div>`:''}
+    <div class="map-card-row">
+      <span class="map-card-lbl">Crew</span>
+      <span class="map-card-val" style="color:var(--green);font-weight:700">
+        <i class="ti ti-users" style="font-size:11px"></i> ${pax.length} aboard
+      </span>
+    </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Departed</span>
+      <span class="map-card-val">${log.started_at?fmtTime(log.started_at):'—'}</span>
+    </div>
+    <button class="map-card-btn" onclick="viewRouteForward('${log.id}',${lat},${lng})">
+      <i class="ti ti-route"></i> View route on map
+    </button>`;
+
+  // Position near click
+  const mapRect=document.getElementById('fleet-map').getBoundingClientRect();
+  const cx=e.originalEvent.clientX-mapRect.left;
+  const cy=e.originalEvent.clientY-mapRect.top;
+  let left=cx+18, top=cy-30;
+  if(left+250>mapRect.width) left=cx-258;
+  if(top+320>mapRect.height) top=mapRect.height-330;
+  if(top<10) top=10;
+  el.style.left=left+'px';
+  el.style.top=top+'px';
+
+  document.getElementById('main').appendChild(el);
+  _mapCard=el;
+}
+
+function closeMapCard(){
+  if(_mapCard){_mapCard.remove();_mapCard=null;}
+}
+
+// ── View route FORWARD from a clicked dot ─────────────────────────────────
+// The pin sits at a location. "View route on map" should always show the
+// leg that DEPARTS from that location — matched by origin_lat/origin_lng.
+// We find the leg for the same vehicle whose origin is nearest to the
+// clicked pin's coordinates. That is the departing leg to draw.
+async function viewRouteForward(logId, pinLat, pinLng){
+  const log=_allLogs.find(l=>l.id===logId);
+  if(!log) return;
+
+  // All legs for the same vehicle
+  const sameVehicle=_allLogs
+    .filter(l=>l.vehicle_plate===log.vehicle_plate && l.vehicle_plate)
+    .sort((a,b)=>new Date(a.started_at||0)-new Date(b.started_at||0));
+
+  // Find the leg whose ORIGIN is closest to the clicked pin
+  let bestLog=null, bestDist=Infinity;
+  sameVehicle.forEach(l=>{
+    const olat=parseFloat(l.origin_lat), olng=parseFloat(l.origin_lng);
+    if(isNaN(olat)||isNaN(olng)) return;
+    const d=Math.hypot(olat-pinLat, olng-pinLng);
+    if(d<bestDist){bestDist=d; bestLog=l;}
+  });
+
+  await viewSelectedOnMap([bestLog ? bestLog.id : logId]);
+}
+
+// ── Route + ping overlay ──────────────────────────────────────────────────
+function clearOverlays(){
+  _overlayLayers.forEach(l=>{try{l.remove?l.remove():_fleetMap.removeControl(l);}catch(e){}});
+  _overlayLayers=[];
+  document.getElementById('trip-color-legend').classList.remove('show');
+  document.getElementById('trip-color-legend').innerHTML='';
+  document.getElementById('map-legend').style.display='';
+}
+
+async function viewSelectedOnMap(ids){
+  clearOverlays();
+  closeMapCard();
+  const selectedIds = ids || [..._selected];
+  if(!selectedIds.length) return;
+
+  const multiMode = selectedIds.length > 1;
+  let allBounds = null;
+
+  // Build color map for multi-trip
+  const colorMap = {};
+  selectedIds.forEach((id,i)=>{ colorMap[id]=TRIP_PALETTE[i%TRIP_PALETTE.length]; });
+
+  // Build legend for multi-trip
+  if(multiMode){
+    const legend=document.getElementById('trip-color-legend');
+    legend.innerHTML='<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Trips</div>'+
+      selectedIds.map(id=>{
+        const log=_allLogs.find(l=>l.id===id);
+        if(!log) return '';
+        const name=(log.driver_name||'Driver').split(' ')[0];
+        const leg={outbound:'Out',return:'Ret',job_to_job:'J→J'}[log.leg_type]||'';
+        return `<div class="tcl-row">
+          <div class="tcl-line" style="background:${colorMap[id]}"></div>
+          <span class="tcl-label">${name} · ${leg}</span>
+        </div>`;
+      }).join('');
+    legend.classList.add('show');
+    // Hide the status dot legend while trip legend is visible
+    document.getElementById('map-legend').style.display='none';
+    // Position trip legend at bottom-right (map-legend is hidden, so take its spot)
+    legend.style.bottom='10px';
+    legend.style.right='10px';
+  }
+
+  // Draw each trip
+  for(const [idx, logId] of selectedIds.entries()){
+    const log=_allLogs.find(l=>l.id===logId);
+    if(!log) continue;
+
+    const tripColor=colorMap[logId];
+
+    const {data:pings}=await getSB().from('gps_pings')
+      .select('lat,lng,recorded_at,ping_health,deviation_m,speed,is_moving')
+      .eq('travel_log_id',logId)
+      .eq('trip_status','active')
+      .order('recorded_at',{ascending:true})
+      .limit(500);
+
+    const {data:stops}=await getSB().from('travel_stop_events')
+      .select('*').eq('travel_log_id',logId).eq('is_confirmed',true);
+
+    const activePings=(pings||[]).filter(p=>p.lat&&p.lng);
+    const coords=activePings.map(p=>[parseFloat(p.lat),parseFloat(p.lng)]);
+
+    // Planned route
+    const pr=log.planned_route;
+    if(pr?.polyline){
+      const pc=decodePolyline(pr.polyline);
+      if(pc.length>1){
+        const pl=L.polyline(pc,{color:multiMode?tripColor:'#1E5FAE',weight:4,opacity:.65,dashArray:'8 5'}).addTo(_fleetMap);
+        pl.bindPopup(`<b>Planned route</b><br>${log.driver_name||'Driver'} · ${{outbound:'Outbound',return:'Return',job_to_job:'Job→Job'}[log.leg_type]||''}<br>${pr.distance_miles!=null?pr.distance_miles.toFixed(1)+' mi':'—'} · ${pr.duration_text||fmtDur(pr.duration_seconds)||'—'}`);
+        _overlayLayers.push(pl);
+        allBounds=allBounds?allBounds.extend(pl.getBounds()):pl.getBounds();
+      }
+    }
+
+    // Ping connecting line
+    if(coords.length>1){
+      const gl=L.polyline(coords,{color:multiMode?tripColor+'80':'rgba(255,255,255,.2)',weight:2}).addTo(_fleetMap);
+      _overlayLayers.push(gl);
+      const lb=L.latLngBounds(coords);
+      allBounds=allBounds?allBounds.extend(lb):lb;
+    }
+
+    // Individual ping dots — RAG color if single trip, trip color if multi
+    activePings.forEach((p,i)=>{
+      const lat=parseFloat(p.lat), lng=parseFloat(p.lng);
+      // Single trip: use ping_health RAG colors; Multi trip: use trip palette color
+      const ragColors={green:'#6AB34F',amber:'#F4A93A',red:'#f87171',gray:'#888780'};
+      const fillColor=multiMode ? tripColor : (ragColors[p.ping_health||'gray']||'#888780');
+      const isEndpoint=i===0||i===activePings.length-1;
+      // Larger dots: endpoints 10px, middle 7px (up from 4px)
+      const r=isEndpoint?10:7;
+      const m=L.circleMarker([lat,lng],{
+        radius:r,color:'#fff',weight:2,fillColor,fillOpacity:1
+      }).addTo(_fleetMap);
+      const dev=p.deviation_m!=null?Math.round(p.deviation_m)+'m from route':'No deviation data';
+      const spd=p.speed!=null?Math.round(p.speed*2.237)+' mph':'—';
+      m.bindPopup(`<div style="font-size:12px;min-width:140px">
+        <b>${i===0?'Departed':i===activePings.length-1?'Last ping':'Ping '+(i+1)}</b><br>
+        ${log.driver_name||''}${log.leg_type?' · '+log.leg_type:''}<br>
+        ${fmtTime(p.recorded_at)}<br>
+        <span style="color:${fillColor}">${dev}</span><br>
+        Speed: ${spd}
+      </div>`);
+      _overlayLayers.push(m);
+    });
+
+    // Departure marker
+    if(coords.length>0){
+      const depIcon=L.divIcon({
+        html:`<div style="background:${multiMode?tripColor:'#1E5FAE'};color:#fff;font-size:9px;
+          font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;
+          border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)">Start</div>`,
+        className:'',iconAnchor:[16,10]
+      });
+      const dm=L.marker(coords[0],{icon:depIcon}).addTo(_fleetMap);
+      dm.bindPopup(`<b>Departed</b><br>${log.driver_name||''}<br>${fmtTime(log.started_at)}`);
+      _overlayLayers.push(dm);
+    }
+
+    // Stop markers
+    (stops||[]).filter(s=>s.lat&&s.lng).forEach(s=>{
+      const durMin=s.duration_secs?Math.round(s.duration_secs/60):'?';
+      const icon=L.divIcon({
+        html:`<div style="background:#a855f7;color:#fff;font-size:9px;font-weight:700;
+          padding:2px 6px;border-radius:4px;white-space:nowrap;border:2px solid #fff;
+          box-shadow:0 1px 4px rgba(0,0,0,.5)">${durMin}m</div>`,
+        className:'',iconAnchor:[16,10]
+      });
+      const sm=L.marker([parseFloat(s.lat),parseFloat(s.lng)],{icon}).addTo(_fleetMap);
+      sm.bindPopup(`<b style="color:#a855f7">Stop · ${durMin} min</b><br>Started: ${fmtTime(s.started_at)}`);
+      _overlayLayers.push(sm);
+    });
+
+    // Destination marker
+    if(log.dest_lat&&log.dest_lng){
+      const dlat=parseFloat(log.dest_lat), dlng=parseFloat(log.dest_lng);
+      const destIcon=L.divIcon({
+        html:`<div style="background:${multiMode?tripColor:'#6AB34F'};color:#fff;font-size:9px;
+          font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;
+          border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)">
+          ${log._ts?.client_name||'Dest'}</div>`,
+        className:'',iconAnchor:[20,10]
+      });
+      const dest=L.marker([dlat,dlng],{icon:destIcon}).addTo(_fleetMap);
+      dest.bindPopup(`<b>Destination</b><br>${log._ts?.client_name||''}`);
+      _overlayLayers.push(dest);
+      if(allBounds) allBounds=allBounds.extend([dlat,dlng]);
+      else allBounds=L.latLngBounds([[dlat,dlng]]);
+    }
+  }
+
+  // Add "Clear route" button to map
+  const clearCtrl=L.control({position:'topright'});
+  clearCtrl.onAdd=()=>{
+    const d=L.DomUtil.create('div');
+    d.innerHTML=`<button onclick="clearOverlays()" style="
+      background:rgba(17,31,51,.92);border:1px solid rgba(255,255,255,.2);
+      border-radius:6px;color:#e8f0f8;font-size:12px;padding:6px 12px;cursor:pointer;
+      display:flex;align-items:center;gap:5px;font-family:inherit;
+      box-shadow:0 2px 8px rgba(0,0,0,.4)">
+      <i class="ti ti-x"></i> Clear route
+    </button>`;
+    return d;
+  };
+  clearCtrl.addTo(_fleetMap);
+  _overlayLayers.push(clearCtrl);
+
+  if(allBounds) setTimeout(()=>_fleetMap.fitBounds(allBounds,{padding:[60,60]}),100);
+  if(_drawerOpen) toggleDrawer();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DRAWER
+// ════════════════════════════════════════════════════════════════════════════
+function toggleDrawer(){
+  _drawerOpen=!_drawerOpen;
+  document.getElementById('trips-drawer').classList.toggle('open',_drawerOpen);
+  if(_drawerOpen) renderDrawer();
+}
+
+function renderDrawer(search=''){
+  if(!_drawerOpen) return;
+  const q=(search||document.getElementById('drawer-search')?.value||'').toLowerCase();
+  const body=document.getElementById('drawer-body');
+
+  // Group by job
+  const groups={};
+  _filtered.forEach(log=>{
+    const key=log.timesheet_id||log.id;
+    if(!groups[key]) groups[key]={ts:log._ts||{},logs:[]};
+    groups[key].logs.push(log);
+  });
+
+  const gArr=Object.values(groups).filter(g=>{
+    if(!q) return true;
+    return (g.ts.client_name||'').toLowerCase().includes(q)||
+      g.logs.some(l=>(l.driver_name||'').toLowerCase().includes(q)||
+                     (l.vehicle_plate||'').toLowerCase().includes(q));
+  });
+
+  if(!gArr.length){
+    body.innerHTML='<div style="padding:2rem;text-align:center;color:var(--text3);font-size:12px">No trips match</div>';
+    return;
+  }
+
+  body.innerHTML=gArr.map(g=>{
+    const ts=g.ts;
+    const jobName=ts.client_name
+      ?`${ts.client_name}${ts.store_number?' · Store '+ts.store_number:''}${ts.city?' · '+ts.city+(ts.state?', '+ts.state:''):''}`
+      :'Unknown Job';
+    const legs=g.logs.sort((a,b)=>new Date(a.started_at||0)-new Date(b.started_at||0));
+    return `<div class="job-group">
+      <div class="job-header">
+        <div class="job-header-name">${jobName}</div>
+      </div>
+      ${legs.map(log=>{
+        const sel=_selected.has(log.id);
+        const h=calcTripHealth(log);
+        const s=tripStatusLabel(log);
+        const pax=log._pax||[];
+        const paxNames=pax.map(p=>(p.full_name||'').split(' ')[0]).join(', ');
+        const legLabel={outbound:'Outbound',return:'Return',job_to_job:'Job→Job'}[log.leg_type]||'—';
+        return `<div class="trip-row${sel?' selected':''}" onclick="toggleSelect('${log.id}',event)">
+          <input type="checkbox" class="trip-row-cb" ${sel?'checked':''}
+            onclick="toggleSelect('${log.id}',event)" onchange="return false"/>
+          <div class="trip-row-content">
+            <div class="trip-row-top">
+              <span class="trip-driver">${log.driver_name||'Driver'}</span>
+              <span class="trip-leg-badge">${legLabel}</span>
+              <span class="trip-time">${log.started_at?fmtTime(log.started_at):'—'}</span>
+            </div>
+            <div class="trip-row-detail">
+              <span class="status-pill ${s==='Boarding'?'sp-boarding':s==='En Route'?'sp-enroute':'sp-destinated'}">${s}</span>
+              ${s!=='Boarding'?`<span class="rag ${ragClass(h)}" style="font-size:9px">${healthLabel(h)}</span>`:''}
+              <span class="trip-pax-count"><i class="ti ti-users" style="font-size:10px"></i> ${pax.length}</span>
+              ${paxNames?`<span class="trip-pax-names">${paxNames}</span>`:''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+function toggleSelect(logId,e){
+  e.stopPropagation();
+  if(_selected.has(logId)) _selected.delete(logId);
+  else _selected.add(logId);
+  renderDrawer();
+}
+
+function clearSelections(){
+  _selected.clear();
+  clearOverlays();
+  renderFleetMarkers();
+  renderDrawer();
+}
+
+async function viewSelectedOnMapFromDrawer(){
+  await viewSelectedOnMap([..._selected]);
+}
+
+// Override so FAB version works
+const _origViewSelected=viewSelectedOnMap;
+
+// ════════════════════════════════════════════════════════════════════════════
+// DATE / REFRESH
+// ════════════════════════════════════════════════════════════════════════════
+function onDateChange(){
+  const val=document.getElementById('filter-date').value;
+  const today=new Date().toISOString().split('T')[0];
+  _isToday=(val===today);
+  stopAutoRefresh();
+  loadTrips();
+  if(_isToday) startAutoRefresh();
+  const lb=document.getElementById('live-badge');
+  if(lb) lb.style.display=_isToday?'flex':'none';
+}
+
+function startAutoRefresh(){
+  stopAutoRefresh();
+  if(!_isToday) return;
+  document.getElementById('live-badge').style.display='flex';
+  _refreshTimer=setInterval(async()=>{
+    document.getElementById('refresh-ring').style.display='flex';
+    await loadTrips();
+    setTimeout(()=>{document.getElementById('refresh-ring').style.display='none';},1000);
+  },60000);
+}
+
+function stopAutoRefresh(){
+  if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null;}
+  document.getElementById('live-badge').style.display='none';
+}
+
+function updateRefreshLabel(){
+  const el=document.getElementById('refresh-label');
+  if(el) el.textContent=_lastRefresh?'Updated '+fmtTime(_lastRefresh.toISOString()):'Refreshing…';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════════════════════════
+function decodePolyline(enc){
+  if(!enc) return [];
+  const pts=[];let i=0,lat=0,lng=0;
+  while(i<enc.length){
+    let b,sh=0,r=0;
+    do{b=enc.charCodeAt(i++)-63;r|=(b&0x1f)<<sh;sh+=5;}while(b>=0x20);
+    lat+=(r&1)?~(r>>1):(r>>1);sh=0;r=0;
+    do{b=enc.charCodeAt(i++)-63;r|=(b&0x1f)<<sh;sh+=5;}while(b>=0x20);
+    lng+=(r&1)?~(r>>1):(r>>1);
+    pts.push([lat/1e5,lng/1e5]);
+  }
+  return pts;
+}
+
+function fmtTime(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+
+function fmtDur(secs){
+  if(!secs) return '—';
+  const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60);
+  return h>0?`${h}h ${m}m`:`${m}m`;
+}
+</script>
+</body>
+</html>
