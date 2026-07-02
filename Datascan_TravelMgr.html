@@ -197,6 +197,12 @@ select.filter-input{cursor:pointer}
   color:#7eb8f7;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;
   display:flex;align-items:center;justify-content:center;gap:6px}
 .map-card-btn:hover{background:rgba(30,95,174,.35)}
+.hub-card-row{display:flex;align-items:center;gap:8px;padding:6px 4px;
+  border-radius:6px;cursor:pointer;transition:background .15s}
+.hub-card-row:hover{background:rgba(255,255,255,.06)}
+.hub-card-num{width:18px;height:18px;border-radius:50%;color:#fff;font-size:10px;
+  font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hub-card-role{font-size:11px;color:var(--text1);flex:1}
 
 /* ── Multi-trip color legend overlay ────────────────────────────────────── */
 #trip-color-legend{position:absolute;bottom:10px;right:10px;z-index:150;
@@ -239,7 +245,7 @@ select.filter-input{cursor:pointer}
       <i class="ti ti-login"></i> Sign in
     </button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:rgba(232,240,248,.25);letter-spacing:.04em">v1.0.7</div>
+    <div id="login-version" style="text-align:center;margin-top:.75rem;font-size:11px;color:rgba(232,240,248,.25);letter-spacing:.04em"></div>
   </div>
 </div>
 
@@ -366,13 +372,24 @@ let _allLogs = [], _filtered = [], _selected = new Set();
 let _sortCol = 'started_at', _sortAsc = false;
 let _fleetMap = null, _fleetMarkers = {};
 let _overlayLayers = [];   // all layers added for route/ping overlays
+let _autoTrailLayers = []; // planned route + ping trail + dest, auto-drawn for en-route trips
 let _mapCard = null;
 let _refreshTimer = null, _isToday = true, _lastRefresh = null;
 let _drawerOpen = false;
 
+// ── Boarding (onboarding) live state ────────────────────────────────────────
+let _boardingGroups = [];       // pseudo-trips built from pending_board gps_pings
+let _filteredBoarding = [];     // boarding groups after applying topbar filters
+let _knownLocations = [];       // manager-tagged locations, e.g. hotels
+let _locationHubs = [];         // clustered departure/arrival points across today's legs
+let _profilesCache = {};        // driver_id -> full_name
+let _boardingSub = null, _trackingSub = null;
+let _realtimeDebounce = null;
+
 // ════════════════════════════════════════════════════════════════════════════
 // SUPABASE
 // ════════════════════════════════════════════════════════════════════════════
+const APP_VERSION   = 'v1.1.0';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -381,6 +398,8 @@ function getSB(){ return _sb; }
 
 waitForSB(()=>{
   _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const vEl=document.getElementById('login-version');
+  if(vEl) vEl.textContent=APP_VERSION;
   getSB().auth.getSession().then(async({data})=>{
     if(data.session?.user) await onSignedIn(data.session.user);
   });
@@ -427,14 +446,53 @@ async function onSignedIn(user){
   initFleetMap();
   await loadTrips();
   startAutoRefresh();
+  subscribeRealtime();
 }
 
 async function doLogout(){
   stopAutoRefresh();
+  unsubscribeRealtime();
   await getSB().auth.signOut();
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').style.display='none';
-  currentUser=null;currentProfile=null;_allLogs=[];_filtered=[];
+  currentUser=null;currentProfile=null;_allLogs=[];_filtered=[];_boardingGroups=[];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REALTIME — onboarding (pending_board) and en-route tracking pings
+// ════════════════════════════════════════════════════════════════════════════
+function subscribeRealtime(){
+  if(_boardingSub||_trackingSub) return;
+
+  // Passengers boarding/un-boarding — reflect instantly, this is the
+  // "who's getting in the vehicle right now" signal managers need live.
+  _boardingSub = getSB().channel('mgr-pending-board-rt')
+    .on('postgres_changes',
+      {event:'*',schema:'public',table:'gps_pings',filter:'event_type=eq.pending_board'},
+      async()=>{
+        if(!_isToday) return;
+        await loadBoardingGroups();
+        applyFilters();
+      })
+    .subscribe();
+
+  // Active trip tracking pings — debounced full refresh so the live route/
+  // trail/ETA on the map stays current without waiting for the 60s poll.
+  _trackingSub = getSB().channel('mgr-tracking-rt')
+    .on('postgres_changes',
+      {event:'INSERT',schema:'public',table:'gps_pings',filter:'event_type=eq.tracking'},
+      ()=>{
+        if(!_isToday) return;
+        if(_realtimeDebounce) clearTimeout(_realtimeDebounce);
+        _realtimeDebounce=setTimeout(()=>{ loadTrips(); },2000);
+      })
+    .subscribe();
+}
+
+function unsubscribeRealtime(){
+  if(_boardingSub){ getSB().removeChannel(_boardingSub); _boardingSub=null; }
+  if(_trackingSub){ getSB().removeChannel(_trackingSub); _trackingSub=null; }
+  if(_realtimeDebounce){ clearTimeout(_realtimeDebounce); _realtimeDebounce=null; }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -488,6 +546,52 @@ async function loadTrips(){
 
   _allLogs=(logs||[]).map(l=>({...l,_ts:tsMap[l.timesheet_id]||{},_pax:paxMap[l.id]||[],_lastPing:pingMap[l.id]||null}));
 
+  // Full ping-trail history for active (en route) legs, batched in one query,
+  // so the manager map can draw where each vehicle has been, not just where
+  // it is right now.
+  const activeIds=_allLogs.filter(l=>l.status==='active').map(l=>l.id);
+  let trailMap={};
+  if(activeIds.length){
+    const {data:trailPings}=await getSB().from('gps_pings')
+      .select('travel_log_id,lat,lng,speed,recorded_at,ping_health,deviation_m,is_moving')
+      .in('travel_log_id',activeIds)
+      .eq('trip_status','active')
+      .order('recorded_at',{ascending:true})
+      .limit(3000);
+    (trailPings||[]).forEach(p=>{
+      if(!trailMap[p.travel_log_id]) trailMap[p.travel_log_id]=[];
+      trailMap[p.travel_log_id].push(p);
+    });
+  }
+  _allLogs=_allLogs.map(l=>({...l,_trail:trailMap[l.id]||[]}));
+
+  // Stop events (fuel/rest/meal/traffic/other, self-reported by the driver)
+  // for active legs, batched in one query, so the live map can render them
+  // alongside the trail without a per-leg round trip.
+  let stopMap={};
+  if(activeIds.length){
+    const {data:stopRows}=await getSB().from('travel_stop_events')
+      .select('id,travel_log_id,lat,lng,started_at,duration_secs,is_confirmed,stop_type')
+      .in('travel_log_id',activeIds)
+      .eq('is_confirmed',true);
+    (stopRows||[]).forEach(s=>{
+      if(!stopMap[s.travel_log_id]) stopMap[s.travel_log_id]=[];
+      stopMap[s.travel_log_id].push(s);
+    });
+  }
+  _allLogs=_allLogs.map(l=>({...l,_stops:stopMap[l.id]||[]}));
+
+  // Manager-tagged known locations (currently just "hotel") — optional table;
+  // fail open (empty) if it doesn't exist yet rather than breaking the map.
+  try{
+    const {data:known}=await getSB().from('known_locations').select('lat,lng,location_type');
+    _knownLocations=known||[];
+  }catch(e){ _knownLocations=[]; }
+
+  // Passengers currently boarding a vehicle (no travel_log yet)
+  if(_isToday) await loadBoardingGroups();
+  else _boardingGroups=[];
+
   // Populate vehicle filter
   const vehicles=[...new Set(_allLogs.map(l=>l.vehicle_plate).filter(Boolean))].sort();
   const vSel=document.getElementById('filter-vehicle');
@@ -498,6 +602,213 @@ async function loadTrips(){
   applyFilters();
   _lastRefresh=new Date();
   updateRefreshLabel();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOCATION HUBS — departure/arrival points clustered by coordinate
+// ════════════════════════════════════════════════════════════════════════════
+// Every leg contributes two boundary events: departs (origin) and arrives
+// (destination). Job-to-job legs chain, so an internal boundary is always
+// touched by two legs at once (leg N arrives where leg N+1 departs) — that's
+// a "waypoint". The very first departure of the day and the very last
+// arrival aren't tied to any job; when they land on the same coordinate
+// (the common case — a loop returning to where it started) that's a "meet
+// spot", carrying however many legs' departures/arrivals touch it.
+//
+// Two different signals decide whether two events are "the same stop":
+//  - Sequential adjacency (leg N's arrival, leg N+1's departure) — this is
+//    ALWAYS the same physical stop by construction, even though the two
+//    events come from different coordinate sources that rarely match
+//    exactly (leg N's destination is the store's geocoded address; leg
+//    N+1's origin is the driver's live GPS reading when they tap "begin
+//    next leg" — parking lot vs. storefront, plus ordinary GPS drift).
+//    Adjacency is checked first and is authoritative.
+//  - Coordinate proximity — the only signal available for the meet-spot
+//    case, since the first departure and the last arrival aren't adjacent
+//    legs (there's a whole loop between them).
+const HUB_TOLERANCE_DEG = 0.00025; // ~25-28m — meet-spot GPS drift only
+const HEALTH_SEVERITY = {'#f87171':3,'#F4A93A':2,'#6AB34F':1,'#7eb8f7':0,'#888780':0};
+
+function _hubGridKey(lat,lng){
+  return Math.round(lat/HUB_TOLERANCE_DEG)+':'+Math.round(lng/HUB_TOLERANCE_DEG);
+}
+
+function buildLocationHubs(logs){
+  const byVehicle={};
+  logs.forEach(l=>{
+    if(!l.vehicle_plate) return;
+    (byVehicle[l.vehicle_plate]=byVehicle[l.vehicle_plate]||[]).push(l);
+  });
+
+  const hubs={};       // hub id -> hub object
+  const hubIndex={};   // "plate::gridKey" -> hub id, for coordinate lookups
+
+  const getOrCreateHub=(plate,lat,lng)=>{
+    lat=parseFloat(lat); lng=parseFloat(lng);
+    if(!lat||!lng||isNaN(lat)||isNaN(lng)) return null;
+    const key=plate+'::'+_hubGridKey(lat,lng);
+    if(!hubIndex[key]){
+      const id='hub:'+key;
+      hubs[id]={id, vehicle_plate:plate, lat, lng, events:[]};
+      hubIndex[key]=id;
+    }
+    return hubIndex[key];
+  };
+
+  Object.entries(byVehicle).forEach(([plate,vehLogs])=>{
+    const sorted=vehLogs.slice().sort((a,b)=>new Date(a.started_at||0)-new Date(b.started_at||0));
+
+    // Carries the previous leg's arrival hub id forward, so a chained leg's
+    // departure lands in the SAME hub regardless of GPS offset.
+    let prevArrivalHubId=null;
+
+    // Carries the day's meet-spot hub id forward from the first outbound
+    // departure to the eventual return arrival. Same reasoning as the
+    // job-to-job chain above: "return leg ends where the outbound leg
+    // started" is a structural fact of how the app builds a return leg
+    // (not just two GPS readings that happen to be nearby), so it should
+    // merge the same way — not depend on distance at all. Resets once
+    // consumed, so a later unrelated outbound leg on the same vehicle
+    // starts its own new meet-spot hub rather than reusing a stale one.
+    let meetHubId=null;
+
+    sorted.forEach((log,idx)=>{
+      const legNum=idx+1;
+      const legType=log.leg_type||'outbound';
+      const isMeetDepart=legType==='outbound';
+      const isMeetArrive=legType==='return';
+
+      if(log.origin_lat&&log.origin_lng){
+        let hid;
+        if(isMeetDepart){
+          hid = meetHubId || getOrCreateHub(plate,log.origin_lat,log.origin_lng);
+          meetHubId = hid;
+        } else if(prevArrivalHubId){
+          hid = prevArrivalHubId;
+        } else {
+          hid = getOrCreateHub(plate,log.origin_lat,log.origin_lng);
+        }
+        if(hid) hubs[hid].events.push({role:'departs', legNum, log, isMeet:isMeetDepart});
+      }
+
+      prevArrivalHubId=null;
+      if(log.dest_lat&&log.dest_lng){
+        const hid = (isMeetArrive && meetHubId) ? meetHubId : getOrCreateHub(plate,log.dest_lat,log.dest_lng);
+        if(hid){
+          hubs[hid].events.push({role:'arrives', legNum, log, isMeet:isMeetArrive});
+          prevArrivalHubId=hid;
+        }
+        if(isMeetArrive) meetHubId=null; // consumed — a later outbound leg gets a fresh hub
+      }
+    });
+  });
+
+  return Object.values(hubs).map(h=>{
+    h.type=classifyHub(h);
+    h.color=hubBadgeColor(h.events);
+    h.hotel=isHotelLocation(h.lat,h.lng);
+    h.events.sort((a,b)=>a.legNum-b.legNum); // departs (lowest legNum) first, arrives last
+    return h;
+  });
+}
+
+// meetspot        — dual role, split badge, no chip (steering-wheel chip only
+//                    when it's a single-role meet spot with no return pairing)
+// meetspot-single — one-off departure/arrival with no job tie
+// waypoint        — internal job-to-job boundary, likely a passenger swap
+// job             — a single-role job-site endpoint
+function classifyHub(hub){
+  const anyMeet=hub.events.some(e=>e.isMeet);
+  if(anyMeet) return hub.events.length>1 ? 'meetspot' : 'meetspot-single';
+  return hub.events.length>1 ? 'waypoint' : 'job';
+}
+
+function hubBadgeColor(events){
+  let worst=null, worstScore=-1;
+  events.forEach(e=>{
+    const c=dotColor(e.log);
+    const score=HEALTH_SEVERITY[c]??0;
+    if(score>worstScore){ worstScore=score; worst=c; }
+  });
+  return worst||'#888780';
+}
+
+function isHotelLocation(lat,lng){
+  return _knownLocations.some(k=>
+    k.location_type==='hotel' &&
+    Math.abs(parseFloat(k.lat)-lat) < HUB_TOLERANCE_DEG*1.5 &&
+    Math.abs(parseFloat(k.lng)-lng) < HUB_TOLERANCE_DEG*1.5
+  );
+}
+
+// ── Onboarding: passengers boarding, before a travel_logs row exists ───────
+// Drivers write one gps_pings row per boarded passenger (event_type =
+// 'pending_board', travel_log_id null). We group those by vehicle+job into
+// lightweight pseudo-trips so the map/drawer can show boarding activity in
+// real time, before the trip officially starts.
+async function loadBoardingGroups(){
+  const {data:pings}=await getSB().from('gps_pings')
+    .select('id,driver_id,timesheet_id,vehicle_plate,profile_id,passenger_name,lat,lng,recorded_at')
+    .eq('event_type','pending_board')
+    .order('recorded_at',{ascending:true});
+
+  if(!pings||!pings.length){ _boardingGroups=[]; return; }
+
+  // Resolve driver names — prefer what we already have from today's trips
+  // (driver_name is denormalized on travel_logs) to avoid a profiles query
+  // that may be blocked by row-level security for other users.
+  const unresolved=[...new Set(pings.map(p=>p.driver_id).filter(Boolean))]
+    .filter(id=>{
+      if(_profilesCache[id]) return false;
+      const match=_allLogs.find(l=>l.driver_id===id && l.driver_name);
+      if(match){ _profilesCache[id]=match.driver_name; return false; }
+      return true;
+    });
+  if(unresolved.length){
+    try{
+      const {data:profs}=await getSB().from('profiles').select('id,full_name').in('id',unresolved);
+      (profs||[]).forEach(p=>{ _profilesCache[p.id]=p.full_name; });
+    }catch(e){ /* RLS may block cross-user lookups — fall back to a generic label */ }
+  }
+
+  // Resolve job names for boarding groups that don't overlap today's _ts map
+  const tsIds=[...new Set(pings.map(p=>p.timesheet_id).filter(Boolean))];
+  let tsMap={};
+  tsIds.forEach(id=>{ const l=_allLogs.find(x=>x.timesheet_id===id); if(l) tsMap[id]=l._ts; });
+  const missingTs=tsIds.filter(id=>!tsMap[id]);
+  if(missingTs.length){
+    const {data:tsList}=await getSB().from('timesheets')
+      .select('id,client_name,store_number,city,state').in('id',missingTs);
+    (tsList||[]).forEach(t=>{ tsMap[t.id]=t; });
+  }
+
+  const groups={};
+  pings.forEach(p=>{
+    const key=(p.timesheet_id||'x')+'::'+(p.vehicle_plate||'x');
+    if(!groups[key]){
+      groups[key]={
+        id:'board:'+key,
+        _isBoarding:true,
+        status:'setup',
+        leg_type:'outbound',
+        vehicle_plate:p.vehicle_plate,
+        driver_id:p.driver_id,
+        driver_name:_profilesCache[p.driver_id]||'Driver',
+        timesheet_id:p.timesheet_id,
+        _ts:tsMap[p.timesheet_id]||{},
+        _pax:[],
+        origin_lat:p.lat, origin_lng:p.lng,
+        started_at:p.recorded_at,
+        _lastPing:null, _trail:[],
+        planned_route:null,
+      };
+    }
+    const g=groups[key];
+    g.origin_lat=p.lat; g.origin_lng=p.lng; // pings arrive in ascending order — latest wins
+    g._pax.push({full_name:p.passenger_name||'Passenger', profile_id:p.profile_id});
+  });
+
+  _boardingGroups=Object.values(groups);
 }
 
 function applyFilters(){
@@ -516,11 +827,23 @@ function applyFilters(){
     return true;
   });
 
+  _filteredBoarding=_boardingGroups.filter(g=>{
+    if(v&&g.vehicle_plate!==v) return false;
+    if(st&&st!=='setup') return false; // boarding groups only match the "Boarding" status filter
+    return true;
+  });
+
+  // Hubs are built from every leg touching a vehicle today (not just the
+  // status-filtered subset) so a meet spot still shows its full departs/
+  // arrives pairing even if, say, only "En Route" is checked — then filtered
+  // down to the vehicles currently in view.
+  _locationHubs=buildLocationHubs(_allLogs).filter(h=>!v||h.vehicle_plate===v);
+
   renderStats();
   renderFleetMarkers();
   renderDrawer();
-  document.getElementById('fab-badge').textContent=_filtered.length;
-  document.getElementById('drawer-count').textContent=_filtered.length;
+  document.getElementById('fab-badge').textContent=_filtered.length+_filteredBoarding.length;
+  document.getElementById('drawer-count').textContent=_filtered.length+_filteredBoarding.length;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -596,23 +919,25 @@ function renderFleetMarkers(){
   if(!_fleetMap) return;
   Object.values(_fleetMarkers).forEach(m=>m.remove());
   _fleetMarkers={};
+  _autoTrailLayers.forEach(l=>{try{l.remove?l.remove():_fleetMap.removeControl(l);}catch(e){}});
+  _autoTrailLayers=[];
 
-  _filtered.forEach(log=>{
+  // Live position — only for legs actually en route right now. A completed
+  // leg's "last known position" is already covered by its arrival hub badge,
+  // so drawing both would just stack a plain dot on top of a numbered one.
+  _filtered.filter(l=>l.status==='active').forEach(log=>{
     const ping=log._lastPing;
     const lat=parseFloat(ping?.lat||log.origin_lat);
     const lng=parseFloat(ping?.lng||log.origin_lng);
     if(!lat||!lng||isNaN(lat)||isNaN(lng)) return;
 
     const color=dotColor(log);
-    const isActive=log.status==='active';
-
-    // Larger dots — 18px diameter with glow for active
     const icon=L.divIcon({
       html:`<div style="
         width:18px;height:18px;border-radius:50%;
         background:${color};
         border:3px solid rgba(255,255,255,.9);
-        box-shadow:${isActive?`0 0 0 4px ${color}35,`:''} 0 2px 8px rgba(0,0,0,.6);
+        box-shadow:0 0 0 4px ${color}35, 0 2px 8px rgba(0,0,0,.6);
         cursor:pointer;transition:transform .1s"
         onmouseenter="this.style.transform='scale(1.3)'"
         onmouseleave="this.style.transform='scale(1)'">
@@ -620,9 +945,38 @@ function renderFleetMarkers(){
       className:'',iconAnchor:[9,9]
     });
 
-    const m=L.marker([lat,lng],{icon}).addTo(_fleetMap);
+    const m=L.marker([lat,lng],{icon,zIndexOffset:500}).addTo(_fleetMap);
     m.on('click',e=>{L.DomEvent.stopPropagation(e);showMapCard(log,lat,lng,e);});
-    _fleetMarkers[log.id]=m;
+    _fleetMarkers['live:'+log.id]=m;
+
+    if(tripStatusLabel(log)==='En Route') drawAutoTrail(log);
+  });
+
+  // Structural waypoints — every departure/arrival point touched today,
+  // clustered into hubs and numbered by sequence. Covers start, destination,
+  // and everywhere in between, whether the leg is still active or already
+  // completed.
+  renderLocationHubs();
+
+  // Boarding pseudo-markers — passengers currently getting into a vehicle
+  _filteredBoarding.forEach(g=>{
+    const lat=parseFloat(g.origin_lat), lng=parseFloat(g.origin_lng);
+    if(!lat||!lng||isNaN(lat)||isNaN(lng)) return;
+    const color='#7eb8f7';
+    const icon=L.divIcon({
+      html:`<div style="
+        width:18px;height:18px;border-radius:50%;background:${color};
+        border:3px solid rgba(255,255,255,.9);
+        box-shadow:0 0 0 4px ${color}35,0 2px 8px rgba(0,0,0,.6);
+        cursor:pointer;transition:transform .1s"
+        onmouseenter="this.style.transform='scale(1.3)'"
+        onmouseleave="this.style.transform='scale(1)'">
+      </div>`,
+      className:'',iconAnchor:[9,9]
+    });
+    const m=L.marker([lat,lng],{icon,zIndexOffset:500}).addTo(_fleetMap);
+    m.on('click',e=>{L.DomEvent.stopPropagation(e);showMapCard(g,lat,lng,e);});
+    _fleetMarkers[g.id]=m;
   });
 
   if(!_mapCard){
@@ -632,26 +986,228 @@ function renderFleetMarkers(){
   }
 }
 
-// ── Map card ──────────────────────────────────────────────────────────────
-function showMapCard(log,lat,lng,e){
+// ── Location hubs — numbered departure/arrival badges ───────────────────────
+const HUB_CIRCLE=44, HUB_CHIP=24, HUB_BOX=56, HUB_OFFSET=12;
+
+function hubChipIcon(hub){
+  if(hub.hotel) return 'ti-bed';
+  if(hub.type==='job') return 'ti-building-store';
+  if(hub.type==='waypoint') return 'ti-users';
+  if(hub.type==='meetspot'||hub.type==='meetspot-single') return 'ti-steering-wheel';
+  return null;
+}
+
+function hubMarkerHTML(hub){
+  // Same single-circle pattern as every other pin — one badge, joined leg
+  // numbers in the order they occurred (depart's number first, arrive's
+  // second), a chip identifying what kind of place it is. A meet spot isn't
+  // a different shape, just a different chip.
+  const label = (hub.type==='waypoint'||hub.type==='meetspot')
+    ? [...new Set(hub.events.map(e=>e.legNum))].join('\u00B7')
+    : String(hub.events[0]?.legNum ?? '');
+  const chipIcon=hubChipIcon(hub);
+  const chip=chipIcon?`<div style="position:absolute;left:0;top:0;width:${HUB_CHIP}px;height:${HUB_CHIP}px;
+    border-radius:50%;background:#5F5E5A;border:2px solid #0b1929;display:flex;align-items:center;
+    justify-content:center;z-index:2"><i class="ti ${chipIcon}" style="font-size:13px;color:#fff"></i></div>`:'';
+  return `<div style="position:relative;width:${HUB_BOX}px;height:${HUB_BOX}px;cursor:pointer">
+    <div style="position:absolute;left:${HUB_OFFSET}px;top:${HUB_OFFSET}px;width:${HUB_CIRCLE}px;height:${HUB_CIRCLE}px;
+      border-radius:50%;background:${hub.color};border:3.5px solid rgba(255,255,255,.9);color:#fff;
+      font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;
+      box-shadow:0 2px 8px rgba(0,0,0,.6)">${label}</div>
+    ${chip}
+  </div>`;
+}
+
+function renderLocationHubs(){
+  _locationHubs.forEach(hub=>{
+    const icon=L.divIcon({
+      html:hubMarkerHTML(hub), className:'',
+      iconSize:[HUB_BOX,HUB_BOX],
+      iconAnchor:[HUB_OFFSET+HUB_CIRCLE/2, HUB_OFFSET+HUB_CIRCLE/2],
+    });
+    const m=L.marker([hub.lat,hub.lng],{icon,zIndexOffset:400}).addTo(_fleetMap);
+    m.on('click',e=>{L.DomEvent.stopPropagation(e);showHubCard(hub,e);});
+    _fleetMarkers[hub.id]=m;
+  });
+}
+
+function showHubCard(hub,e){
+  // A hub touched by exactly one leg is really just that leg's endpoint —
+  // no need for an intermediate list, go straight to its own card.
+  if(hub.events.length===1){
+    showMapCard(hub.events[0].log, hub.lat, hub.lng, e, hub.events[0].role);
+    return;
+  }
+
   closeMapCard();
+  const el=document.createElement('div');
+  el.className='map-card';
+  el.id='active-map-card';
+  el.innerHTML=`
+    <button class="map-card-close" onclick="closeMapCard()">×</button>
+    <div class="map-card-name">${hub.type==='meetspot'?'Meet spot':'Waypoint'}${hub.hotel?' · Hotel':''}</div>
+    <div class="map-card-job">${hub.vehicle_plate||''}</div>
+    <div class="map-card-divider"></div>
+    <div id="hub-card-rows"></div>`;
+
+  const rowsEl=el.querySelector('#hub-card-rows');
+  hub.events.forEach(ev=>{
+    const roleColor=ev.role==='departs'?'#1E5FAE':'#F4A93A';
+    const roleIcon=ev.role==='departs'?'ti-arrow-up-right':'ti-arrow-down-left';
+    const roleLabel=ev.role==='departs'?'Departs':'Arrives';
+    const t=ev.role==='departs'?ev.log.started_at:ev.log.completed_at;
+    const row=document.createElement('div');
+    row.className='hub-card-row';
+    row.innerHTML=`
+      <div class="hub-card-num" style="background:${roleColor}">${ev.legNum}</div>
+      <i class="ti ${roleIcon}" style="font-size:12px;color:${roleColor}"></i>
+      <span class="hub-card-role">${roleLabel}${t?' '+fmtTime(t):''}</span>
+      <i class="ti ti-chevron-right" style="font-size:12px;color:rgba(232,240,248,.35);margin-left:auto"></i>`;
+    row.addEventListener('click',()=>{ showMapCard(ev.log, hub.lat, hub.lng, e, ev.role); });
+    rowsEl.appendChild(row);
+  });
+
+  positionMapCard(el,e);
+  document.getElementById('main').appendChild(el);
+  _mapCard=el;
+}
+
+function stopTypeMetaMgr(t){
+  return {
+    fuel:   {label:'Fuel',    icon:'ti-gas-station'},
+    rest:   {label:'Rest',    icon:'ti-coffee'},
+    meal:   {label:'Meal',    icon:'ti-tools-kitchen-2'},
+    traffic:{label:'Traffic', icon:'ti-car'},
+    other:  {label:'Other',   icon:'ti-dots'},
+  }[t] || {label:'Untagged', icon:'ti-help'};
+}
+
+// ── Auto route + trail + destination, drawn live for en-route trips ────────
+function drawAutoTrail(log){
+  const trail=(log._trail||[]).filter(p=>p.lat&&p.lng);
+  const coords=trail.map(p=>[parseFloat(p.lat),parseFloat(p.lng)]);
+  const ragColors={green:'#6AB34F',amber:'#F4A93A',red:'#f87171'};
+
+  // Planned route — thin dashed line so it reads as "the plan" behind the
+  // actual trail, and doesn't overwhelm the map when several vehicles show.
+  const pr=log.planned_route;
+  if(pr?.polyline){
+    const pc=decodePolyline(pr.polyline);
+    if(pc.length>1){
+      const pl=L.polyline(pc,{color:'#1E5FAE',weight:3,opacity:.45,dashArray:'6 6'}).addTo(_fleetMap);
+      _autoTrailLayers.push(pl);
+    }
+  }
+
+  // Ping-by-ping trail line, segment-colored by health at that point in time.
+  if(coords.length>1){
+    for(let i=1;i<coords.length;i++){
+      const col=ragColors[trail[i].ping_health]||'rgba(255,255,255,.4)';
+      const ln=L.polyline([coords[i-1],coords[i]],{color:col,weight:3,opacity:.85}).addTo(_fleetMap);
+      _autoTrailLayers.push(ln);
+    }
+
+    // GPS ping breadcrumbs — thinned so a long leg doesn't turn into a wall
+    // of dots, but always includes the very first and last ping.
+    const maxDots=14;
+    const step=Math.max(1,Math.ceil(coords.length/maxDots));
+    const indices=new Set();
+    for(let i=0;i<coords.length;i+=step) indices.add(i);
+    indices.add(coords.length-1);
+    [...indices].sort((a,b)=>a-b).forEach(i=>{
+      const p=trail[i];
+      const col=ragColors[p.ping_health]||'rgba(255,255,255,.5)';
+      const dotIcon=L.divIcon({
+        html:`<div style="width:9px;height:9px;border-radius:50%;background:${col};
+          border:1.5px solid rgba(255,255,255,.8);cursor:pointer"></div>`,
+        className:'',iconAnchor:[5,5]
+      });
+      const dm=L.marker(coords[i],{icon:dotIcon,zIndexOffset:300}).addTo(_fleetMap);
+      const spdTxt=p.speed!=null?Math.round(p.speed*2.237)+' mph':'—';
+      const devTxt=p.deviation_m!=null?Math.round(p.deviation_m)+'m from route':'No deviation data';
+      dm.bindPopup(`<div style="font:12px Arial;color:#0b1929"><strong>${fmtTime(p.recorded_at)}</strong><br/>${spdTxt} · ${devTxt}</div>`);
+      _autoTrailLayers.push(dm);
+    });
+  }
+
+  // Stop pills — fuel/rest/meal/traffic/other, self-reported by the driver.
+  // Deliberately unnumbered: these aren't planned trip structure, just
+  // things that happened along the way.
+  (log._stops||[]).forEach(s=>{
+    const slat=parseFloat(s.lat), slng=parseFloat(s.lng);
+    if(!slat||!slng||isNaN(slat)||isNaN(slng)) return;
+    const meta=stopTypeMetaMgr(s.stop_type);
+    const pillIcon=L.divIcon({
+      html:`<div style="width:36px;height:36px;border-radius:50%;background:#a855f7;
+        border:3px solid rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer">
+        <i class="ti ${meta.icon}" style="font-size:17px;color:#fff"></i>
+      </div>`,
+      className:'',iconAnchor:[18,18]
+    });
+    const sm=L.marker([slat,slng],{icon:pillIcon,zIndexOffset:450}).addTo(_fleetMap);
+    const mins=s.duration_secs?Math.round(s.duration_secs/60):null;
+    sm.bindPopup(`<div style="font:12px Arial;color:#0b1929"><strong>${meta.label}</strong><br/>${fmtTime(s.started_at)}${mins?' · '+mins+' min':''}</div>`);
+    _autoTrailLayers.push(sm);
+  });
+}
+
+// ── Map card ──────────────────────────────────────────────────────────────
+function showMapCard(log,lat,lng,e,role){
+  closeMapCard();
+
+  if(log._isBoarding){ showBoardingCard(log,lat,lng,e); return; }
+
   const s=tripStatusLabel(log), h=calcTripHealth(log), ts=log._ts||{};
   const pax=log._pax||[];
+  const paxNames=pax.map(p=>p.full_name).filter(Boolean).join(', ')||'—';
   const spClass={Boarding:'sp-boarding','En Route':'sp-enroute',Destinated:'sp-destinated'}[s]||'sp-enroute';
+  const lastP=log._lastPing;
 
+  // Live ETA: prefer distance-remaining ÷ current speed from the latest
+  // ping (matches what the driver app itself estimates); fall back to the
+  // planned route's static duration when live speed isn't available yet.
   let etaText='—';
-  if(log.started_at&&log.planned_route?.duration_seconds){
+  let distText='—';
+  if(s==='En Route'&&lastP?.lat&&lastP?.lng&&log.dest_lat&&log.dest_lng){
+    const distM=haversineMeters(parseFloat(lastP.lat),parseFloat(lastP.lng),parseFloat(log.dest_lat),parseFloat(log.dest_lng));
+    distText=(distM/1609.34).toFixed(1)+' mi';
+    const spdMs=lastP.speed&&lastP.speed>0.9?lastP.speed:5.6; // ~12.5mph fallback while crawling/stopped
+    const etaMins=Math.round(distM/spdMs/60);
+    etaText=etaMins<=1?'Arriving':etaMins+' min';
+  } else if(log.started_at&&log.planned_route?.duration_seconds){
     const eta=new Date(new Date(log.started_at).getTime()+log.planned_route.duration_seconds*1000);
     etaText=fmtTime(eta.toISOString());
   }
+
+  const speedText=lastP?.speed!=null?Math.round(lastP.speed*2.237)+' mph':(s==='En Route'?'—':null);
+
+  // Origin/destination — always both, always addressed, regardless of which
+  // hub row got you here. A leg's origin address isn't a column on
+  // travel_logs, but it's always the SAME physical spot as the previous
+  // leg's destination (that's exactly how hubs get merged), so borrow it
+  // from there rather than falling back to a job name that can repeat
+  // across two different addresses for the same client.
+  const sameVeh=_allLogs.filter(l=>l.vehicle_plate===log.vehicle_plate)
+    .sort((a,b)=>new Date(a.started_at||0)-new Date(b.started_at||0));
+  const vIdx=sameVeh.findIndex(l=>l.id===log.id);
+  const prevLeg=vIdx>0?sameVeh[vIdx-1]:null;
+  const originLabel = log.leg_type==='outbound'
+    ? 'Meet spot'
+    : (prevLeg?.dest_address || prevLeg?._ts?.client_name || 'Previous stop');
+  const destLabel = log.dest_address || ts.client_name || '—';
+  const arrivedOrEta = s==='En Route' ? etaText : (log.completed_at?fmtTime(log.completed_at):'—');
+  const arrivedOrEtaLbl = s==='En Route' ? 'ETA' : 'Arrived';
 
   const el=document.createElement('div');
   el.className='map-card';
   el.id='active-map-card';
   el.innerHTML=`
     <button class="map-card-close" onclick="closeMapCard()">×</button>
-    <div style="margin-bottom:8px">
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <span class="status-pill ${spClass}">${s}</span>
+      ${role?`<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+        color:${role==='arrives'?'#F4A93A':'#85B7EB'}">${role==='arrives'?'· Arrival here':'· Departure from here'}</span>`:''}
     </div>
     <div class="map-card-name">${log.driver_name||'Driver'}</div>
     <div class="map-card-job">${ts.client_name||'—'}${ts.store_number?' · Store '+ts.store_number:''}${ts.city?' · '+ts.city:''}</div>
@@ -660,39 +1216,102 @@ function showMapCard(log,lat,lng,e){
       <span class="map-card-lbl">Leg</span>
       <span class="map-card-val">${{outbound:'Outbound',return:'Return',job_to_job:'Job→Job'}[log.leg_type]||'—'}</span>
     </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Vehicle</span>
+      <span class="map-card-val">${log.vehicle_plate||'—'}</span>
+    </div>
+    <div class="map-card-divider"></div>
+    <div class="map-card-row" style="align-items:flex-start">
+      <span class="map-card-lbl">Origin</span>
+      <span class="map-card-val" style="white-space:normal;max-width:150px">${originLabel}</span>
+    </div>
+    <div class="map-card-row" style="padding-left:12px">
+      <span class="map-card-lbl" style="opacity:.65">&#8627; Departed</span>
+      <span class="map-card-val">${log.started_at?fmtTime(log.started_at):'—'}</span>
+    </div>
+    <div class="map-card-row" style="align-items:flex-start;margin-top:4px">
+      <span class="map-card-lbl">Destination</span>
+      <span class="map-card-val" style="white-space:normal;max-width:150px">${destLabel}</span>
+    </div>
+    <div class="map-card-row" style="padding-left:12px">
+      <span class="map-card-lbl" style="opacity:.65">&#8627; ${arrivedOrEtaLbl}</span>
+      <span class="map-card-val">${arrivedOrEta}</span>
+    </div>
+    <div class="map-card-divider"></div>
     ${s==='En Route'?`
     <div class="map-card-row">
       <span class="map-card-lbl">Health</span>
       <span class="rag ${ragClass(h)}">${healthLabel(h)}</span>
     </div>
     <div class="map-card-row">
-      <span class="map-card-lbl">ETA</span>
-      <span class="map-card-val">${etaText}</span>
-    </div>`:''}
-    ${s==='Destinated'&&log.completed_at?`
-    <div class="map-card-row">
-      <span class="map-card-lbl">Arrived</span>
-      <span class="map-card-val">${fmtTime(log.completed_at)}</span>
+      <span class="map-card-lbl">Speed</span>
+      <span class="map-card-val">${speedText}</span>
     </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Distance left</span>
+      <span class="map-card-val">${distText}</span>
+    </div>`:''}
+    ${s==='Destinated'?`
     <div class="map-card-row">
       <span class="map-card-lbl">Result</span>
       <span class="rag ${ragClass(h)}">${healthLabel(h)}</span>
     </div>`:''}
-    <div class="map-card-row">
-      <span class="map-card-lbl">Crew</span>
-      <span class="map-card-val" style="color:var(--green);font-weight:700">
-        <i class="ti ti-users" style="font-size:11px"></i> ${pax.length} aboard
-      </span>
+    <div class="map-card-row" style="align-items:flex-start">
+      <span class="map-card-lbl">Passengers</span>
+      <span class="map-card-val" style="white-space:normal;max-width:150px">${paxNames} <span style="color:var(--green)">(${pax.length})</span></span>
     </div>
-    <div class="map-card-row">
-      <span class="map-card-lbl">Departed</span>
-      <span class="map-card-val">${log.started_at?fmtTime(log.started_at):'—'}</span>
-    </div>
-    <button class="map-card-btn" onclick="viewRouteForward('${log.id}',${lat},${lng})">
+    <button class="map-card-btn" onclick="viewRouteForward('${log.id}')">
       <i class="ti ti-route"></i> View route on map
-    </button>`;
+    </button>
+    ${(!log.planned_route && log.origin_lat && log.dest_lat) ? `
+    <button class="map-card-btn" id="retry-route-${log.id}"
+      style="margin-top:6px;background:rgba(168,85,247,.15);border-color:rgba(168,85,247,.4);color:#c9a6f5"
+      onclick="retryPlannedRouteMgr('${log.id}', this)"
+      ${_routeRetriedIds.has(log.id)?'disabled':''}>
+      <i class="ti ti-refresh"></i> ${_routeRetriedIds.has(log.id)?'Already retried this session':'No planned route — fetch it'}
+    </button>`:''}`;
 
-  // Position near click
+  positionMapCard(el,e);
+  document.getElementById('main').appendChild(el);
+  _mapCard=el;
+}
+
+// ── Boarding card — passengers currently getting into a vehicle ────────────
+function showBoardingCard(g,lat,lng,e){
+  const pax=g._pax||[];
+  const paxNames=pax.map(p=>p.full_name).filter(Boolean).join(', ')||'—';
+  const ts=g._ts||{};
+
+  const el=document.createElement('div');
+  el.className='map-card';
+  el.id='active-map-card';
+  el.innerHTML=`
+    <button class="map-card-close" onclick="closeMapCard()">×</button>
+    <div style="margin-bottom:8px">
+      <span class="status-pill sp-boarding">Boarding</span>
+    </div>
+    <div class="map-card-name">${g.driver_name||'Driver'}</div>
+    <div class="map-card-job">${ts.client_name||'—'}${ts.store_number?' · Store '+ts.store_number:''}${ts.city?' · '+ts.city:''}</div>
+    <div class="map-card-divider"></div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Vehicle</span>
+      <span class="map-card-val">${g.vehicle_plate||'—'}</span>
+    </div>
+    <div class="map-card-row" style="align-items:flex-start">
+      <span class="map-card-lbl">Passengers</span>
+      <span class="map-card-val" style="white-space:normal;max-width:150px">${paxNames} <span style="color:var(--green)">(${pax.length})</span></span>
+    </div>
+    <div class="map-card-row">
+      <span class="map-card-lbl">Boarding since</span>
+      <span class="map-card-val">${g.started_at?fmtTime(g.started_at):'—'}</span>
+    </div>`;
+
+  positionMapCard(el,e);
+  document.getElementById('main').appendChild(el);
+  _mapCard=el;
+}
+
+function positionMapCard(el,e){
   const mapRect=document.getElementById('fleet-map').getBoundingClientRect();
   const cx=e.originalEvent.clientX-mapRect.left;
   const cy=e.originalEvent.clientY-mapRect.top;
@@ -702,9 +1321,6 @@ function showMapCard(log,lat,lng,e){
   if(top<10) top=10;
   el.style.left=left+'px';
   el.style.top=top+'px';
-
-  document.getElementById('main').appendChild(el);
-  _mapCard=el;
 }
 
 function closeMapCard(){
@@ -716,25 +1332,14 @@ function closeMapCard(){
 // leg that DEPARTS from that location — matched by origin_lat/origin_lng.
 // We find the leg for the same vehicle whose origin is nearest to the
 // clicked pin's coordinates. That is the departing leg to draw.
-async function viewRouteForward(logId, pinLat, pinLng){
-  const log=_allLogs.find(l=>l.id===logId);
-  if(!log) return;
-
-  // All legs for the same vehicle
-  const sameVehicle=_allLogs
-    .filter(l=>l.vehicle_plate===log.vehicle_plate && l.vehicle_plate)
-    .sort((a,b)=>new Date(a.started_at||0)-new Date(b.started_at||0));
-
-  // Find the leg whose ORIGIN is closest to the clicked pin
-  let bestLog=null, bestDist=Infinity;
-  sameVehicle.forEach(l=>{
-    const olat=parseFloat(l.origin_lat), olng=parseFloat(l.origin_lng);
-    if(isNaN(olat)||isNaN(olng)) return;
-    const d=Math.hypot(olat-pinLat, olng-pinLng);
-    if(d<bestDist){bestDist=d; bestLog=l;}
-  });
-
-  await viewSelectedOnMap([bestLog ? bestLog.id : logId]);
+async function viewRouteForward(logId){
+  // Trust the leg id the open card was actually built from. This used to
+  // re-search for "whichever leg's origin is closest to this pin" as a
+  // fallback from before hubs existed — now that a hub pin is legitimately
+  // shared by two different legs (one arriving, one departing), that search
+  // always resolved to the departing leg, since its origin literally IS the
+  // pin — silently overriding the arrival leg's own route every time.
+  await viewSelectedOnMap([logId]);
 }
 
 // ── Route + ping overlay ──────────────────────────────────────────────────
@@ -924,6 +1529,39 @@ function renderDrawer(search=''){
   const q=(search||document.getElementById('drawer-search')?.value||'').toLowerCase();
   const body=document.getElementById('drawer-body');
 
+  // Boarding now — passengers getting into vehicles, no travel_log yet
+  const boardGroups=_filteredBoarding.filter(g=>{
+    if(!q) return true;
+    return (g._ts?.client_name||'').toLowerCase().includes(q)||
+      (g.driver_name||'').toLowerCase().includes(q)||
+      (g.vehicle_plate||'').toLowerCase().includes(q);
+  });
+  const boardingHtml=boardGroups.length?`<div class="job-group">
+    <div class="job-header">
+      <div class="job-header-name" style="color:#7eb8f7;display:flex;align-items:center;gap:5px">
+        <i class="ti ti-clock" style="font-size:12px"></i> Boarding now
+      </div>
+    </div>
+    ${boardGroups.map(g=>{
+      const pax=g._pax||[];
+      const paxNames=pax.map(p=>(p.full_name||'').split(' ')[0]).join(', ');
+      return `<div class="trip-row" onclick="focusBoardingGroup('${g.id}')">
+        <div class="trip-row-content">
+          <div class="trip-row-top">
+            <span class="trip-driver">${g.driver_name||'Driver'}</span>
+            <span class="trip-leg-badge">${g.vehicle_plate||'—'}</span>
+            <span class="trip-time">${g.started_at?fmtTime(g.started_at):'—'}</span>
+          </div>
+          <div class="trip-row-detail">
+            <span class="status-pill sp-boarding">Boarding</span>
+            <span class="trip-pax-count"><i class="ti ti-users" style="font-size:10px"></i> ${pax.length}</span>
+            ${paxNames?`<span class="trip-pax-names">${paxNames}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`:'';
+
   // Group by job
   const groups={};
   _filtered.forEach(log=>{
@@ -939,12 +1577,12 @@ function renderDrawer(search=''){
                      (l.vehicle_plate||'').toLowerCase().includes(q));
   });
 
-  if(!gArr.length){
+  if(!gArr.length&&!boardGroups.length){
     body.innerHTML='<div style="padding:2rem;text-align:center;color:var(--text3);font-size:12px">No trips match</div>';
     return;
   }
 
-  body.innerHTML=gArr.map(g=>{
+  body.innerHTML=boardingHtml+gArr.map(g=>{
     const ts=g.ts;
     const jobName=ts.client_name
       ?`${ts.client_name}${ts.store_number?' · Store '+ts.store_number:''}${ts.city?' · '+ts.city+(ts.state?', '+ts.state:''):''}`
@@ -983,6 +1621,19 @@ function renderDrawer(search=''){
   }).join('');
 }
 
+function focusBoardingGroup(id){
+  const g=_boardingGroups.find(x=>x.id===id);
+  if(!g) return;
+  const lat=parseFloat(g.origin_lat), lng=parseFloat(g.origin_lng);
+  if(isNaN(lat)||isNaN(lng)) return;
+  if(_drawerOpen) toggleDrawer();
+  _fleetMap.setView([lat,lng],14);
+  const mapRect=document.getElementById('fleet-map').getBoundingClientRect();
+  setTimeout(()=>{
+    showMapCard(g,lat,lng,{originalEvent:{clientX:mapRect.left+mapRect.width/2,clientY:mapRect.top+mapRect.height/2}});
+  },260); // wait for the drawer-close transition so positioning uses the final map size
+}
+
 function toggleSelect(logId,e){
   e.stopPropagation();
   if(_selected.has(logId)) _selected.delete(logId);
@@ -1011,6 +1662,7 @@ function onDateChange(){
   const val=document.getElementById('filter-date').value;
   const today=new Date().toISOString().split('T')[0];
   _isToday=(val===today);
+  if(!_isToday) _boardingGroups=[];
   stopAutoRefresh();
   loadTrips();
   if(_isToday) startAutoRefresh();
@@ -1042,6 +1694,13 @@ function updateRefreshLabel(){
 // ════════════════════════════════════════════════════════════════════════════
 // UTILS
 // ════════════════════════════════════════════════════════════════════════════
+function haversineMeters(lat1,lng1,lat2,lng2){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
 function decodePolyline(enc){
   if(!enc) return [];
   const pts=[];let i=0,lat=0,lng=0;
@@ -1066,6 +1725,77 @@ function fmtDur(secs){
   const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60);
   return h>0?`${h}h ${m}m`:`${m}m`;
 }
+
+// ── Manual "fetch route" — explicit, per-leg, one attempt per session ──────
+// This calls the same paid Google Routes API the driver app uses. It must
+// NEVER fire automatically, on a timer, or in a retry loop — only from an
+// explicit manager click, and capped at one attempt per leg per page
+// session, full stop. GPS pings alone still give a workable picture of what
+// happened on a leg even with no plotted route, so this is a convenience
+// worth a single deliberate try, not something worth risking API quota on.
+const _routeRetriedIds = new Set();
+
+async function retryPlannedRouteMgr(logId, btnEl){
+  if(_routeRetriedIds.has(logId)) return; // hard cap — no exceptions, no re-arming
+  _routeRetriedIds.add(logId);
+  if(btnEl){ btnEl.disabled=true; btnEl.innerHTML='<i class="ti ti-loader-2"></i> Fetching…'; }
+
+  const log=_allLogs.find(l=>l.id===logId);
+  const originLat=parseFloat(log?.origin_lat), originLng=parseFloat(log?.origin_lng);
+  const destLat=parseFloat(log?.dest_lat), destLng=parseFloat(log?.dest_lng);
+  if(!log||!originLat||!originLng||!destLat||!destLng){
+    if(btnEl) btnEl.innerHTML='Missing coordinates';
+    return;
+  }
+
+  const ROUTES_KEY='AIzaSyD2P07dJGflMhKsUCVtrltsWxSee6Fw0_M';
+  try{
+    const resp=await fetch('https://routes.googleapis.com/directions/v2:computeRoutes',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Goog-Api-Key':ROUTES_KEY,
+        'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps',
+      },
+      body:JSON.stringify({
+        origin:{location:{latLng:{latitude:originLat,longitude:originLng}}},
+        destination:{location:{latLng:{latitude:destLat,longitude:destLng}}},
+        travelMode:'DRIVE', routingPreference:'TRAFFIC_UNAWARE',
+        computeAlternativeRoutes:false, languageCode:'en-US', units:'IMPERIAL',
+      }),
+    });
+    const data=await resp.json();
+    const route=data.routes?.[0];
+    if(data.error||!route){
+      if(btnEl) btnEl.innerHTML='Route unavailable — '+(data.error?.message||'no route found');
+      return;
+    }
+
+    const distM=route.distanceMeters||0;
+    const durSec=parseInt((route.duration||'0s').replace('s',''))||0;
+    const polyline=route.polyline?.encodedPolyline||'';
+    const routeObj={
+      fetched_at:new Date().toISOString(),
+      origin:{lat:originLat,lng:originLng}, destination:{lat:destLat,lng:destLng},
+      distance_miles:+((distM/1609.34).toFixed(2)), duration_seconds:durSec,
+      duration_text:fmtDur(durSec), polyline,
+    };
+
+    const {error}=await getSB().from('travel_logs').update({planned_route:routeObj}).eq('id',logId);
+    if(error){ if(btnEl) btnEl.innerHTML='Save failed — '+error.message; return; }
+
+    if(polyline){
+      const coords=decodePolyline(polyline);
+      if(coords.length) await getSB().from('travel_logs').update({directions:coords}).eq('id',logId);
+    }
+
+    if(btnEl) btnEl.innerHTML='<i class="ti ti-check"></i> Route added';
+    await loadTrips(); // refresh so the dashed planned-route line picks it up on the map
+  }catch(e){
+    if(btnEl) btnEl.innerHTML='Retry failed — '+e.message;
+  }
+}
+
 </script>
 </body>
 </html>

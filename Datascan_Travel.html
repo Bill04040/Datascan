@@ -294,6 +294,48 @@ body{background:#0f1e30;color:#f0f4f8}
 .pax-select-card{display:flex;align-items:center;gap:10px;padding:.625rem .75rem;
   background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
   margin-bottom:.375rem;cursor:pointer;transition:border-color .15s}
+
+/* ── Stop self-report — soft nudge (dismissible) + hard gate (blocking) ──── */
+#soft-stop-prompt{
+  position:fixed;left:1rem;right:1rem;bottom:76px;z-index:850;
+  background:var(--card);border:1px solid var(--amber);border-radius:var(--radius);
+  padding:.875rem 1rem;box-shadow:0 6px 24px rgba(0,0,0,.4);
+  transform:translateY(120%);opacity:0;transition:all .25s;pointer-events:none;
+}
+#soft-stop-prompt.show{transform:translateY(0);opacity:1;pointer-events:auto}
+.soft-stop-head{display:flex;align-items:center;gap:8px;margin-bottom:.625rem}
+.soft-stop-head i{font-size:16px;color:var(--amber)}
+.soft-stop-title{font-size:13px;font-weight:700;color:#fff;flex:1}
+.soft-stop-dismiss{background:none;border:none;color:var(--text3);font-size:20px;
+  line-height:1;cursor:pointer;padding:0 4px;font-family:inherit}
+.soft-stop-btns{display:flex;gap:6px;flex-wrap:wrap}
+.stop-tag-btn{
+  flex:1;min-width:60px;padding:8px 4px;background:rgba(255,255,255,.08);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text1);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:border-color .15s,background .15s;
+}
+.stop-tag-btn:active{border-color:var(--green);background:rgba(106,179,79,.1)}
+.stop-tag-btn i{font-size:16px;color:var(--text2)}
+
+#hard-stop-modal{
+  position:fixed;inset:0;z-index:1200;background:rgba(6,14,26,.82);
+  display:none;align-items:flex-end;justify-content:center;
+}
+#hard-stop-modal.show{display:flex}
+.hard-stop-sheet{
+  width:100%;max-width:480px;background:var(--bg2);border-top-left-radius:18px;
+  border-top-right-radius:18px;padding:1.25rem 1rem 1.5rem;max-height:78vh;
+  overflow-y:auto;border:1px solid var(--border);border-bottom:none;
+}
+.hard-stop-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:2px}
+.hard-stop-sub{font-size:12px;color:var(--text2);margin-bottom:1rem;line-height:1.5}
+.stop-tag-row{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.75rem;margin-bottom:.625rem}
+.stop-tag-meta{display:flex;align-items:center;gap:6px;font-size:12px;
+  color:var(--text2);margin-bottom:.5rem}
+.stop-tag-btns{display:flex;gap:6px;flex-wrap:wrap}
 .pax-select-card.checked{border-color:var(--green);background:rgba(106,179,79,.08)}
 .pax-select-card.warned{border-color:var(--amber);background:rgba(244,169,58,.06)}
 .pax-check{width:20px;height:20px;border-radius:4px;border:1.5px solid var(--border);
@@ -428,7 +470,7 @@ body{background:#0f1e30;color:#f0f4f8}
       <i class="ti ti-login"></i> Sign in
     </button>
     <div class="login-err" id="login-err"></div>
-    <div style="text-align:center;margin-top:.75rem;font-size:11px;color:var(--text3);letter-spacing:.04em">v1.0.12</div>
+    <div class="login-version" id="login-version"></div>
   </div>
 </div>
 
@@ -568,12 +610,38 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- Toast -->
 <div id="toast"></div>
 
+<!-- Soft stop-reason nudge — shown while stationary ≥5 min en route, dismissible -->
+<div id="soft-stop-prompt">
+  <div class="soft-stop-head">
+    <i class="ti ti-clock"></i>
+    <span class="soft-stop-title">Stopped a while — why?</span>
+    <button class="soft-stop-dismiss" onclick="dismissSoftStopPrompt()">&times;</button>
+  </div>
+  <input type="hidden" id="soft-stop-id"/>
+  <div class="soft-stop-btns">
+    <button class="stop-tag-btn" onclick="tagStop(document.getElementById('soft-stop-id').value,'fuel')"><i class="ti ti-gas-station"></i>Fuel</button>
+    <button class="stop-tag-btn" onclick="tagStop(document.getElementById('soft-stop-id').value,'rest')"><i class="ti ti-coffee"></i>Rest</button>
+    <button class="stop-tag-btn" onclick="tagStop(document.getElementById('soft-stop-id').value,'meal')"><i class="ti ti-tools-kitchen-2"></i>Meal</button>
+    <button class="stop-tag-btn" onclick="tagStop(document.getElementById('soft-stop-id').value,'traffic')"><i class="ti ti-car"></i>Traffic</button>
+    <button class="stop-tag-btn" onclick="tagStop(document.getElementById('soft-stop-id').value,'other')"><i class="ti ti-dots"></i>Other</button>
+  </div>
+</div>
+
+<!-- Hard stop-reason gate — required before a leg can be closed out -->
+<div id="hard-stop-modal">
+  <div class="hard-stop-sheet">
+    <div class="hard-stop-title">Tag your stops</div>
+    <div class="hard-stop-sub">Before we can close out this leg, let us know why the vehicle stopped along the way.</div>
+    <div id="hard-stop-list"></div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT                                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.124';
+const APP_VERSION  = 'v1.0.16';
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -2596,6 +2664,16 @@ let _setupGPSActive   = false; // true while the setup-phase watch is running
 let _setupPingBuffer  = [];    // tracking pings captured before travel_log_id is known
 let _setupLastPing    = 0;     // throttle timer for setup-phase tracking pings
 
+// ── Stop self-report (fuel/rest/meal/traffic/other) ─────────────────────────
+let _stationarySince    = null; // ms timestamp — set once GPS reports not moving
+let _lastStopCheckAt    = 0;    // throttle for polling travel_stop_events
+let _softStopShownFor   = null; // stop_event id already soft-prompted this stop
+let _softStopSnoozedAt  = null; // ms timestamp of last dismiss — avoid re-nagging immediately
+let _hardStopQueue      = [];   // unclassified stops currently blocking arrival submit
+let _hardStopOnDone     = null; // callback to resume once all stops are tagged
+const STOP_SOFT_THRESHOLD_MS = 5*60*1000; // stationary this long before we ask
+const STOP_SNOOZE_MS         = 3*60*1000; // wait this long after a dismiss before asking again
+
 // ── Native maps integration ──────────────────────────────────────────────────
 function openNativeMap(){
   const destLat = _activeJob?.dest_lat;
@@ -3546,6 +3624,23 @@ async function onGPSUpdate(pos,log){
   if(_driverMarker){ _driverMarker.setPosition({lat,lng}); if(_tripMap) _tripMap.panTo({lat,lng}); }
   const statusEl=document.getElementById('gps-status-text');
   if(statusEl) statusEl.textContent='±'+Math.round(acc)+'m accuracy';
+
+  // Stop self-report — soft nudge only once genuinely stationary (never while
+  // actually driving), and only while a trip leg is active/en route, which is
+  // exactly when this GPS watch callback runs at all.
+  const isMovingNow = spd!=null ? spd>0.9 : null;
+  if(isMovingNow===true){
+    _stationarySince = null;
+    hideSoftStopPrompt();
+  } else if(isMovingNow===false){
+    if(_stationarySince===null) _stationarySince = Date.now();
+    const nowTs = Date.now();
+    if(nowTs-_lastStopCheckAt > 20000){ // poll for a confirmed stop row at most every 20s
+      _lastStopCheckAt = nowTs;
+      _maybeShowSoftStopPrompt(log);
+    }
+  }
+
   const destLat=_activeJob.dest_lat, destLng=_activeJob.dest_lng;
   if(destLat&&destLng){
     const distM=haversineMeters(lat,lng,destLat,destLng);
@@ -3655,6 +3750,132 @@ async function onGPSUpdate(pos,log){
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STOP SELF-REPORT — soft nudge while stationary, hard gate at leg completion
+// ══════════════════════════════════════════════════════════════════════════════
+// travel_stop_events rows are detected/confirmed server-side (Edge Function,
+// watching for clusters of is_moving=false pings). This app never creates
+// them — it only watches for a confirmed-but-untagged row and asks the
+// driver why, then writes stop_type back onto that row.
+
+function stopTypeMeta(t){
+  return {
+    fuel:   {label:'Fuel',    icon:'ti-gas-station'},
+    rest:   {label:'Rest',    icon:'ti-coffee'},
+    meal:   {label:'Meal',    icon:'ti-tools-kitchen-2'},
+    traffic:{label:'Traffic', icon:'ti-car'},
+    other:  {label:'Other',   icon:'ti-dots'},
+  }[t] || {label:t, icon:'ti-dots'};
+}
+
+function fmtStopTime(iso){
+  if(!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+async function _maybeShowSoftStopPrompt(log){
+  if(_stationarySince===null) return;
+  if(Date.now()-_stationarySince < STOP_SOFT_THRESHOLD_MS) return;   // not stopped long enough yet
+  if(_softStopSnoozedAt && Date.now()-_softStopSnoozedAt < STOP_SNOOZE_MS) return;
+  if(document.getElementById('soft-stop-prompt')?.classList.contains('show')) return;
+
+  try{
+    const {data:stops} = await getSupabase().from('travel_stop_events')
+      .select('id,started_at,is_confirmed,stop_type')
+      .eq('travel_log_id', log.id)
+      .is('stop_type', null)
+      .eq('is_confirmed', true)
+      .order('started_at',{ascending:false})
+      .limit(1);
+    const stop = stops && stops[0];
+    // No confirmed stop row yet (Edge Function hasn't caught up) — try again
+    // on the next poll rather than nagging based on our own local guess.
+    if(stop && stop.id !== _softStopShownFor) showSoftStopPrompt(stop.id);
+  }catch(e){ /* best-effort */ }
+}
+
+function showSoftStopPrompt(stopId){
+  _softStopShownFor = stopId;
+  const idEl = document.getElementById('soft-stop-id');
+  if(idEl) idEl.value = stopId;
+  document.getElementById('soft-stop-prompt')?.classList.add('show');
+}
+
+function dismissSoftStopPrompt(){
+  _softStopSnoozedAt = Date.now();
+  document.getElementById('soft-stop-prompt')?.classList.remove('show');
+}
+
+function hideSoftStopPrompt(){
+  document.getElementById('soft-stop-prompt')?.classList.remove('show');
+}
+
+// Every confirmed stop on this leg that hasn't been tagged yet. Fails open —
+// a network hiccup here should never permanently block a driver from closing
+// out a trip.
+async function _getUnclassifiedStops(logId){
+  try{
+    const {data} = await getSupabase().from('travel_stop_events')
+      .select('id,started_at,duration_secs,stop_type')
+      .eq('travel_log_id', logId)
+      .eq('is_confirmed', true)
+      .is('stop_type', null)
+      .order('started_at',{ascending:true});
+    return data||[];
+  }catch(e){ return []; }
+}
+
+function showHardStopModal(stops, onAllTagged){
+  _hardStopQueue  = stops;
+  _hardStopOnDone = onAllTagged;
+  _renderHardStopModal();
+  document.getElementById('hard-stop-modal')?.classList.add('show');
+}
+
+function _renderHardStopModal(){
+  const list=document.getElementById('hard-stop-list');
+  if(!list) return;
+  list.innerHTML = _hardStopQueue.map(s=>{
+    const mins = s.duration_secs ? Math.round(s.duration_secs/60) : null;
+    return `<div class="stop-tag-row">
+      <div class="stop-tag-meta">
+        <i class="ti ti-clock"></i>
+        <span>Stopped ${fmtStopTime(s.started_at)}${mins?' · '+mins+' min':''}</span>
+      </div>
+      <div class="stop-tag-btns">
+        ${['fuel','rest','meal','traffic','other'].map(t=>{
+          const m=stopTypeMeta(t);
+          return `<button class="stop-tag-btn" onclick="tagStop('${s.id}','${t}')"><i class="ti ${m.icon}"></i>${m.label}</button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function tagStop(stopId, stopType){
+  try{
+    await getSupabase().from('travel_stop_events').update({stop_type:stopType}).eq('id', stopId);
+  }catch(e){ showToast('Could not save — try again','error'); return; }
+
+  if(_softStopShownFor===stopId){
+    hideSoftStopPrompt();
+    _softStopShownFor=null;
+  }
+
+  if(_hardStopQueue.length){
+    _hardStopQueue = _hardStopQueue.filter(s=>s.id!==stopId);
+    if(_hardStopQueue.length){
+      _renderHardStopModal();
+    } else {
+      document.getElementById('hard-stop-modal')?.classList.remove('show');
+      const done=_hardStopOnDone; _hardStopOnDone=null;
+      if(done) done();
+    }
+  }
+
+  showToast('Stop tagged','success');
+}
+
 function showArrivalBanner(isManual){
   const banner=document.getElementById('arrival-banner');
   if(banner){ banner.classList.add('show'); banner.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -3741,6 +3962,16 @@ async function submitArrival(){
   if(!endMiles || endMiles <= (_startingMileage||0)){
     showToast('Ending mileage must be greater than starting mileage','error'); return;
   }
+
+  // Hard gate — every confirmed stop on this leg needs a reason before the
+  // leg can close out. Checked here (not mid-drive) so it never interrupts
+  // actual driving; re-runs submitArrival() automatically once clear.
+  const pendingStops = await _getUnclassifiedStops(_activeTrip.id);
+  if(pendingStops.length){
+    showHardStopModal(pendingStops, ()=>submitArrival());
+    return;
+  }
+
   // Confirmation already shown via promptConfirmArrival banner — proceed directly
   const completedAt = _arrivedAt || new Date().toISOString();
   const btn = document.getElementById('confirm-arrival-btn');
