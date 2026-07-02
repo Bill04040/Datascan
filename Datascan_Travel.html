@@ -1195,6 +1195,20 @@ async function _resumeActiveTrip(log){
     .eq('travel_log_id', log.id);
   _passengers = pax || [];
 
+  // A leg that already arrived (geofence_hit_at is set) but never got
+  // resolved — session reload, lost signal, backgrounded app, anything —
+  // must always resume back into What's Next, never the en-route screen.
+  // From the database's point of view this is the ONLY signal that
+  // distinguishes "still driving" from "arrived, decision pending" — there
+  // is no scenario where skipping this check is correct.
+  if(log.geofence_hit_at && log.status === 'active'){
+    _arrivedAt = log.geofence_hit_at;
+    _lastArrivalLog = log;
+    _arrivalUnresolved = true;
+    await showArrivalSummaryScreen(log);
+    return;
+  }
+
   // Resume active trip screen
   showTripActive(log);
   // Restore planned route summary if already fetched
@@ -2609,6 +2623,7 @@ let _lastArrivalLog   = null;  // the leg that MOST RECENTLY completed — drive
                                 // "What's next?" / passenger-setup screens for THIS stop
 let _returnDest       = null;  // {lat, lng, address, type} for return trip
 let _legType          = 'outbound'; // outbound | return | job_to_job
+let _arrivalUnresolved = false; // true from the moment a leg arrives until What's Next is answered — blocks navigation away
 let _lastPingTime     = 0;
 let _pingCount        = 0;
 let _currentPos       = null;
@@ -3671,6 +3686,7 @@ async function onGPSUpdate(pos,log){
       _geofenceHitAt   = new Date().toISOString();
       _geofenceHitDist = Math.round(distM);
       _fastPingActive  = true;
+      _arrivalUnresolved = true; // locks navigation until What's Next is answered
 
       // Record geofence hit on travel log
       if(_activeTrip?.id){
@@ -3977,50 +3993,59 @@ async function submitArrival(){
   const btn = document.getElementById('confirm-arrival-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
   try{
+    // Mileage confirmation records arrival — it does NOT close the leg out.
+    // geofence_hit_at is set here too as a fallback for a manual arrival
+    // confirmation where live GPS detection never fired the fence itself,
+    // so the resume-check downstream always has something to key off of
+    // regardless of how arrival was actually confirmed.
     await getSupabase().from('travel_logs').update({
-      miles_end:    endMiles,
-      status:       'completed',
-      completed_at: completedAt,
+      miles_end:        endMiles,
+      geofence_hit_at:  _geofenceHitAt || completedAt,
+      geofence_hit_dist_m: _geofenceHitDist ?? null,
     }).eq('id', _activeTrip.id);
 
-    // Update local record so summary screen has correct data
-    _activeTrip.miles_end    = endMiles;
-    _activeTrip.completed_at = completedAt;
+    _activeTrip.miles_end       = endMiles;
+    _activeTrip.geofence_hit_at = _geofenceHitAt || completedAt;
+    _arrivedAt = _activeTrip.geofence_hit_at;
 
     await pushTravelBlocksToTimesheet();
     stopGPS();
     _stopReturnWatch();
-    clearTripState();
 
-    showToast('Arrival confirmed — trip complete!','success');
-    const completedLog = {..._activeTrip};
-    _activeTrip = null;
+    showToast('Arrival confirmed','success');
+    const arrivedLog = {..._activeTrip};
 
-    if(completedLog.leg_type === 'return'){
-      // Return leg complete — this concludes the job. Release the driver
-      // from the vehicle and clear all trip-session state so nothing
-      // carries over into the next job, and hide the "Trip" nav tab so the
-      // only action available on the summary screen is "Back to jobs".
+    if(arrivedLog.leg_type === 'return'){
+      // Return leg — arriving back at the meet spot is self-evidently
+      // terminal. No What's Next choice needed; resolve and release in one
+      // step, same as before, just now explicit about WHY no choice is
+      // required rather than this being the only path that ever worked
+      // this way by coincidence.
+      await getSupabase().from('travel_logs').update({
+        status: 'completed', completed_at: completedAt, next_leg_choice: 'day_complete',
+      }).eq('id', arrivedLog.id);
+      clearTripState();
+      _arrivalUnresolved = false;
+      _activeTrip = null;
       _releaseDriverAndResetTripState();
       showToast('Trip complete — you have been released from this vehicle','success');
-      setTimeout(()=>{ showTripSummary(completedLog); loadMyTrips(); }, 800);
+      setTimeout(()=>{ showTripSummary({...arrivedLog, status:'completed', completed_at:completedAt}); loadMyTrips(); }, 800);
     } else {
-      // Outbound, job-to-job, or custom leg complete — arriving here does
-      // NOT conclude the job. Show "What's next?" so the driver can pick
-      // where this vehicle goes from this stop.
-      _lastArrivalLog = completedLog;
-      if(completedLog.leg_type === 'outbound' || !completedLog.leg_type){
-        // First arrival of the day — pin _outboundLog so "Return to meet
-        // spot" always points back here, regardless of how many job-to-job
-        // stops happen in between.
-        _outboundLog = completedLog;
-        _returnDest = completedLog.origin_lat
-          ? {lat:completedLog.origin_lat, lng:completedLog.origin_lng,
+      // Outbound, job-to-job, or custom leg — arriving here does NOT
+      // conclude anything by itself. The leg stays status:'active' with
+      // geofence_hit_at set; What's Next is now a REQUIRED gate, not a
+      // suggestion — status only becomes 'completed' once a real choice
+      // resolves it (see _resolvePrecedingLeg, called from every What's
+      // Next action below).
+      _lastArrivalLog = arrivedLog;
+      if(arrivedLog.leg_type === 'outbound' || !arrivedLog.leg_type){
+        _outboundLog = arrivedLog;
+        _returnDest = arrivedLog.origin_lat
+          ? {lat:arrivedLog.origin_lat, lng:arrivedLog.origin_lng,
              address:'Meet spot', type:'return'}
           : null;
-        console.log('[submitArrival] outboundLog set — origin:', completedLog.origin_lat, completedLog.origin_lng);
       }
-      setTimeout(()=>{ showArrivalSummaryScreen(completedLog); loadMyTrips(); }, 800);
+      setTimeout(()=>{ showArrivalSummaryScreen(arrivedLog); loadMyTrips(); }, 800);
     }
   } catch(e){
     showToast('Error: '+e.message,'error');
@@ -4411,6 +4436,11 @@ async function confirmReleaseDriver(){
     'Confirm — I am not driving back?'
   );
   if(!ok) return;
+  // Resolves this leg AND marks the vehicle available for another driver to
+  // pick up — but NOT the vehicle's day as complete. A future driver
+  // selecting this plate should continue this same chain (parent_log_id),
+  // not start an independent trip.
+  await _resolvePrecedingLeg('released');
   if(releaseLog?.id){
     await getSupabase().from('travel_logs').update({
       driver_released:true, driver_released_at:new Date().toISOString()
@@ -4442,6 +4472,9 @@ async function completeTravelForToday(){
   );
   if(!ok) return;
 
+  // This is the genuine vehicle-day-complete terminal — unlike a plain
+  // release, nothing continues this chain today.
+  await _resolvePrecedingLeg('complete_for_today');
   try{
     await getSupabase().from('travel_logs')
       .update({is_end_point:true}).eq('id', log.id);
@@ -4451,7 +4484,7 @@ async function completeTravelForToday(){
 
   stopSetupGPS();
   _setupPingBuffer = [];
-  const finalLog = {...log, is_end_point:true};
+  const finalLog = {...log, is_end_point:true, status:'completed'};
   _releaseDriverAndResetTripState();
 
   showToast('Travel complete for today — you have been released from this vehicle','success');
@@ -4726,6 +4759,25 @@ function selectNextJob(tsId){
   _updateDestDebugCard();
 }
 
+// Resolves the preceding arrived-but-unresolved leg: closes it out with a
+// real next_leg_choice, only now — this is the actual gate. Nothing before
+// this point in the flow is allowed to set status:'completed' for a
+// non-return leg; this is the one place it happens, and it always happens
+// together with next_leg_choice in the same write, so the two can never
+// drift apart the way status and "a real decision was made" used to.
+async function _resolvePrecedingLeg(nextChoice){
+  const log = _lastArrivalLog;
+  if(!log?.id) return;
+  try{
+    await getSupabase().from('travel_logs').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      next_leg_choice: nextChoice,
+    }).eq('id', log.id);
+  }catch(e){ console.warn('[_resolvePrecedingLeg]', e.message); }
+  _arrivalUnresolved = false;
+}
+
 // ── Start return trip ─────────────────────────────────────────────────────────
 // startReturnTrip and startJobToJobTrip replaced by beginReturnLeg
 
@@ -4735,6 +4787,11 @@ async function _beginNewLeg(legType, alightedPax){
   if(btn){ btn.disabled=true; btn.innerHTML='Starting...'; }
 
   try{
+    // Resolve the leg that just arrived — this new leg only gets created
+    // once that's done, so there's never a moment where the old leg is
+    // closed but unresolved, or a new leg exists before the old one closed.
+    await _resolvePrecedingLeg(legType);
+
     // Capture current GPS position as new origin
     let originLat=null, originLng=null;
     try{
@@ -5039,6 +5096,16 @@ async function resetTrip(){
 
 // ── Screen navigation ─────────────────────────────────────────────────────────
 function showScreen(name){
+  // Arrived-but-unresolved is a gate, not a suggestion — any attempt to
+  // leave (nav bar, cancel buttons, a stray Enter landing on the wrong
+  // control) redirects straight back to What's Next instead of navigating
+  // away. This re-evaluates on every call, so it holds regardless of how
+  // many times someone tries to leave.
+  if(_arrivalUnresolved && name !== 'trip' && _lastArrivalLog){
+    showToast("Please choose what's next before leaving this screen",'error');
+    showArrivalSummaryScreen(_lastArrivalLog);
+    return;
+  }
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('screen-'+name)?.classList.add('active');
