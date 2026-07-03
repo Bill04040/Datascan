@@ -41,7 +41,10 @@ html,body{height:100%;font-family:'Inter',Arial,sans-serif;background:#0b1929;co
 .login-err{font-size:12px;color:var(--red);text-align:center;margin-top:.75rem;min-height:18px}
 
 /* ── App shell ───────────────────────────────────────────────────────────── */
-#app{display:none;height:100vh;height:100dvh;flex-direction:column;overflow:hidden}
+#app{display:none}
+
+#app-header{position:fixed;top:0;left:0;right:0;z-index:200;
+  display:flex;flex-direction:column}
 
 /* ── Topbar / filter bar ─────────────────────────────────────────────────── */
 #topbar{display:flex;align-items:center;gap:8px;padding:.5rem .875rem;
@@ -76,7 +79,12 @@ select.filter-input{cursor:pointer}
   padding:.3rem .75rem;background:var(--bg2);border-left:1px solid var(--border);flex-shrink:0}
 
 /* ── Main area ───────────────────────────────────────────────────────────── */
-#main{flex:1;position:relative;overflow:hidden}
+/* --header-h is set by JS (measureHeaderHeight()) to the header's actual
+   rendered height, and kept live via ResizeObserver — so #main always
+   starts exactly where the header ends, even if the header's height ever
+   changes (different filter row height per breakpoint, live-badge
+   appearing, etc.), with no hardcoded pixel value to fall out of sync. */
+#main{position:fixed;left:0;right:0;bottom:0;top:var(--header-h,64px);overflow:hidden}
 
 /* ── Fleet map ───────────────────────────────────────────────────────────── */
 #fleet-map{position:absolute;inset:0;z-index:1}
@@ -267,45 +275,52 @@ select.filter-input{cursor:pointer}
 <!-- App -->
 <div id="app">
 
-  <!-- Filter bar -->
-  <div id="topbar">
-    <span class="tb-brand">Datascan</span>
-    <span class="tb-sub">Travel Manager</span>
-    <div class="tb-sep"></div>
-    <span class="tb-label">Date</span>
-    <input type="date" id="filter-date" class="filter-input" onchange="onDateChange()"/>
-    <div class="tb-sep"></div>
-    <span class="tb-label">Vehicle</span>
-    <select id="filter-vehicle" class="filter-input" onchange="applyFilters(true)">
-      <option value="">All</option>
-    </select>
-    <span class="tb-label">Leg</span>
-    <select id="filter-leg" class="filter-input" onchange="applyFilters(true)">
-      <option value="">All</option>
-      <option value="outbound">Outbound</option>
-      <option value="return">Return</option>
-      <option value="job_to_job">Job to Job</option>
-    </select>
-    <span class="tb-label">Status</span>
-    <select id="filter-status" class="filter-input" onchange="applyFilters(true)">
-      <option value="">All</option>
-      <option value="active">Active</option>
-      <option value="completed">Completed</option>
-      <option value="setup">Boarding</option>
-    </select>
-    <span class="tb-user" id="tb-user">—</span>
-    <button class="tb-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
-  </div>
+  <!-- Fixed header — pinned directly to the viewport with position:fixed,
+       independent of #app/#main's height entirely. This is deliberately
+       NOT relying on vh/dvh or flex-fill sizing anymore — position:fixed
+       elements are anchored to the actual current viewport by the browser
+       itself, live, regardless of chrome show/hide behavior. -->
+  <div id="app-header">
+    <!-- Filter bar -->
+    <div id="topbar">
+      <span class="tb-brand">Datascan</span>
+      <span class="tb-sub">Travel Manager</span>
+      <div class="tb-sep"></div>
+      <span class="tb-label">Date</span>
+      <input type="date" id="filter-date" class="filter-input" onchange="onDateChange()"/>
+      <div class="tb-sep"></div>
+      <span class="tb-label">Vehicle</span>
+      <select id="filter-vehicle" class="filter-input" onchange="applyFilters(true)">
+        <option value="">All</option>
+      </select>
+      <span class="tb-label">Leg</span>
+      <select id="filter-leg" class="filter-input" onchange="applyFilters(true)">
+        <option value="">All</option>
+        <option value="outbound">Outbound</option>
+        <option value="return">Return</option>
+        <option value="job_to_job">Job to Job</option>
+      </select>
+      <span class="tb-label">Status</span>
+      <select id="filter-status" class="filter-input" onchange="applyFilters(true)">
+        <option value="">All</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+        <option value="setup">Boarding</option>
+      </select>
+      <span class="tb-user" id="tb-user">—</span>
+      <button class="tb-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
+    </div>
 
-  <!-- Stats strip -->
-  <div id="stats-bar">
-    <div class="stat-cell"><div class="stat-num" id="st-total">—</div><div class="stat-lbl">Trips</div></div>
-    <div class="stat-cell"><div class="stat-num blue" id="st-active">—</div><div class="stat-lbl">Active</div></div>
-    <div class="stat-cell"><div class="stat-num green" id="st-ontime">—</div><div class="stat-lbl">On Time</div></div>
-    <div class="stat-cell"><div class="stat-num amber" id="st-late">—</div><div class="stat-lbl">A Little Late</div></div>
-    <div class="stat-cell"><div class="stat-num red" id="st-reallylate">—</div><div class="stat-lbl">Really Late</div></div>
-    <div class="stat-cell"><div class="stat-num" id="st-drivers">—</div><div class="stat-lbl">Drivers</div></div>
-    <div id="live-badge"><i class="ti ti-radar" style="font-size:12px"></i> Live</div>
+    <!-- Stats strip -->
+    <div id="stats-bar">
+      <div class="stat-cell"><div class="stat-num" id="st-total">—</div><div class="stat-lbl">Trips</div></div>
+      <div class="stat-cell"><div class="stat-num blue" id="st-active">—</div><div class="stat-lbl">Active</div></div>
+      <div class="stat-cell"><div class="stat-num green" id="st-ontime">—</div><div class="stat-lbl">On Time</div></div>
+      <div class="stat-cell"><div class="stat-num amber" id="st-late">—</div><div class="stat-lbl">A Little Late</div></div>
+      <div class="stat-cell"><div class="stat-num red" id="st-reallylate">—</div><div class="stat-lbl">Really Late</div></div>
+      <div class="stat-cell"><div class="stat-num" id="st-drivers">—</div><div class="stat-lbl">Drivers</div></div>
+      <div id="live-badge"><i class="ti ti-radar" style="font-size:12px"></i> Live</div>
+    </div>
   </div>
 
   <!-- Main map area -->
@@ -410,9 +425,9 @@ let _realtimeDebounce = null;
 // is never actually named to match — comparing against the served filename
 // would be a guaranteed false alarm every time, not a real signal. The
 // version string itself is what survives deployment unchanged.
-const APP_VERSION = 'v1.2.2';
+const APP_VERSION = 'v1.2.3';
 const VERSION_HISTORY = [
-  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2',
+  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3',
 ];
 
 function _checkVersionSequence(){
@@ -489,10 +504,32 @@ async function onSignedIn(user){
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('filter-date').value=today;
   _isToday=true;
+  measureHeaderHeight();
   initFleetMap();
   await loadTrips(true);
   startAutoRefresh();
   subscribeRealtime();
+}
+
+// Keeps #main's top offset (--header-h) matched to the fixed header's
+// actual rendered height, live. A ResizeObserver — not a one-time measurement
+// or a window resize listener — because the header's own height can change
+// for reasons that aren't a viewport resize at all (the live-badge showing
+// once today's data loads, filter row wrapping differently, font loading
+// shifting text metrics). This runs once per sign-in and then updates itself
+// automatically for the rest of the session.
+let _headerRO = null;
+function measureHeaderHeight(){
+  const header = document.getElementById('app-header');
+  if(!header) return;
+  const apply = ()=>{
+    const h = header.getBoundingClientRect().height;
+    if(h>0) document.documentElement.style.setProperty('--header-h', h+'px');
+  };
+  apply();
+  if(_headerRO) return; // observer already running from a previous sign-in
+  _headerRO = new ResizeObserver(apply);
+  _headerRO.observe(header);
 }
 
 async function doLogout(){
