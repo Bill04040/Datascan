@@ -641,7 +641,48 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const APP_VERSION  = 'v1.0.16';
+// ════════════════════════════════════════════════════════════════════════════
+// VERSION — append the new version to VERSION_HISTORY every time APP_VERSION
+// changes; that's the whole discipline. This exists instead of a filename
+// check, because the version suffix gets stripped from the filename before
+// upload — the deployed file is never actually named to match, so comparing
+// against the served filename would be a guaranteed false alarm every time,
+// not a real signal. The version string itself is the one thing guaranteed
+// to survive deployment unchanged, so that's what gets checked.
+//
+// _checkVersionSequence() runs at load and logs to the console (not the UI —
+// this is a dev-time sanity check, not something an end user needs to see):
+//   - errors if APP_VERSION doesn't match the last entry in VERSION_HISTORY
+//     (forgot to add the new version to the list)
+//   - warns if the last two entries don't look like a clean +1 bump on
+//     major, minor, or patch (skipped a version, or typo'd one)
+// ════════════════════════════════════════════════════════════════════════════
+const APP_VERSION = 'v1.1.1';
+const VERSION_HISTORY = [
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1',
+];
+
+function _checkVersionSequence(){
+  const last = VERSION_HISTORY[VERSION_HISTORY.length-1];
+  if(last !== APP_VERSION){
+    console.error('[VERSION] APP_VERSION ('+APP_VERSION+') does not match the last entry in VERSION_HISTORY ('+last+'). Add it to the list.');
+    return;
+  }
+  if(VERSION_HISTORY.length < 2) return;
+  const prev = VERSION_HISTORY[VERSION_HISTORY.length-2];
+  const parse = v => v.replace(/^v/,'').split('.').map(Number);
+  const [pMaj,pMin,pPatch] = parse(prev);
+  const [cMaj,cMin,cPatch] = parse(last);
+  const cleanBump =
+    (cMaj===pMaj+1 && cMin===0   && cPatch===0) ||
+    (cMaj===pMaj   && cMin===pMin+1 && cPatch===0) ||
+    (cMaj===pMaj   && cMin===pMin   && cPatch===pPatch+1);
+  if(!cleanBump){
+    console.warn('[VERSION] '+prev+' -> '+last+' is not a clean +1 bump on major, minor, or patch — double check this was intentional.');
+  }
+}
+_checkVersionSequence();
+
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -891,7 +932,8 @@ async function loadMyTrips(){
              vehicle_model, vehicle_year, vehicle_color, vehicle_capacity, vehicle_type,
              miles_start, miles_end, started_at, completed_at,
              origin_lat, origin_lng, dest_lat, dest_lng, dest_address, parent_log_id,
-             from_job_id, to_job_id, driver_name, planned_route`)
+             from_job_id, to_job_id, driver_name, planned_route,
+             geofence_hit_at, geofence_hit_dist_m, next_leg_choice, driver_released`)
     .eq('driver_id', currentUser.id)
     .gte('started_at', localStart.toISOString())
     .lt('started_at', localEnd.toISOString())
@@ -1195,13 +1237,12 @@ async function _resumeActiveTrip(log){
     .eq('travel_log_id', log.id);
   _passengers = pax || [];
 
-  // A leg that already arrived (geofence_hit_at is set) but never got
-  // resolved — session reload, lost signal, backgrounded app, anything —
-  // must always resume back into What's Next, never the en-route screen.
-  // From the database's point of view this is the ONLY signal that
-  // distinguishes "still driving" from "arrived, decision pending" — there
-  // is no scenario where skipping this check is correct.
-  if(log.geofence_hit_at && log.status === 'active'){
+  // next_leg_choice='pending' is now the direct, stated fact that a leg
+  // arrived but a next step is still required — no inference needed. The
+  // geofence_hit_at fallback stays in place for any row written before this
+  // value existed, so nothing that already arrived under the old logic
+  // silently falls through the crack on the way to the new one.
+  if((log.next_leg_choice === 'pending' || log.geofence_hit_at) && log.status === 'active'){
     _arrivedAt = log.geofence_hit_at;
     _lastArrivalLog = log;
     _arrivalUnresolved = true;
@@ -3993,18 +4034,27 @@ async function submitArrival(){
   const btn = document.getElementById('confirm-arrival-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
   try{
-    // Mileage confirmation records arrival — it does NOT close the leg out.
-    // geofence_hit_at is set here too as a fallback for a manual arrival
-    // confirmation where live GPS detection never fired the fence itself,
-    // so the resume-check downstream always has something to key off of
-    // regardless of how arrival was actually confirmed.
+    // Mileage confirmation records arrival — completed_at is the timestamp
+    // of THIS moment (mileage entered, arrival confirmed), independent of
+    // whether the leg's status is allowed to close yet. next_leg_choice is
+    // set to 'pending' right here too — an explicit stated fact ("a next
+    // step is required for this travel log") rather than something that
+    // has to be inferred from geofence_hit_at being set and next_leg_choice
+    // happening to still be null. geofence_hit_at itself doubles as a
+    // fallback for a manual arrival confirmation where live GPS detection
+    // never fired the fence, so downstream checks always have something to
+    // key off of regardless of how arrival was actually confirmed.
     await getSupabase().from('travel_logs').update({
       miles_end:        endMiles,
+      completed_at:     completedAt,
+      next_leg_choice:  'pending',
       geofence_hit_at:  _geofenceHitAt || completedAt,
       geofence_hit_dist_m: _geofenceHitDist ?? null,
     }).eq('id', _activeTrip.id);
 
     _activeTrip.miles_end       = endMiles;
+    _activeTrip.completed_at    = completedAt;
+    _activeTrip.next_leg_choice = 'pending';
     _activeTrip.geofence_hit_at = _geofenceHitAt || completedAt;
     _arrivedAt = _activeTrip.geofence_hit_at;
 
@@ -4017,12 +4067,11 @@ async function submitArrival(){
 
     if(arrivedLog.leg_type === 'return'){
       // Return leg — arriving back at the meet spot is self-evidently
-      // terminal. No What's Next choice needed; resolve and release in one
-      // step, same as before, just now explicit about WHY no choice is
-      // required rather than this being the only path that ever worked
-      // this way by coincidence.
+      // terminal. completed_at is already set above; this just adds the
+      // status/next_leg_choice that make the closure official, since a
+      // return leg has no separate later resolution moment to wait for.
       await getSupabase().from('travel_logs').update({
-        status: 'completed', completed_at: completedAt, next_leg_choice: 'day_complete',
+        status: 'completed', next_leg_choice: 'day_complete',
       }).eq('id', arrivedLog.id);
       clearTripState();
       _arrivalUnresolved = false;
@@ -4325,6 +4374,14 @@ async function showReturnSetupScreen(log){
         <div>outboundLog.origin: <span id="dbg-origin">${_outboundLog?.origin_lat||'null'}, ${_outboundLog?.origin_lng||'null'}</span></div>
         <div>outboundLog.dest (store): <span id="dbg-storedst">${_outboundLog?.dest_lat||'null'}, ${_outboundLog?.dest_lng||'null'}</span></div>
         <div>_activeJob.dest (current): <span id="dbg-activedst">${_activeJob?.dest_lat||'null'}, ${_activeJob?.dest_lng||'null'}</span></div>
+        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed rgba(30,95,174,.3)">
+          <div style="font-weight:700;color:#90b8f0;margin-bottom:2px">Preceding leg (arrival state machine)</div>
+          <div>lastArrivalLog.id: <span id="dbg-arrivalid">${_lastArrivalLog?.id||'null'}</span></div>
+          <div>lastArrivalLog.status: <span id="dbg-arrivalstatus">${_lastArrivalLog?.status||'null'}</span></div>
+          <div>lastArrivalLog.next_leg_choice: <span id="dbg-nextlegchoice">${_lastArrivalLog?.next_leg_choice||'null'}</span></div>
+          <div>lastArrivalLog.geofence_hit_at: <span id="dbg-geofencehit">${_lastArrivalLog?.geofence_hit_at||'null'}</span></div>
+          <div>_arrivalUnresolved: <span id="dbg-unresolved">${_arrivalUnresolved}</span></div>
+        </div>
       </div>` : ''}
     </div>`;
 
@@ -4673,6 +4730,11 @@ function _updateDestDebugCard(){
   const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
   set('dbg-legtype', _legType||'(none)');
   set('dbg-returndest', JSON.stringify(_returnDest));
+  set('dbg-arrivalid', _lastArrivalLog?.id||'null');
+  set('dbg-arrivalstatus', _lastArrivalLog?.status||'null');
+  set('dbg-nextlegchoice', _lastArrivalLog?.next_leg_choice||'null');
+  set('dbg-geofencehit', _lastArrivalLog?.geofence_hit_at||'null');
+  set('dbg-unresolved', String(_arrivalUnresolved));
 }
 
 async function onReturnAddressInput(val){
@@ -4761,17 +4823,22 @@ function selectNextJob(tsId){
 
 // Resolves the preceding arrived-but-unresolved leg: closes it out with a
 // real next_leg_choice, only now — this is the actual gate. Nothing before
+// Resolves the preceding arrived-but-unresolved leg: closes it out with a
+// real next_leg_choice, only now — this is the actual gate. Nothing before
 // this point in the flow is allowed to set status:'completed' for a
 // non-return leg; this is the one place it happens, and it always happens
 // together with next_leg_choice in the same write, so the two can never
 // drift apart the way status and "a real decision was made" used to.
+// completed_at is NOT touched here — it was already set correctly at
+// mileage-confirmation time in submitArrival(), which is the moment it's
+// meant to represent. This step only ever closes the administrative loop
+// on top of an arrival that already happened.
 async function _resolvePrecedingLeg(nextChoice){
   const log = _lastArrivalLog;
   if(!log?.id) return;
   try{
     await getSupabase().from('travel_logs').update({
       status: 'completed',
-      completed_at: new Date().toISOString(),
       next_leg_choice: nextChoice,
     }).eq('id', log.id);
   }catch(e){ console.warn('[_resolvePrecedingLeg]', e.message); }
@@ -5132,6 +5199,20 @@ async function doLogout(){
   await getSupabase().auth.signOut();
   currentUser = null; currentProfile = null; driverApproval = null;
   _activeJob = null; _activeTrip = null;
+  // These previously survived a logout untouched (logout never reloads the
+  // page, so nothing wiped memory) — meaning a driver could log back in
+  // with stale arrival state from a session that should have ended. A hard
+  // refresh always cleared this correctly by virtue of wiping everything;
+  // logout needs to do the same explicitly.
+  _lastArrivalLog = null;
+  _arrivalUnresolved = false;
+  _arrivedAt = null;
+  _geofenceHitAt = null;
+  _geofenceHitDist = null;
+  _outboundLog = null;
+  _returnDest = null;
+  _legType = 'outbound';
+  _passengers = [];
   showLoginScreen();
 }
 
