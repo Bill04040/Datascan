@@ -98,16 +98,15 @@ body{background:#0f1e30;color:#f0f4f8}
 }
 
 /* ── App shell ────────────────────────────────────────────────────────────── */
-#app-shell{
-  display:none;flex-direction:column;height:100vh;overflow:hidden;
-}
-#app-shell.active{display:flex}
+#app-shell{display:none}
+#app-shell.active{display:block}
+
+#drv-header{position:fixed;top:0;left:0;right:0;z-index:200}
 
 /* Top bar */
 .top-bar{
   background:var(--navy);border-bottom:1px solid var(--border);
   padding:0 1rem;height:52px;display:flex;align-items:center;gap:10px;
-  flex-shrink:0;
 }
 .top-bar-title{font-size:15px;font-weight:700;color:#fff;flex:1}
 .top-bar-sub{font-size:11px;color:var(--green);font-weight:600;letter-spacing:.06em}
@@ -116,15 +115,23 @@ body{background:#0f1e30;color:#f0f4f8}
   display:flex;align-items:center;justify-content:center;
   font-size:13px;font-weight:700;color:#fff;flex-shrink:0;cursor:pointer;
 }
-.green-bar{height:3px;background:var(--green);flex-shrink:0}
+.green-bar{height:3px;background:var(--green)}
 
-/* Main content area */
-.app-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* Main content area — --header-h/--footer-h set by JS (measureShellBars) and
+   kept live via ResizeObserver, same pattern already proven on the manager
+   app: position:fixed anchored with top/bottom (not a computed height) so
+   the browser recalculates it live as the actual viewport changes, instead
+   of trusting a vh/dvh value that can go stale when mobile chrome
+   shows/hides. That mismatch was exactly what made the nav bar intermittent. */
+.app-content{position:fixed;left:0;right:0;
+  top:var(--header-h,55px);bottom:var(--footer-h,60px);
+  overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Bottom nav */
 .bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
   background:var(--navy);border-top:1px solid var(--border);
-  display:flex;height:60px;flex-shrink:0;
+  display:flex;height:60px;
   padding-bottom:env(safe-area-inset-bottom);
 }
 .nav-btn{
@@ -521,18 +528,30 @@ body{background:#0f1e30;color:#f0f4f8}
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <div id="app-shell">
 
-  <!-- Top bar -->
-  <div class="top-bar">
-    <div>
-      <div class="top-bar-title">DATASCAN <span style="color:var(--green)">TRAVEL</span></div>
-      <div class="top-bar-sub" id="top-bar-sub">Travel Log</div>
+  <!-- Fixed header — pinned directly to the viewport, same fix already
+       proven on the manager app: position:fixed anchors to the real device
+       viewport, independent of #app-shell's height or any vh/dvh sizing. -->
+  <div id="drv-header">
+    <div class="top-bar">
+      <div>
+        <div class="top-bar-title">DATASCAN <span style="color:var(--green)">TRAVEL</span></div>
+        <div class="top-bar-sub" id="top-bar-sub">Travel Log</div>
+      </div>
+      <div style="flex:1"></div>
+      <button id="header-my-trips-btn" onclick="showScreen('home');loadMyTrips()" style="
+        display:flex;align-items:center;gap:5px;background:transparent;
+        border:1px solid var(--green);border-radius:var(--radius-sm);
+        color:var(--green);font-size:11px;font-weight:600;letter-spacing:.03em;
+        font-family:inherit;text-transform:uppercase;cursor:pointer;
+        padding:6px 10px;margin-right:10px;transition:color .15s,border-color .15s">
+        <i class="ti ti-steering-wheel" style="font-size:15px"></i>My Trips
+      </button>
+      <div class="top-bar-avatar" id="avatar-btn" onclick="toggleProfileMenu()">
+        <span id="avatar-initials">?</span>
+      </div>
     </div>
-    <div style="flex:1"></div>
-    <div class="top-bar-avatar" id="avatar-btn" onclick="toggleProfileMenu()">
-      <span id="avatar-initials">?</span>
-    </div>
+    <div class="green-bar"></div>
   </div>
-  <div class="green-bar"></div>
 
   <!-- Profile menu -->
   <div id="profile-menu">
@@ -575,33 +594,14 @@ body{background:#0f1e30;color:#f0f4f8}
       <div id="trip-content" style="padding:1rem"></div>
     </div>
 
-    <!-- ── HISTORY SCREEN ── -->
-    <div class="screen" id="screen-history">
-      <div style="padding:1rem 1rem 0">
-        <div class="screen-title">Trip History</div>
-        <div class="screen-sub">Your recent travel logs</div>
-      </div>
-      <div id="history-list" style="padding:.75rem 1rem 5rem">
-        <div class="empty-state">
-          <i class="ti ti-history empty-icon"></i>
-          <div class="empty-title">No trips yet</div>
-          <div class="empty-msg">Completed trips will appear here</div>
-        </div>
-      </div>
-    </div>
-
   </div>
 
-  <!-- Bottom nav -->
-  <div class="bottom-nav">
-    <button class="nav-btn active" id="nav-home" onclick="showScreen('home')">
-      <i class="ti ti-steering-wheel"></i>My Trips
-    </button>
+  <!-- Bottom nav — only "Trip" remains, shown while a trip is active. Starts
+       hidden (not just its one button) so it doesn't render as an empty
+       navy stripe before any trip exists. -->
+  <div class="bottom-nav" style="display:none">
     <button class="nav-btn" id="nav-trip" onclick="showScreen('trip')" style="display:none">
       <i class="ti ti-steering-wheel"></i>Trip
-    </button>
-    <button class="nav-btn" id="nav-history" onclick="showScreen('history')">
-      <i class="ti ti-history"></i>History
     </button>
   </div>
 
@@ -657,9 +657,9 @@ body{background:#0f1e30;color:#f0f4f8}
 //   - warns if the last two entries don't look like a clean +1 bump on
 //     major, minor, or patch (skipped a version, or typo'd one)
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.4';
 const VERSION_HISTORY = [
-  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0',
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4',
 ];
 
 function _checkVersionSequence(){
@@ -868,7 +868,48 @@ async function submitNewPassword(){
   completeSignIn();
 }
 
-function completeSignIn(){
+// Keeps --header-h/--footer-h matched to the fixed bars' actual rendered
+// height, live — same pattern already proven on the manager app. A
+// ResizeObserver on each bar catches ordinary size changes; it also fires
+// correctly when a bar goes to/from display:none (its content rect goes to
+// 0), but setTripNavVisible() calls this directly too rather than depending
+// solely on that async callback, so .app-content's bottom offset updates in
+// the same tick the bar hides, not a moment later.
+let _shellRO = null;
+function measureShellBars(){
+  try{
+    const header = document.getElementById('drv-header');
+    const footer = document.querySelector('.bottom-nav');
+    if(header) document.documentElement.style.setProperty('--header-h', header.getBoundingClientRect().height+'px');
+    if(footer) document.documentElement.style.setProperty('--footer-h', footer.getBoundingClientRect().height+'px');
+    if(_shellRO) return; // observer already running from a previous call
+    if(typeof ResizeObserver !== 'undefined'){
+      _shellRO = new ResizeObserver(measureShellBars);
+      if(header) _shellRO.observe(header);
+      if(footer) _shellRO.observe(footer);
+    }
+  }catch(e){
+    // A layout-measurement helper must never be able to block sign-in —
+    // if this fails for any reason (ResizeObserver unsupported, anything
+    // else), the header/footer just fall back to their CSS defaults
+    // (55px/60px) instead of taking the rest of the app down with them.
+    console.warn('[measureShellBars]', e.message);
+  }
+}
+
+// nav-trip is the ONLY thing left in .bottom-nav now that My Trips lives in
+// the header and History is gone — so the bar itself needs to hide right
+// along with its one button, or it renders as an empty navy stripe with
+// nothing in it whenever no trip is active (which is most of the time).
+function setTripNavVisible(visible){
+  const btn = document.getElementById('nav-trip');
+  const bar = document.querySelector('.bottom-nav');
+  if(btn) btn.style.display = visible ? 'flex' : 'none';
+  if(bar) bar.style.display = visible ? 'flex' : 'none';
+  measureShellBars();
+}
+
+async function completeSignIn(){
   const isApproved = driverApproval && driverApproval.status === 'approved';
 
   if(!isApproved){
@@ -880,6 +921,7 @@ function completeSignIn(){
   // Show app shell
   document.getElementById('not-approved-screen').classList.remove('active');
   document.getElementById('app-shell').classList.add('active');
+  measureShellBars();
 
   // Populate profile UI
   const name     = currentProfile.full_name || currentUser.email;
@@ -1086,7 +1128,7 @@ async function selectTrip(log, ts){
 
   document.getElementById('trip-screen-title').textContent = clientName;
   document.getElementById('trip-screen-sub').textContent   = storeSub;
-  document.getElementById('nav-trip').style.display = 'flex';
+  setTripNavVisible(true);
   showScreen('trip');
 
   if(log.status === 'active' || log.status === 'setup'){
@@ -1144,6 +1186,9 @@ async function handOffSetupLeg(){
     _activeTrip = null;
     _setupInProgress = false;
     _legType = 'outbound';
+    _stopOriginLat = null;
+    _stopOriginLng = null;
+    _stationarySince = null;
     showScreen('home');
     loadMyTrips();
   }catch(e){
@@ -1176,7 +1221,7 @@ async function startNewTrip(){
   // Show store picker in the trip screen
   document.getElementById('trip-screen-title').textContent = 'New Trip';
   document.getElementById('trip-screen-sub').textContent   = 'Select your destination';
-  document.getElementById('nav-trip').style.display = 'flex';
+  setTripNavVisible(true);
   showScreen('trip');
   await showStorePicker();
 }
@@ -2736,13 +2781,48 @@ let _setupInProgress   = false; // true from the moment a continuation leg's set
 // driver may not have typed an address yet; they get filled in later, at
 // confirmation, in _beginNewLeg's update rather than insert.
 async function _beginSetupLeg(legType){
+  const parentLogId = _lastArrivalLog?.id || null;
+
+  // Guard against creating a second setup row for the same parent — this is
+  // exactly the bug found in testing: a double-tap or re-navigating back to
+  // What's Next before the first setup screen finished loading created two
+  // rows for the same transition, one of which never resolved and sat
+  // permanently stuck. Reuse the existing row instead of creating a second.
+  // This is the app-side half of the fix — it closes the realistic
+  // double-tap case, but a true simultaneous race still needs the database
+  // constraint (partial unique index on parent_log_id where status='setup')
+  // to be airtight, since check-then-insert always has a narrow gap a
+  // constraint doesn't.
+  if(parentLogId){
+    try{
+      const {data:existing} = await getSupabase()
+        .from('travel_logs')
+        .select('*')
+        .eq('parent_log_id', parentLogId)
+        .eq('status', 'setup')
+        .order('started_at', {ascending:false})
+        .limit(1);
+      if(existing?.length){
+        console.warn('[beginSetupLeg] reusing existing setup row for this parent instead of creating a duplicate:', existing[0].id);
+        _activeTrip = existing[0];
+        _setupInProgress = true;
+        return existing[0];
+      }
+    }catch(e){
+      // Fail open — if the check itself fails (network blip), proceed to
+      // insert rather than block the driver from starting their leg. A
+      // resulting duplicate is recoverable; a driver stuck unable to start
+      // is not.
+      console.warn('[beginSetupLeg] duplicate-check failed, proceeding to insert:', e.message);
+    }
+  }
+
   let originLat=null, originLng=null;
   try{
     const pos = await _getGPS();
     originLat = pos.lat; originLng = pos.lng;
   } catch(e){ console.warn('[beginSetupLeg] GPS unavailable:', e.message); }
 
-  const parentLogId = _lastArrivalLog?.id || null;
   const isReturn = legType === 'return';
 
   const payload = {
@@ -2778,6 +2858,26 @@ async function _beginSetupLeg(legType){
     _setupInProgress = true;
     return data;
   } catch(e){
+    // If the database constraint (partial unique index on parent_log_id
+    // where status='setup') rejects this as a duplicate — a true race the
+    // check above couldn't catch — recover by fetching whichever row
+    // actually won, instead of leaving the driver on a raw error. Postgres
+    // unique-violation is code 23505.
+    if(e.code === '23505' && parentLogId){
+      try{
+        const {data:winner} = await getSupabase()
+          .from('travel_logs')
+          .select('*')
+          .eq('parent_log_id', parentLogId)
+          .eq('status', 'setup')
+          .limit(1);
+        if(winner?.length){
+          _activeTrip = winner[0];
+          _setupInProgress = true;
+          return winner[0];
+        }
+      }catch(e2){ /* fall through to the error toast below */ }
+    }
     console.error('[beginSetupLeg]', e);
     showToast('Could not start leg setup: '+e.message, 'error');
     return null;
@@ -2840,6 +2940,8 @@ let _setupLastPing    = 0;     // throttle timer for setup-phase tracking pings
 
 // ── Stop self-report (fuel/rest/meal/traffic/other) ─────────────────────────
 let _stationarySince    = null; // ms timestamp — set once GPS reports not moving
+let _stopOriginLat      = null; // where the CURRENT stop began — the anchor distance is measured from
+let _stopOriginLng      = null;
 let _lastStopCheckAt    = 0;    // throttle for polling travel_stop_events
 let _softStopShownFor   = null; // stop_event id already soft-prompted this stop
 let _softStopSnoozedAt  = null; // ms timestamp of last dismiss — avoid re-nagging immediately
@@ -3799,19 +3901,46 @@ async function onGPSUpdate(pos,log){
   const statusEl=document.getElementById('gps-status-text');
   if(statusEl) statusEl.textContent='±'+Math.round(acc)+'m accuracy';
 
-  // Stop self-report — soft nudge only once genuinely stationary (never while
-  // actually driving), and only while a trip leg is active/en route, which is
-  // exactly when this GPS watch callback runs at all.
-  const isMovingNow = spd!=null ? spd>0.9 : null;
-  if(isMovingNow===true){
-    _stationarySince = null;
-    hideSoftStopPrompt();
-  } else if(isMovingNow===false){
-    if(_stationarySince===null) _stationarySince = Date.now();
-    const nowTs = Date.now();
-    if(nowTs-_lastStopCheckAt > 20000){ // poll for a confirmed stop row at most every 20s
-      _lastStopCheckAt = nowTs;
-      _maybeShowSoftStopPrompt(log);
+  // Stop self-report — soft nudge only once genuinely stationary (never
+  // while actually driving), and only while a trip leg is active/en route,
+  // which is exactly when this GPS watch callback runs at all.
+  //
+  // This tracks distance from where the stop BEGAN, not ping-to-ping speed.
+  // A driver who parks and walks into a store produces plenty of real,
+  // sustained on-foot movement between pings — that's not noise to smooth
+  // over, it's exactly the case this feature exists to catch. Speed alone
+  // can't tell "walking around inside a store" apart from "drove away" —
+  // distance from the stop's origin can, as long as the radius is generous
+  // enough to cover walking around a large store without falsely clearing.
+  // Low-accuracy pings (common indoors, multipath/reflection off the
+  // building) are also excluded from ever clearing the stop on their own,
+  // since a noisy position jump is exactly when a spurious "moved far"
+  // reading is most likely.
+  const STOP_CLEAR_RADIUS_M = 120;   // generous enough for walking a large store
+  const STOP_CLEAR_MAX_ACCURACY_M = 50; // an indoor/noisy ping can't clear a stop by itself
+
+  if(_stopOriginLat===null){
+    // Not in a tracked stop yet — any ping establishes a potential new origin
+    // once speed reads low, without waiting for a "true" stationary signal
+    // the old speed-only logic needed.
+    if(spd==null || spd<=2){ // ~4.5mph — walking pace or slower, plausible stop start
+      _stopOriginLat = lat; _stopOriginLng = lng;
+      _stationarySince = Date.now();
+    }
+  } else {
+    const distFromOrigin = haversineMeters(_stopOriginLat, _stopOriginLng, lat, lng);
+    const reliableFix = acc==null || acc<=STOP_CLEAR_MAX_ACCURACY_M;
+    if(distFromOrigin > STOP_CLEAR_RADIUS_M && reliableFix){
+      // Genuinely left — clear the stop and start fresh
+      _stopOriginLat = null; _stopOriginLng = null;
+      _stationarySince = null;
+      hideSoftStopPrompt();
+    } else {
+      const nowTs = Date.now();
+      if(nowTs-_lastStopCheckAt > 20000){ // poll for a confirmed stop row at most every 20s
+        _lastStopCheckAt = nowTs;
+        _maybeShowSoftStopPrompt(log);
+      }
     }
   }
 
@@ -4126,10 +4255,12 @@ function _releaseDriverAndResetTripState(){
   _returnDest      = null;
   _legType         = 'outbound';
   _passengers      = [];
+  _stopOriginLat   = null;
+  _stopOriginLng   = null;
+  _stationarySince = null;
   window._returnPaxSelected = new Set();
   window._returnPaxData     = [];
-  const navTrip = document.getElementById('nav-trip');
-  if(navTrip) navTrip.style.display = 'none';
+  setTripNavVisible(false);
 }
 
 async function submitArrival(){
@@ -5149,6 +5280,9 @@ async function _beginNewLeg(legType, alightedPax){
     _setupInProgress = false;
     _arrivedFired   = false;
     _arrivedAt      = null;
+    _stopOriginLat  = null;
+    _stopOriginLng  = null;
+    _stationarySince = null;
     clearTripState();
 
     // Fetch planned route for this leg — same as outbound but fires here
@@ -5321,7 +5455,7 @@ async function fullTestCleanup(){
     _arrivedAt       = null;
     _arrivedFired    = false;
     clearTripState();
-    document.getElementById('nav-trip').style.display = 'none';
+    setTripNavVisible(false);
 
     showToast('Cleanup complete — ' + logIds.length + ' trip(s) deleted','success');
     showScreen('home');
@@ -5345,7 +5479,7 @@ async function resetCompletedTrip(){
     _activeTrip=null; _selectedVehicle=null; _startingMileage=null;
     _passengers=[]; _arrivedAt=null; _arrivedFired=false;
     clearTripState();
-    document.getElementById('nav-trip').style.display='none';
+    setTripNavVisible(false);
     showToast('Trip deleted — ready to start over','success');
     showScreen('home');
     await loadMyTrips();
@@ -5379,7 +5513,7 @@ async function resetTrip(){
     clearTripState();
 
     showToast('Trip reset — starting from vehicle selection','success');
-    document.getElementById('nav-trip').style.display = 'none';
+    setTripNavVisible(false);
     showScreen('home');
     await loadMyTrips();
 
@@ -5411,8 +5545,17 @@ function showScreen(name){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('screen-'+name)?.classList.add('active');
   document.getElementById('nav-'+name)?.classList.add('active');
+  // My Trips lives in the header now, not the bottom nav — highlight it the
+  // same way an active .nav-btn highlights, just driven by inline styles
+  // since it isn't part of that shared class.
+  const myTripsBtn = document.getElementById('header-my-trips-btn');
+  if(myTripsBtn){
+    const isHome = name==='home';
+    myTripsBtn.style.color = isHome ? 'var(--green)' : 'var(--text2)';
+    myTripsBtn.style.borderColor = isHome ? 'var(--green)' : 'var(--border)';
+  }
   // Update top bar subtitle
-  const subs = {home:'Job Selection', trip:'Active Trip', history:'Trip History'};
+  const subs = {home:'Job Selection', trip:'Active Trip'};
   document.getElementById('top-bar-sub').textContent = subs[name] || 'Travel Log';
   // Close profile menu
   document.getElementById('profile-menu').classList.remove('open');
