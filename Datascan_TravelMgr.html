@@ -425,9 +425,9 @@ let _realtimeDebounce = null;
 // is never actually named to match — comparing against the served filename
 // would be a guaranteed false alarm every time, not a real signal. The
 // version string itself is what survives deployment unchanged.
-const APP_VERSION = 'v1.2.3';
+const APP_VERSION = 'v1.2.4';
 const VERSION_HISTORY = [
-  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3',
+  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4',
 ];
 
 function _checkVersionSequence(){
@@ -1026,6 +1026,51 @@ function initFleetMap(){
   _fleetMap=L.map(mapEl,{zoomControl:true,attributionControl:false}).setView([37,-95.7],5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_fleetMap);
   _fleetMap.on('click',()=>closeMapCard());
+  _fleetMap.on('zoomend',applyPinZoomScale);
+}
+
+// ── Pin zoom scaling ─────────────────────────────────────────────────────────
+// divIcon markers are fixed screen-pixel size by default — correct for
+// keeping badges readable and tappable, but it means a 44-56px pin that
+// looked right over one store starts visually swallowing whole blocks, then
+// a neighborhood, then the city itself as you zoom out, since the map
+// compresses more geography into the same screen space while the pin stays
+// the same size. Full size down to FULL_ZOOM, shrinking linearly to
+// FLOOR_SCALE by FLOOR_ZOOM, then LOCKED there — never shrinking further, so
+// pins stay visible even zoomed out to state/country level instead of
+// continuing to shrink into nothing.
+const PIN_FULL_ZOOM=13, PIN_FLOOR_ZOOM=8, PIN_FLOOR_SCALE=0.45;
+
+function pinZoomScale(zoom){
+  if(zoom>=PIN_FULL_ZOOM) return 1;
+  if(zoom<=PIN_FLOOR_ZOOM) return PIN_FLOOR_SCALE;
+  const t=(zoom-PIN_FLOOR_ZOOM)/(PIN_FULL_ZOOM-PIN_FLOOR_ZOOM);
+  return PIN_FLOOR_SCALE + t*(1-PIN_FLOOR_SCALE);
+}
+
+// Leaflet controls each marker's OUTER element via its own transform (for
+// positioning) — scaling that directly would fight Leaflet and send pins to
+// the wrong spot on the next pan/zoom. Instead this sets a CSS custom
+// property (--pin-scale) on the marker's INNER content (the root div from
+// our own divIcon HTML, always the first child), which Leaflet never
+// touches. Each icon's own root div reads that property for its base
+// transform, with transform-origin baked in at creation matching its own
+// anchor point, so scaling shrinks the badge around the actual geographic
+// point rather than letting it drift off it. Using a custom property rather
+// than setting .style.transform directly also means a marker's own hover
+// effect (scale up slightly on mouseenter) can multiply on top of the
+// current zoom scale instead of fighting it for control of the same property.
+function applyPinZoomScale(){
+  if(!_fleetMap) return;
+  const s=pinZoomScale(_fleetMap.getZoom());
+  const setScale=m=>{
+    const inner=m.getElement?.()?.firstElementChild;
+    if(inner) inner.style.setProperty('--pin-scale', s);
+  };
+  Object.values(_fleetMarkers).forEach(setScale);
+  // _autoTrailLayers is a mix of markers (stop pills, ping breadcrumbs) and
+  // polylines (route/trail lines) — only markers have getElement().
+  _autoTrailLayers.forEach(l=>{ if(typeof l.getElement==='function') setScale(l); });
 }
 
 function renderFleetMarkers(shouldFit=false){
@@ -1051,9 +1096,10 @@ function renderFleetMarkers(shouldFit=false){
         background:${color};
         border:3px solid rgba(255,255,255,.9);
         box-shadow:0 0 0 4px ${color}35, 0 2px 8px rgba(0,0,0,.6);
-        cursor:pointer;transition:transform .1s"
-        onmouseenter="this.style.transform='scale(1.3)'"
-        onmouseleave="this.style.transform='scale(1)'">
+        cursor:pointer;transition:transform .1s;
+        transform-origin:9px 9px;transform:scale(var(--pin-scale,1))"
+        onmouseenter="this.style.transform='scale(calc(var(--pin-scale,1) * 1.3))'"
+        onmouseleave="this.style.transform='scale(var(--pin-scale,1))'">
       </div>`,
       className:'',iconAnchor:[9,9]
     });
@@ -1081,9 +1127,10 @@ function renderFleetMarkers(shouldFit=false){
         width:18px;height:18px;border-radius:50%;background:${color};
         border:3px solid rgba(255,255,255,.9);
         box-shadow:0 0 0 4px ${color}35,0 2px 8px rgba(0,0,0,.6);
-        cursor:pointer;transition:transform .1s"
-        onmouseenter="this.style.transform='scale(1.3)'"
-        onmouseleave="this.style.transform='scale(1)'">
+        cursor:pointer;transition:transform .1s;
+        transform-origin:9px 9px;transform:scale(var(--pin-scale,1))"
+        onmouseenter="this.style.transform='scale(calc(var(--pin-scale,1) * 1.3))'"
+        onmouseleave="this.style.transform='scale(var(--pin-scale,1))'">
       </div>`,
       className:'',iconAnchor:[9,9]
     });
@@ -1101,6 +1148,11 @@ function renderFleetMarkers(shouldFit=false){
     if(pts.length>1) _fleetMap.fitBounds(L.latLngBounds(pts),{padding:[60,60]});
     else if(pts.length===1) _fleetMap.setView(pts[0],12);
   }
+
+  // Freshly-created markers start at scale(1) regardless of current zoom —
+  // apply the right scale immediately rather than waiting for the next
+  // zoomend, which won't fire again if the zoom level hasn't actually changed.
+  applyPinZoomScale();
 }
 
 // ── Location hubs — numbered departure/arrival badges ───────────────────────
@@ -1126,7 +1178,9 @@ function hubMarkerHTML(hub){
   const chip=chipIcon?`<div style="position:absolute;left:0;top:0;width:${HUB_CHIP}px;height:${HUB_CHIP}px;
     border-radius:50%;background:#5F5E5A;border:2px solid #0b1929;display:flex;align-items:center;
     justify-content:center;z-index:2"><i class="ti ${chipIcon}" style="font-size:13px;color:#fff"></i></div>`:'';
-  return `<div style="position:relative;width:${HUB_BOX}px;height:${HUB_BOX}px;cursor:pointer">
+  return `<div style="position:relative;width:${HUB_BOX}px;height:${HUB_BOX}px;cursor:pointer;
+    transform-origin:${HUB_OFFSET+HUB_CIRCLE/2}px ${HUB_OFFSET+HUB_CIRCLE/2}px;
+    transform:scale(var(--pin-scale,1))">
     <div style="position:absolute;left:${HUB_OFFSET}px;top:${HUB_OFFSET}px;width:${HUB_CIRCLE}px;height:${HUB_CIRCLE}px;
       border-radius:50%;background:${hub.color};border:3.5px solid rgba(255,255,255,.9);color:#fff;
       font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;
@@ -1236,7 +1290,8 @@ function drawAutoTrail(log){
       const col=ragColors[p.ping_health]||'rgba(255,255,255,.5)';
       const dotIcon=L.divIcon({
         html:`<div style="width:9px;height:9px;border-radius:50%;background:${col};
-          border:1.5px solid rgba(255,255,255,.8);cursor:pointer"></div>`,
+          border:1.5px solid rgba(255,255,255,.8);cursor:pointer;
+          transform-origin:5px 5px;transform:scale(var(--pin-scale,1))"></div>`,
         className:'',iconAnchor:[5,5]
       });
       const dm=L.marker(coords[i],{icon:dotIcon,zIndexOffset:300}).addTo(_fleetMap);
@@ -1257,7 +1312,8 @@ function drawAutoTrail(log){
     const pillIcon=L.divIcon({
       html:`<div style="width:36px;height:36px;border-radius:50%;background:#a855f7;
         border:3px solid rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;
-        box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer">
+        box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;
+        transform-origin:18px 18px;transform:scale(var(--pin-scale,1))">
         <i class="ti ${meta.icon}" style="font-size:17px;color:#fff"></i>
       </div>`,
       className:'',iconAnchor:[18,18]
