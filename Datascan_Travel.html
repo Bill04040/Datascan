@@ -657,9 +657,9 @@ body{background:#0f1e30;color:#f0f4f8}
 //   - warns if the last two entries don't look like a clean +1 bump on
 //     major, minor, or patch (skipped a version, or typo'd one)
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.2.0';
 const VERSION_HISTORY = [
-  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1',
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0',
 ];
 
 function _checkVersionSequence(){
@@ -950,7 +950,7 @@ async function loadMyTrips(){
   }
 
   // ── Check one-trip-at-a-time gate ─────────────────────────────────────────
-  const activeLog = (myLogs||[]).find(l=>l.status==='active');
+  const activeLog = (myLogs||[]).find(l=>l.status==='active'||l.status==='setup');
 
   // ── Fetch timesheet metadata for each log ─────────────────────────────────
   let tsMap = {};
@@ -1089,26 +1089,65 @@ async function selectTrip(log, ts){
   document.getElementById('nav-trip').style.display = 'flex';
   showScreen('trip');
 
-  if(log.status === 'active'){
+  if(log.status === 'active' || log.status === 'setup'){
     _activeTrip = log;
     await _resumeActiveTrip(log);
 
-  } else if(log.status === 'setup'){
-    _activeTrip      = log;
-    _selectedVehicle = {
-      plate:        log.vehicle_plate,
-      make:         log.vehicle_make,
-      model:        log.vehicle_model,
-      year:         log.vehicle_year,
-      color:        log.vehicle_color,
-      capacity:     log.vehicle_capacity,
-      vehicle_type: log.vehicle_type,
-    };
-    _startingMileage = log.miles_start;
-    showPassengerCheckIn();
-
   } else if(log.status === 'completed'){
     showTripSummary(log);
+  }
+}
+
+// Mid-trip setup can be handed off but never cancelled — the vehicle
+// already has real committed history behind it (a completed preceding
+// leg), so there's no clean "nothing" to back out to. The new driver must
+// already have been a passenger on the leg that just arrived — nobody
+// teleports into the vehicle to take over.
+async function handOffSetupLeg(){
+  if(!_activeTrip?.id || !_activeTrip.parent_log_id){
+    showToast('Nothing to hand off','error'); return;
+  }
+  const {data:candidates} = await getSupabase()
+    .from('travel_passengers')
+    .select('profile_id, full_name, external_name')
+    .eq('travel_log_id', _activeTrip.parent_log_id);
+
+  // Can only hand off to a real employee (has a profile_id) — not an
+  // external/non-employee passenger, who isn't authorized to drive.
+  const named = (candidates||[]).filter(p=>p.profile_id && p.profile_id!==currentUser.id);
+  if(!named.length){ showToast('No eligible passengers to hand off to','error'); return; }
+
+  const choice = prompt(
+    'Hand off driving to who?\n\n' +
+    named.map((p,i)=>(i+1)+'. '+(p.full_name||p.external_name)).join('\n') +
+    '\n\nEnter a number:'
+  );
+  const idx = parseInt(choice)-1;
+  if(isNaN(idx) || idx<0 || idx>=named.length) return;
+  const newDriver = named[idx];
+
+  const ok = confirm(
+    'Hand off to '+(newDriver.full_name||newDriver.external_name)+'?\n\n' +
+    'They will need to log in on their own device to continue selecting ' +
+    'passengers and begin driving. Everything already selected stays as-is.'
+  );
+  if(!ok) return;
+
+  try{
+    await getSupabase().from('travel_logs').update({
+      driver_id:   newDriver.profile_id,
+      driver_name: newDriver.full_name||newDriver.external_name,
+    }).eq('id', _activeTrip.id);
+
+    showToast('Handed off to '+(newDriver.full_name||newDriver.external_name),'success');
+    stopSetupGPS();
+    _activeTrip = null;
+    _setupInProgress = false;
+    _legType = 'outbound';
+    showScreen('home');
+    loadMyTrips();
+  }catch(e){
+    showToast('Hand-off failed: '+e.message,'error');
   }
 }
 
@@ -1117,12 +1156,16 @@ function selectJob(ts, log){ return log ? selectTrip(log, ts) : startNewTrip(); 
 
 // ── Start New Trip: pick a store, then create the log ─────────────────────────
 async function startNewTrip(){
-  // One-at-a-time gate — double check before proceeding
+  // One-at-a-time gate — double check before proceeding. 'setup' blocks the
+  // same as 'active': a leg that's mid-onboarding is just as much "in
+  // progress" as one that's already driving, even though nothing has moved
+  // yet — the vehicle is spoken for the moment selection begins, not once
+  // driving starts.
   const {data:activeLogs} = await getSupabase()
     .from('travel_logs')
     .select('id, status')
     .eq('driver_id', currentUser.id)
-    .eq('status', 'active')
+    .in('status', ['active','setup'])
     .limit(1);
 
   if(activeLogs?.length){
@@ -1236,6 +1279,22 @@ async function _resumeActiveTrip(log){
     .select('profile_id, full_name, role')
     .eq('travel_log_id', log.id);
   _passengers = pax || [];
+
+  // A leg still in status:'setup' means onboarding was interrupted before
+  // confirmation — resume straight back into passenger selection for THIS
+  // leg, same reasoning as the arrived-but-unresolved case: the database is
+  // the only thing that can tell us this happened, and there's no scenario
+  // where landing anywhere else is correct.
+  if(log.status === 'setup'){
+    _activeTrip = log;
+    _legType = log.leg_type;
+    _lastArrivalLog = { id: log.parent_log_id, to_job_id: log.from_job_id }; // enough for the picker's sibling-log lookup
+    if(log.dest_lat && log.dest_lng){
+      _returnDest = {lat:log.dest_lat, lng:log.dest_lng, address:log.dest_address||'Meet spot', type:log.leg_type};
+    }
+    await showReturnSetupScreen({id: log.parent_log_id, timesheet_id: log.timesheet_id}, log);
+    return;
+  }
 
   // next_leg_choice='pending' is now the direct, stated fact that a leg
   // arrived but a next step is still required — no inference needed. The
@@ -2665,6 +2724,65 @@ let _lastArrivalLog   = null;  // the leg that MOST RECENTLY completed — drive
 let _returnDest       = null;  // {lat, lng, address, type} for return trip
 let _legType          = 'outbound'; // outbound | return | job_to_job
 let _arrivalUnresolved = false; // true from the moment a leg arrives until What's Next is answered — blocks navigation away
+let _setupInProgress   = false; // true from the moment a continuation leg's setup row exists until it's confirmed — same lockout, one phase earlier
+
+// Creates the travel_logs row for a continuation leg (return / job_to_job /
+// custom) the MOMENT passenger selection begins, in status:'setup' — not at
+// confirmation. This is what lets the manager see onboarding happening live
+// for every leg, not just the very first meet-spot pickup, and it's what
+// makes the leg genuinely resumable if the driver's session gets
+// interrupted mid-selection, the same way an arrived-but-unresolved leg is.
+// dest_lat/dest_lng are deliberately left null here for 'custom' — the
+// driver may not have typed an address yet; they get filled in later, at
+// confirmation, in _beginNewLeg's update rather than insert.
+async function _beginSetupLeg(legType){
+  let originLat=null, originLng=null;
+  try{
+    const pos = await _getGPS();
+    originLat = pos.lat; originLng = pos.lng;
+  } catch(e){ console.warn('[beginSetupLeg] GPS unavailable:', e.message); }
+
+  const parentLogId = _lastArrivalLog?.id || null;
+  const isReturn = legType === 'return';
+
+  const payload = {
+    timesheet_id:  _outboundLog?.timesheet_id || _activeJob?.id || null,
+    driver_id:     currentUser.id,
+    driver_name:   currentProfile?.full_name || '',
+    vehicle_id:    _selectedVehicle?.id || null,
+    vehicle_plate: _selectedVehicle?.plate || null,
+    vehicle_type:  _selectedVehicle?.vehicle_type || 'fleet',
+    vehicle_year:  _selectedVehicle?.year || null,
+    vehicle_make:  _selectedVehicle?.make || null,
+    vehicle_model: _selectedVehicle?.model || null,
+    vehicle_color: _selectedVehicle?.color || null,
+    vehicle_capacity: _selectedVehicle?.capacity || null,
+    miles_start:   _startingMileage || null,
+    status:        'setup',
+    leg_type:      legType,
+    origin_lat:    originLat,
+    origin_lng:    originLng,
+    from_job_id:   _lastArrivalLog?.to_job_id || _activeJob?.id || null,
+    to_job_id:     null, // filled at confirmation for job_to_job; stays null for return/custom
+    dest_lat:      isReturn ? (_returnDest?.lat||null) : null,
+    dest_lng:      isReturn ? (_returnDest?.lng||null) : null,
+    dest_address:  isReturn ? 'Meet spot' : null,
+    parent_log_id: parentLogId,
+    started_at:    new Date().toISOString(), // this genuinely is when the leg began — setup phase counts
+  };
+
+  try{
+    const {data, error} = await getSupabase().from('travel_logs').insert(payload).select().single();
+    if(error) throw error;
+    _activeTrip = data;
+    _setupInProgress = true;
+    return data;
+  } catch(e){
+    console.error('[beginSetupLeg]', e);
+    showToast('Could not start leg setup: '+e.message, 'error');
+    return null;
+  }
+}
 let _lastPingTime     = 0;
 let _pingCount        = 0;
 let _currentPos       = null;
@@ -4029,8 +4147,15 @@ async function submitArrival(){
     return;
   }
 
-  // Confirmation already shown via promptConfirmArrival banner — proceed directly
-  const completedAt = _arrivedAt || new Date().toISOString();
+  // completed_at must be the moment THIS function runs — when the driver
+  // actually enters mileage and taps confirm — not _arrivedAt, which is set
+  // much earlier, the instant the geofence was first detected (that's what
+  // triggers the arrival banner in the first place). Falling back to
+  // _arrivedAt here collapsed two genuinely different moments into one:
+  // "GPS crossed the threshold" and "driver confirmed" could be 30+ seconds
+  // apart if the driver stops, waits, then enters mileage — and using
+  // _arrivedAt silently discarded that gap every time.
+  const completedAt = new Date().toISOString();
   const btn = document.getElementById('confirm-arrival-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Saving...'; }
   try{
@@ -4231,7 +4356,7 @@ async function _loadArrivalSummaryPax(log){
 
 // User picked one of the "What's next?" destination options — store the choice
 // and move on to passenger selection (step 3) for the next leg.
-function chooseNextDestination(option){
+async function chooseNextDestination(option){
   _legType = option;
   if(option === 'return'){
     _returnDest = _outboundLog?.origin_lat
@@ -4241,12 +4366,16 @@ function chooseNextDestination(option){
   } else {
     _returnDest = null;
   }
+
+  const setupLog = await _beginSetupLeg(option);
+  if(!setupLog) return; // toast already shown inside _beginSetupLeg
+
   showReturnSetupScreen(_lastArrivalLog);
 }
 
 // Page B — "Who is returning in this vehicle?" + destination details + begin trip
 // (step 3 · Passengers — resumes the normal pre-departure flow)
-async function showReturnSetupScreen(log){
+async function showReturnSetupScreen(log, resumeSetupLog){
   setStepBar(3);
   startSetupGPS();
   const content = document.getElementById('trip-content');
@@ -4277,8 +4406,63 @@ async function showReturnSetupScreen(log){
   // AND null external_name, so a position-based fallback keeps every row distinct.
   const myPaxKeyed    = myPax.map((p,idx)=>({...p, _key: p.profile_id ? `my_${p.profile_id}` : `my_row_${idx}`}));
   const otherPaxKeyed = otherPax.map((p,idx)=>({...p, _key: p.profile_id ? `other_${p.profile_id}` : `other_row_${idx}`}));
-  window._returnPaxSelected = new Set(myPaxKeyed.map(p=>p._key));
   window._returnPaxData = [...myPaxKeyed, ...otherPaxKeyed];
+  window._returnPaxDbId = {}; // key -> travel_passengers row id, for incremental insert/delete on toggle
+
+  if(resumeSetupLog?.id){
+    // Resuming a setup leg that already has real selections saved against
+    // it — restore THOSE, not the "everyone continues" default. Re-defaulting
+    // here would silently discard whatever the driver had actually chosen
+    // before the interruption.
+    const {data:savedPax} = await getSupabase().from('travel_passengers')
+      .select('id, profile_id, external_name, full_name, role, worker_type')
+      .eq('travel_log_id', resumeSetupLog.id);
+    const savedKeys = new Set();
+    (savedPax||[]).forEach(sp=>{
+      const match = window._returnPaxData.find(p=>
+        (sp.profile_id && p.profile_id===sp.profile_id) ||
+        (!sp.profile_id && p.external_name && p.external_name===sp.external_name));
+      if(match){
+        savedKeys.add(match._key);
+        window._returnPaxDbId[match._key] = sp.id;
+      } else {
+        // Saved passenger doesn't match anyone in "my"/"other" (an
+        // externally-added name) — add them to the list directly so they
+        // still render, checked, same as they were before the interruption.
+        const extKey = 'ext_resumed_'+sp.id;
+        window._returnPaxData.push({_key:extKey, profile_id:sp.profile_id||null,
+          full_name:sp.full_name||sp.external_name||'Unknown', external_name:sp.external_name,
+          role:sp.role, worker_type:sp.worker_type});
+        savedKeys.add(extKey);
+        window._returnPaxDbId[extKey] = sp.id;
+      }
+    });
+    window._returnPaxSelected = savedKeys;
+  } else {
+    window._returnPaxSelected = new Set(myPaxKeyed.map(p=>p._key));
+
+    // "This vehicle's" passengers are pre-checked by default (most trips just
+    // continue with the same crew) — write them to the database right away
+    // rather than waiting for an explicit toggle event that never happens for
+    // the default case. Everything checked or unchecked AFTER this point goes
+    // through toggleReturnPax incrementally, one row at a time, live.
+    if(_activeTrip?.id && myPaxKeyed.length){
+      const rows = myPaxKeyed.map(p=>({
+        travel_log_id: _activeTrip.id,
+        profile_id:    p.profile_id||null,
+        full_name:     p.full_name||p.external_name||'Unknown',
+        role:          p.role||null,
+        worker_type:   p.worker_type||'w2',
+        external_name: p.external_name||null,
+        boarded_at:    new Date().toISOString(),
+        waypoint:      _legType==='return' ? 'meet_spot' : 'job_site',
+      }));
+      try{
+        const {data:inserted} = await getSupabase().from('travel_passengers').insert(rows).select();
+        (inserted||[]).forEach((row,i)=>{ window._returnPaxDbId[myPaxKeyed[i]._key] = row.id; });
+      }catch(e){ console.warn('[showReturnSetupScreen] pre-check write failed:', e.message); }
+    }
+  }
 
   const legLabel = _legType==='return' ? 'Return to meet spot'
     : _legType==='job_to_job' ? 'Go to next job'
@@ -4336,6 +4520,15 @@ async function showReturnSetupScreen(log){
       <button class="btn btn-success" id="begin-return-btn"
         style="margin-top:1rem;opacity:.4;transition:opacity .3s" onclick="promptBeginReturnLeg()" disabled>
         <i class="ti ti-steering-wheel"></i> Begin trip
+      </button>
+
+      <!-- Mid-trip setup has no cancel — the vehicle already has real
+           history behind it, so the only two ways forward are finish
+           selecting passengers, or hand off to someone already in the
+           vehicle. -->
+      <button class="btn btn-ghost btn-sm" style="margin-top:.625rem;color:var(--text3)"
+        onclick="handOffSetupLeg()">
+        <i class="ti ti-steering-wheel"></i> I'm not driving — hand off to someone else in the vehicle
       </button>
 
       <!-- Confirmation banner — shown on button tap -->
@@ -4447,8 +4640,12 @@ function _renderReturnPaxList(myPax, otherPax){
   el.innerHTML = html;
 }
 
-function toggleReturnPax(key, card){
-  if(window._returnPaxSelected.has(key)){
+async function toggleReturnPax(key, card){
+  const wasSelected = window._returnPaxSelected.has(key);
+
+  // Flip the visual state immediately — don't make the driver wait on a
+  // network round trip to see their tap register.
+  if(wasSelected){
     window._returnPaxSelected.delete(key);
     card.classList.remove('checked');
     card.querySelector('.pax-check').textContent = '';
@@ -4456,6 +4653,39 @@ function toggleReturnPax(key, card){
     window._returnPaxSelected.add(key);
     card.classList.add('checked');
     card.querySelector('.pax-check').textContent = '✓';
+  }
+
+  if(!_activeTrip?.id) return; // setup leg failed to create — nothing to sync against
+
+  try{
+    if(wasSelected){
+      // Unchecked — remove their row if we wrote one
+      const dbId = window._returnPaxDbId[key];
+      if(dbId){
+        await getSupabase().from('travel_passengers').delete().eq('id', dbId);
+        delete window._returnPaxDbId[key];
+      }
+    } else {
+      // Checked — write their row now, not at confirmation
+      const p = (window._returnPaxData||[]).find(x=>x._key===key);
+      if(!p) return;
+      const {data:row} = await getSupabase().from('travel_passengers').insert({
+        travel_log_id: _activeTrip.id,
+        profile_id:    p.profile_id||null,
+        full_name:     p.full_name||p.external_name||'Unknown',
+        role:          p.role||null,
+        worker_type:   p.worker_type||'w2',
+        external_name: p.external_name||null,
+        boarded_at:    new Date().toISOString(),
+        waypoint:      _legType==='return' ? 'meet_spot' : 'job_site',
+      }).select().single();
+      if(row) window._returnPaxDbId[key] = row.id;
+    }
+  }catch(e){
+    console.warn('[toggleReturnPax] sync failed:', e.message);
+    // Not reverting the visual state for a sync failure — the confirm step
+    // still writes the final passenger list, so a transient network blip
+    // here doesn't lose anything, just delays when the manager sees it.
   }
 }
 
@@ -4853,74 +5083,72 @@ async function _beginNewLeg(legType, alightedPax){
   const btn = document.getElementById('begin-return-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='Starting...'; }
 
+  if(!_activeTrip?.id){
+    showToast('Setup leg is missing — cannot confirm','error');
+    if(btn){ btn.disabled=false; btn.innerHTML=legType==='return'?'Begin return trip':'Start trip'; }
+    return;
+  }
+
   try{
-    // Resolve the leg that just arrived — this new leg only gets created
+    // Resolve the leg that just arrived — this new leg only gets confirmed
     // once that's done, so there's never a moment where the old leg is
-    // closed but unresolved, or a new leg exists before the old one closed.
+    // closed but unresolved.
     await _resolvePrecedingLeg(legType);
 
-    // Capture current GPS position as new origin
-    let originLat=null, originLng=null;
-    try{
-      const pos = await _getGPS();
-      originLat = pos.lat;
-      originLng = pos.lng;
-      console.log('[newLeg] GPS origin:', originLat, originLng, pos.mock?'(mock)':'(real)');
-    } catch(e){ console.warn('[newLeg] GPS unavailable:', e.message); }
-
     const dest = _returnDest;
-    const logPayload = {
-      timesheet_id:  _outboundLog?.timesheet_id || _activeJob?.id,
-      driver_id:     currentUser.id,
-      driver_name:   currentProfile?.full_name||'',
-      vehicle_id:    _selectedVehicle?.id||null,
-      vehicle_plate: _selectedVehicle?.plate,
-      vehicle_type:  _selectedVehicle?.vehicle_type||'fleet',
-      vehicle_year:  _selectedVehicle?.year||null,
-      vehicle_make:  _selectedVehicle?.make||null,
-      vehicle_model: _selectedVehicle?.model||null,
-      vehicle_color: _selectedVehicle?.color||null,
-      vehicle_capacity: _selectedVehicle?.capacity||null,
-      miles_start:   _startingMileage || null, // entered on post-arrival screen before departure
-      status:        'active',
-      leg_type:      legType,
-      parent_log_id: _outboundLog?.id||null,
-      from_job_id:   _activeJob?.id||null,
-      to_job_id:     dest?.to_job_id||null,
-      started_at:    new Date().toISOString(),
-      origin_lat:    originLat,
-      origin_lng:    originLng,
-      dest_lat:      dest?.lat||null,
-      dest_lng:      dest?.lng||null,
-      dest_address:  dest?.address||null,
-    };
+    const originLat = _activeTrip.origin_lat, originLng = _activeTrip.origin_lng;
 
-    const {data:newLog, error} = await getSupabase()
-      .from('travel_logs').insert(logPayload).select().single();
+    // This leg's travel_logs row already exists (created in status:'setup'
+    // the moment passenger selection began) — confirming it updates that
+    // same row rather than inserting a new one. dest_lat/lng get filled in
+    // here for the first time on a 'custom' leg, since the driver may not
+    // have typed an address until just now.
+    const {data:updatedLog, error} = await getSupabase()
+      .from('travel_logs')
+      .update({
+        status:       'active',
+        to_job_id:    dest?.to_job_id || null,
+        dest_lat:     dest?.lat || null,
+        dest_lng:     dest?.lng || null,
+        dest_address: dest?.address || null,
+        miles_start:  _startingMileage || _activeTrip.miles_start || null,
+      })
+      .eq('id', _activeTrip.id)
+      .select().single();
     if(error) throw error;
 
-    // Insert passengers — use _passengers as set by beginReturnLeg
-    // (already filtered by driver's selection — do NOT overwrite from Supabase)
-    if(_passengers?.length){
-      const paxRows = _passengers.map(p=>({
-        travel_log_id: newLog.id,
-        profile_id:    p.profile_id||null,
-        full_name:     p.full_name||p.external_name||'Unknown',
-        role:          p.role||null,
-        worker_type:   p.worker_type||'w2',
-        external_name: p.external_name||null,
-        external_id:   p.external_id||null,
-        boarded_at:    new Date().toISOString(),
-        waypoint:      'job_site',
-      }));
-      await getSupabase().from('travel_passengers').insert(paxRows);
-      console.log('[beginNewLeg] inserted', paxRows.length, 'passengers');
+    // Reconcile passengers against the final selection — a safety net for
+    // any incremental toggle write that failed silently along the way.
+    // Fetch what's actually in the database, diff against the intended
+    // final list, and fix only the difference rather than blindly
+    // re-inserting everything (which would duplicate rows that already
+    // synced correctly during selection).
+    const keyOf = p => p.profile_id ? 'p_'+p.profile_id : 'e_'+(p.full_name||p.external_name);
+    const {data:existingPax} = await getSupabase().from('travel_passengers')
+      .select('id, profile_id, external_name, full_name').eq('travel_log_id', updatedLog.id);
+    const existingKeys = new Set((existingPax||[]).map(keyOf));
+    const finalKeys    = new Set((_passengers||[]).map(keyOf));
+
+    const missing = (_passengers||[]).filter(p=>!existingKeys.has(keyOf(p)));
+    if(missing.length){
+      await getSupabase().from('travel_passengers').insert(missing.map(p=>({
+        travel_log_id: updatedLog.id, profile_id: p.profile_id||null,
+        full_name:     p.full_name||p.external_name||'Unknown', role: p.role||null,
+        worker_type:   p.worker_type||'w2', external_name: p.external_name||null,
+        external_id:   p.external_id||null, boarded_at: new Date().toISOString(),
+        waypoint:      legType==='return' ? 'meet_spot' : 'job_site',
+      })));
+    }
+    const extras = (existingPax||[]).filter(p=>!finalKeys.has(keyOf(p)));
+    if(extras.length){
+      await getSupabase().from('travel_passengers').delete().in('id', extras.map(p=>p.id));
     }
 
-    _activeTrip  = newLog;
-    _legType     = legType;
-    _arrivedFired = false;
-    _arrivedAt   = null;
+    _activeTrip     = updatedLog;
+    _legType        = legType;
+    _setupInProgress = false;
+    _arrivedFired   = false;
+    _arrivedAt      = null;
     clearTripState();
 
     // Fetch planned route for this leg — same as outbound but fires here
@@ -4932,12 +5160,12 @@ async function _beginNewLeg(legType, alightedPax){
     if(routeOriginLat && routeOriginLng && routeDestLat && routeDestLng){
       console.log('[beginNewLeg] fetching planned route for', legType, 'leg');
       fetchAndStorePlannedRoute(
-        newLog.id,
+        updatedLog.id,
         routeOriginLat, routeOriginLng,
         routeDestLat,   routeDestLng,
         'planned_route'
       ).then(route=>{
-        if(route && _activeTrip?.id===newLog.id){
+        if(route && _activeTrip?.id===updatedLog.id){
           _activeTrip.planned_route = route;
           console.log('[beginNewLeg] planned route stored:', route.distance_miles+'mi', route.duration_text);
         }
@@ -4951,11 +5179,11 @@ async function _beginNewLeg(legType, alightedPax){
     // that this leg has a travel_log_id, then record "board"/"alight" pings
     // (at this leg's origin fix) for everyone whose status changed at this stop.
     stopSetupGPS();
-    await _flushSetupPingBuffer(newLog, legType);
-    await _recordPaxBoardAlight(newLog, legType, _passengers, alightedPax);
+    await _flushSetupPingBuffer(updatedLog, legType);
+    await _recordPaxBoardAlight(updatedLog, legType, _passengers, alightedPax);
 
     showToast(legType==='return'?'Return trip started':'Job-to-job trip started','success');
-    showTripActive(newLog);
+    showTripActive(updatedLog);
 
   } catch(e){
     console.error('[beginNewLeg]', e);
@@ -5163,14 +5391,20 @@ async function resetTrip(){
 
 // ── Screen navigation ─────────────────────────────────────────────────────────
 function showScreen(name){
-  // Arrived-but-unresolved is a gate, not a suggestion — any attempt to
-  // leave (nav bar, cancel buttons, a stray Enter landing on the wrong
-  // control) redirects straight back to What's Next instead of navigating
-  // away. This re-evaluates on every call, so it holds regardless of how
-  // many times someone tries to leave.
+  // Arrived-but-unresolved AND mid-onboarding-setup are both gates, not
+  // suggestions — any attempt to leave (nav bar, cancel buttons, a stray
+  // Enter landing on the wrong control) redirects straight back to wherever
+  // the driver actually needs to be, instead of navigating away. This
+  // re-evaluates on every call, so it holds regardless of how many times
+  // someone tries to leave.
   if(_arrivalUnresolved && name !== 'trip' && _lastArrivalLog){
     showToast("Please choose what's next before leaving this screen",'error');
     showArrivalSummaryScreen(_lastArrivalLog);
+    return;
+  }
+  if(_setupInProgress && name !== 'trip' && _activeTrip){
+    showToast('Please finish selecting passengers before leaving this screen','error');
+    showReturnSetupScreen({id:_activeTrip.parent_log_id, timesheet_id:_activeTrip.timesheet_id}, _activeTrip);
     return;
   }
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -5206,6 +5440,7 @@ async function doLogout(){
   // logout needs to do the same explicitly.
   _lastArrivalLog = null;
   _arrivalUnresolved = false;
+  _setupInProgress = false;
   _arrivedAt = null;
   _geofenceHitAt = null;
   _geofenceHitDist = null;

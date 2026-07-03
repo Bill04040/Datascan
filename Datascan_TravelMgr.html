@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
 <title>Datascan · Travel Manager</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -88,7 +88,13 @@ select.filter-input{cursor:pointer}
   line-height:34px !important;font-size:18px !important}
 
 /* ── Trips FAB — sits next to zoom controls ──────────────────────────────── */
-#trips-fab{position:absolute;bottom:10px;left:12px;z-index:150;
+/* bottom offset accounts for env(safe-area-inset-bottom) — the space iOS/
+   Android reserve for their own UI (home indicator, gesture bar). Without
+   it, a flat pixel value can end up rendered underneath that chrome
+   intermittently as it shows/hides while scrolling — same position in code,
+   sometimes covered, sometimes not. calc() falls back to just the 10px on
+   any browser that doesn't support env(), so this is harmless on desktop. */
+#trips-fab{position:absolute;bottom:calc(10px + env(safe-area-inset-bottom));left:12px;z-index:150;
   display:flex;align-items:center;gap:6px;padding:8px 14px;
   background:var(--bg2);border:1px solid var(--border2);border-radius:20px;
   color:var(--text1);font-size:12px;font-weight:600;cursor:pointer;
@@ -216,8 +222,17 @@ select.filter-input{cursor:pointer}
   overflow:hidden;text-overflow:ellipsis}
 
 @media(max-width:600px){
-  #topbar{padding:.4rem .625rem;gap:6px}
+  #topbar{
+    padding:.4rem .625rem;gap:6px;
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none; /* Firefox */
+    mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent 100%);
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent 100%);
+  }
+  #topbar::-webkit-scrollbar{display:none}
+  #topbar > *{flex-shrink:0} /* nothing squishes mid-scroll — same size whether visible or off to the side */
   .tb-sub,.tb-sep:first-of-type{display:none}
+  .tb-user{margin-left:0} /* auto-margin fights a scrolling row — every item just sits in sequence instead */
   #trips-drawer{width:100%;left:-100%}
   #trips-drawer.open{left:0}
   .stat-lbl{font-size:8px}
@@ -261,18 +276,18 @@ select.filter-input{cursor:pointer}
     <input type="date" id="filter-date" class="filter-input" onchange="onDateChange()"/>
     <div class="tb-sep"></div>
     <span class="tb-label">Vehicle</span>
-    <select id="filter-vehicle" class="filter-input" onchange="applyFilters()">
+    <select id="filter-vehicle" class="filter-input" onchange="applyFilters(true)">
       <option value="">All</option>
     </select>
     <span class="tb-label">Leg</span>
-    <select id="filter-leg" class="filter-input" onchange="applyFilters()">
+    <select id="filter-leg" class="filter-input" onchange="applyFilters(true)">
       <option value="">All</option>
       <option value="outbound">Outbound</option>
       <option value="return">Return</option>
       <option value="job_to_job">Job to Job</option>
     </select>
     <span class="tb-label">Status</span>
-    <select id="filter-status" class="filter-input" onchange="applyFilters()">
+    <select id="filter-status" class="filter-input" onchange="applyFilters(true)">
       <option value="">All</option>
       <option value="active">Active</option>
       <option value="completed">Completed</option>
@@ -383,13 +398,44 @@ let _filteredBoarding = [];     // boarding groups after applying topbar filters
 let _knownLocations = [];       // manager-tagged locations, e.g. hotels
 let _locationHubs = [];         // clustered departure/arrival points across today's legs
 let _profilesCache = {};        // driver_id -> full_name
-let _boardingSub = null, _trackingSub = null;
+let _boardingSub = null, _trackingSub = null, _setupSub = null, _paxSub = null;
 let _realtimeDebounce = null;
 
 // ════════════════════════════════════════════════════════════════════════════
 // SUPABASE
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION   = 'v1.1.0';
+// VERSION — append the new version to VERSION_HISTORY every time APP_VERSION
+// changes; that's the whole discipline. No filename check here: the version
+// suffix gets stripped from the filename before upload, so the deployed file
+// is never actually named to match — comparing against the served filename
+// would be a guaranteed false alarm every time, not a real signal. The
+// version string itself is what survives deployment unchanged.
+const APP_VERSION = 'v1.2.1';
+const VERSION_HISTORY = [
+  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1',
+];
+
+function _checkVersionSequence(){
+  const last = VERSION_HISTORY[VERSION_HISTORY.length-1];
+  if(last !== APP_VERSION){
+    console.error('[VERSION] APP_VERSION ('+APP_VERSION+') does not match the last entry in VERSION_HISTORY ('+last+'). Add it to the list.');
+    return;
+  }
+  if(VERSION_HISTORY.length < 2) return;
+  const prev = VERSION_HISTORY[VERSION_HISTORY.length-2];
+  const parse = v => v.replace(/^v/,'').split('.').map(Number);
+  const [pMaj,pMin,pPatch] = parse(prev);
+  const [cMaj,cMin,cPatch] = parse(last);
+  const cleanBump =
+    (cMaj===pMaj+1 && cMin===0   && cPatch===0) ||
+    (cMaj===pMaj   && cMin===pMin+1 && cPatch===0) ||
+    (cMaj===pMaj   && cMin===pMin   && cPatch===pPatch+1);
+  if(!cleanBump){
+    console.warn('[VERSION] '+prev+' -> '+last+' is not a clean +1 bump on major, minor, or patch — double check this was intentional.');
+  }
+}
+_checkVersionSequence();
+
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
 
@@ -444,7 +490,7 @@ async function onSignedIn(user){
   document.getElementById('filter-date').value=today;
   _isToday=true;
   initFleetMap();
-  await loadTrips();
+  await loadTrips(true);
   startAutoRefresh();
   subscribeRealtime();
 }
@@ -462,10 +508,10 @@ async function doLogout(){
 // REALTIME — onboarding (pending_board) and en-route tracking pings
 // ════════════════════════════════════════════════════════════════════════════
 function subscribeRealtime(){
-  if(_boardingSub||_trackingSub) return;
+  if(_boardingSub||_trackingSub||_setupSub||_paxSub) return;
 
-  // Passengers boarding/un-boarding — reflect instantly, this is the
-  // "who's getting in the vehicle right now" signal managers need live.
+  // Passengers boarding/un-boarding at the very first meet-spot pickup —
+  // unchanged, still the pending_board pre-trip mechanism.
   _boardingSub = getSB().channel('mgr-pending-board-rt')
     .on('postgres_changes',
       {event:'*',schema:'public',table:'gps_pings',filter:'event_type=eq.pending_board'},
@@ -487,18 +533,48 @@ function subscribeRealtime(){
         _realtimeDebounce=setTimeout(()=>{ loadTrips(); },2000);
       })
     .subscribe();
+
+  // travel_logs changes — catches a continuation leg entering status:'setup'
+  // the moment onboarding begins, and its transition to 'active' once
+  // confirmed. This is what makes mid-trip onboarding show up live instead
+  // of waiting on the next tracking ping (which won't even exist yet while
+  // a leg is still in setup, since GPS tracking hasn't started).
+  _setupSub = getSB().channel('mgr-setup-rt')
+    .on('postgres_changes',
+      {event:'*',schema:'public',table:'travel_logs'},
+      ()=>{
+        if(!_isToday) return;
+        if(_realtimeDebounce) clearTimeout(_realtimeDebounce);
+        _realtimeDebounce=setTimeout(()=>{ loadTrips(); },1500);
+      })
+    .subscribe();
+
+  // travel_passengers changes — every incremental check/uncheck during
+  // mid-trip onboarding now writes here immediately (see toggleReturnPax in
+  // the driver app). This is the actual "watch them log passengers" signal.
+  _paxSub = getSB().channel('mgr-pax-rt')
+    .on('postgres_changes',
+      {event:'*',schema:'public',table:'travel_passengers'},
+      ()=>{
+        if(!_isToday) return;
+        if(_realtimeDebounce) clearTimeout(_realtimeDebounce);
+        _realtimeDebounce=setTimeout(()=>{ loadTrips(); },1500);
+      })
+    .subscribe();
 }
 
 function unsubscribeRealtime(){
   if(_boardingSub){ getSB().removeChannel(_boardingSub); _boardingSub=null; }
   if(_trackingSub){ getSB().removeChannel(_trackingSub); _trackingSub=null; }
+  if(_setupSub){ getSB().removeChannel(_setupSub); _setupSub=null; }
+  if(_paxSub){ getSB().removeChannel(_paxSub); _paxSub=null; }
   if(_realtimeDebounce){ clearTimeout(_realtimeDebounce); _realtimeDebounce=null; }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 // LOAD DATA
 // ════════════════════════════════════════════════════════════════════════════
-async function loadTrips(){
+async function loadTrips(shouldFit=false){
   const dateVal=document.getElementById('filter-date').value;
   if(!dateVal) return;
   const fromISO=dateVal+'T00:00:00.000Z', toISO=dateVal+'T23:59:59.999Z';
@@ -599,7 +675,7 @@ async function loadTrips(){
   vSel.innerHTML='<option value="">All</option>'+vehicles.map(v=>`<option value="${v}">${v}</option>`).join('');
   if(curV) vSel.value=curV;
 
-  applyFilters();
+  applyFilters(shouldFit);
   _lastRefresh=new Date();
   updateRefreshLabel();
 }
@@ -811,7 +887,7 @@ async function loadBoardingGroups(){
   _boardingGroups=Object.values(groups);
 }
 
-function applyFilters(){
+function applyFilters(shouldFit=false){
   const v=document.getElementById('filter-vehicle').value;
   const leg=document.getElementById('filter-leg').value;
   const st=document.getElementById('filter-status').value;
@@ -840,7 +916,7 @@ function applyFilters(){
   _locationHubs=buildLocationHubs(_allLogs).filter(h=>!v||h.vehicle_plate===v);
 
   renderStats();
-  renderFleetMarkers();
+  renderFleetMarkers(shouldFit);
   renderDrawer();
   document.getElementById('fab-badge').textContent=_filtered.length+_filteredBoarding.length;
   document.getElementById('drawer-count').textContent=_filtered.length+_filteredBoarding.length;
@@ -915,7 +991,7 @@ function initFleetMap(){
   _fleetMap.on('click',()=>closeMapCard());
 }
 
-function renderFleetMarkers(){
+function renderFleetMarkers(shouldFit=false){
   if(!_fleetMap) return;
   Object.values(_fleetMarkers).forEach(m=>m.remove());
   _fleetMarkers={};
@@ -979,7 +1055,11 @@ function renderFleetMarkers(){
     _fleetMarkers[g.id]=m;
   });
 
-  if(!_mapCard){
+  // Only touches the map's pan/zoom on initial load or an explicit filter
+  // change — never on a background refresh (60s poll, realtime tracking
+  // ping, boarding update). A refresh should be invisible except for the
+  // data itself changing; the camera is the manager's, not ours to move.
+  if(shouldFit && !_mapCard){
     const pts=Object.values(_fleetMarkers).map(m=>m.getLatLng());
     if(pts.length>1) _fleetMap.fitBounds(L.latLngBounds(pts),{padding:[60,60]});
     else if(pts.length===1) _fleetMap.setView(pts[0],12);
@@ -1664,7 +1744,7 @@ function onDateChange(){
   _isToday=(val===today);
   if(!_isToday) _boardingGroups=[];
   stopAutoRefresh();
-  loadTrips();
+  loadTrips(true);
   if(_isToday) startAutoRefresh();
   const lb=document.getElementById('live-badge');
   if(lb) lb.style.display=_isToday?'flex':'none';
