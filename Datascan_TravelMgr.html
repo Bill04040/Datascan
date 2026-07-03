@@ -41,7 +41,7 @@ html,body{height:100%;font-family:'Inter',Arial,sans-serif;background:#0b1929;co
 .login-err{font-size:12px;color:var(--red);text-align:center;margin-top:.75rem;min-height:18px}
 
 /* ── App shell ───────────────────────────────────────────────────────────── */
-#app{display:none;height:100vh;flex-direction:column;overflow:hidden}
+#app{display:none;height:100vh;height:100dvh;flex-direction:column;overflow:hidden}
 
 /* ── Topbar / filter bar ─────────────────────────────────────────────────── */
 #topbar{display:flex;align-items:center;gap:8px;padding:.5rem .875rem;
@@ -410,9 +410,9 @@ let _realtimeDebounce = null;
 // is never actually named to match — comparing against the served filename
 // would be a guaranteed false alarm every time, not a real signal. The
 // version string itself is what survives deployment unchanged.
-const APP_VERSION = 'v1.2.1';
+const APP_VERSION = 'v1.2.2';
 const VERSION_HISTORY = [
-  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1',
+  'v1.0.7', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2',
 ];
 
 function _checkVersionSequence(){
