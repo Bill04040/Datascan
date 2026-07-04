@@ -657,9 +657,9 @@ body{background:#0f1e30;color:#f0f4f8}
 //   - warns if the last two entries don't look like a clean +1 bump on
 //     major, minor, or patch (skipped a version, or typo'd one)
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v1.2.4';
+const APP_VERSION = 'v1.2.5';
 const VERSION_HISTORY = [
-  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4',
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.2.5',
 ];
 
 function _checkVersionSequence(){
@@ -1341,16 +1341,38 @@ async function _resumeActiveTrip(log){
     return;
   }
 
-  // next_leg_choice='pending' is now the direct, stated fact that a leg
-  // arrived but a next step is still required — no inference needed. The
-  // geofence_hit_at fallback stays in place for any row written before this
-  // value existed, so nothing that already arrived under the old logic
-  // silently falls through the crack on the way to the new one.
-  if((log.next_leg_choice === 'pending' || log.geofence_hit_at) && log.status === 'active'){
+  // next_leg_choice='pending' is the direct, stated fact that mileage was
+  // confirmed and a next step is still required. This is now checked
+  // ALONE — it previously also fell back to geofence_hit_at, but that
+  // fallback was only ever meant for rows written before 'pending' existed
+  // as a one-time migration-era shim. geofence_hit_at gets set the instant
+  // LIVE GPS detects arrival, completely independent of whether mileage was
+  // ever entered — so keeping it as a permanent alternate trigger meant any
+  // refresh after physically arriving (before mileage was confirmed, before
+  // the hard stop-tag gate was satisfied) routed straight to What's Next,
+  // skipping both entirely. That's exactly the bug found in testing.
+  if(log.next_leg_choice === 'pending' && log.status === 'active'){
     _arrivedAt = log.geofence_hit_at;
     _lastArrivalLog = log;
     _arrivalUnresolved = true;
     await showArrivalSummaryScreen(log);
+    return;
+  }
+
+  // Arrived (per live GPS, already in the database) but mileage was never
+  // confirmed — the gap the check above used to paper over. Resume must
+  // show the arrival/mileage-confirmation prompt immediately, not wait for
+  // live GPS to re-detect the geofence, which may not reliably re-fire if
+  // the phone has moved at all since the original detection (walked into
+  // the building, repositioned in a parking lot). _insideGeofence and
+  // _geofenceHitAt are set here too, so the live GPS watch doesn't write a
+  // second, redundant geofence_hit_at once it resumes tracking.
+  if(log.geofence_hit_at && !log.miles_end && log.status === 'active'){
+    showTripActive(log);
+    _insideGeofence = true;
+    _geofenceHitAt  = log.geofence_hit_at;
+    showArrivalBanner(true, log.geofence_hit_at);
+    if(log.planned_route) setTimeout(()=>updatePlannedRouteSummary(log.planned_route), 300);
     return;
   }
 
@@ -4157,9 +4179,19 @@ function _renderHardStopModal(){
 }
 
 async function tagStop(stopId, stopType){
-  try{
-    await getSupabase().from('travel_stop_events').update({stop_type:stopType}).eq('id', stopId);
-  }catch(e){ showToast('Could not save — try again','error'); return; }
+  // Supabase's .update() does NOT throw on an RLS denial, a constraint
+  // violation, or most other database-level rejections — it returns
+  // {data, error} either way. The try/catch here only ever caught a
+  // network-level failure; a silent RLS rejection sailed straight through
+  // as if it had succeeded, which is exactly what caused this modal to loop
+  // indefinitely — it closed, re-queried, found the same untagged row, and
+  // reopened, with no error ever surfacing to explain why.
+  const {error} = await getSupabase().from('travel_stop_events').update({stop_type:stopType}).eq('id', stopId);
+  if(error){
+    console.error('[tagStop]', error);
+    showToast('Could not save this tag: '+error.message, 'error');
+    return;
+  }
 
   if(_softStopShownFor===stopId){
     hideSoftStopPrompt();
@@ -4180,11 +4212,11 @@ async function tagStop(stopId, stopType){
   showToast('Stop tagged','success');
 }
 
-function showArrivalBanner(isManual){
+function showArrivalBanner(isManual, arrivedAtOverride){
   const banner=document.getElementById('arrival-banner');
   if(banner){ banner.classList.add('show'); banner.scrollIntoView({behavior:'smooth',block:'center'}); }
   // Record and display arrived time
-  _arrivedAt = new Date().toISOString();
+  _arrivedAt = arrivedAtOverride || new Date().toISOString();
   const timeEl = document.getElementById('arrived-time-display');
   if(timeEl) timeEl.textContent = 'Arrived at ' +
     new Date(_arrivedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
@@ -4487,13 +4519,43 @@ async function _loadArrivalSummaryPax(log){
 
 // User picked one of the "What's next?" destination options — store the choice
 // and move on to passenger selection (step 3) for the next leg.
+// The meet spot's coordinates live on the original outbound leg
+// (leg_type='outbound', parent_log_id null) — _outboundLog normally caches
+// this in memory, but a refresh at any point wipes it, and nothing
+// previously reconstructed it afterward. This is what left "Return to meet
+// spot" with no destination at all in testing: _outboundLog was null, and
+// the ternary that built _returnDest from it silently fell through to null
+// rather than looking the real coordinates up.
+async function _getMeetSpotOrigin(timesheetId){
+  if(_outboundLog?.origin_lat) return {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng};
+  if(!timesheetId) return null;
+  try{
+    const {data} = await getSupabase()
+      .from('travel_logs')
+      .select('origin_lat, origin_lng')
+      .eq('timesheet_id', timesheetId)
+      .eq('leg_type', 'outbound')
+      .is('parent_log_id', null)
+      .order('started_at', {ascending:true})
+      .limit(1);
+    return data?.[0]?.origin_lat ? {lat:data[0].origin_lat, lng:data[0].origin_lng} : null;
+  }catch(e){
+    console.warn('[getMeetSpotOrigin]', e.message);
+    return null;
+  }
+}
+
 async function chooseNextDestination(option){
   _legType = option;
   if(option === 'return'){
-    _returnDest = _outboundLog?.origin_lat
-      ? {lat:_outboundLog.origin_lat, lng:_outboundLog.origin_lng,
-         address:'Meet spot', type:'return'}
+    const timesheetId = _lastArrivalLog?.timesheet_id || _activeJob?.id;
+    const origin = await _getMeetSpotOrigin(timesheetId);
+    _returnDest = origin
+      ? {lat:origin.lat, lng:origin.lng, address:'Meet spot', type:'return'}
       : null;
+    if(!_returnDest){
+      showToast('Could not find the original meet spot — enter it manually below','error');
+    }
   } else {
     _returnDest = null;
   }
