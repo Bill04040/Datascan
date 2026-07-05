@@ -657,9 +657,9 @@ body{background:#0f1e30;color:#f0f4f8}
 //   - warns if the last two entries don't look like a clean +1 bump on
 //     major, minor, or patch (skipped a version, or typo'd one)
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v1.2.5';
+const APP_VERSION = 'v1.2.9';
 const VERSION_HISTORY = [
-  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.2.5',
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.2.5', 'v1.2.6', 'v1.2.7', 'v1.2.8', 'v1.2.9',
 ];
 
 function _checkVersionSequence(){
@@ -2828,7 +2828,7 @@ async function _beginSetupLeg(legType){
         console.warn('[beginSetupLeg] reusing existing setup row for this parent instead of creating a duplicate:', existing[0].id);
         _activeTrip = existing[0];
         _setupInProgress = true;
-        return existing[0];
+        return {...existing[0], _wasReused: true};
       }
     }catch(e){
       // Fail open — if the check itself fails (network blip), proceed to
@@ -3619,7 +3619,7 @@ function showTripActive(log){
         <div class="trip-stat"><div class="trip-stat-val" id="stat-distance">—</div><div class="trip-stat-lbl">Distance</div></div>
         <div class="trip-stat"><div class="trip-stat-val" id="stat-eta">—</div><div class="trip-stat-lbl">ETA</div></div>
       </div>
-      <div class="arrival-banner" id="arrival-banner">
+      <div class="arrival-banner" id="arrival-banner" style="display:none">
         <i class="ti ti-map-pin-check" style="font-size:32px;color:var(--green);margin-bottom:.5rem;display:block"></i>
         <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">You have arrived!</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:.5rem">${_activeJob.client_name} — Store ${_activeJob.store_number||'—'}</div>
@@ -3701,6 +3701,17 @@ function showTripActive(log){
       ${_buildGeofenceDebugPanel()}
       ${devResetBtn}
     </div>`;
+  // The panel above starts hardcoded at "Pending…" — the automatic route
+  // fetch fired earlier (confirmPassengers/_beginNewLeg) is fire-and-forget
+  // and typically resolves ~4-5 seconds later, often after this exact
+  // screen has already replaced whatever was showing when it was fired.
+  // Waiting for that async callback to happen to land while THIS screen is
+  // up is a race; checking the actual stored state right now isn't. If the
+  // route already exists by the time we're here, reflect that immediately
+  // instead of showing a stale "Pending…" that never gets corrected.
+  if(log.planned_route){
+    updatePlannedRouteDebug('ok', log.planned_route);
+  }
   startGPS(log);
   // Start return watch in case user navigates away immediately
   // (will activate properly when openNativeMap is tapped)
@@ -4214,7 +4225,11 @@ async function tagStop(stopId, stopType){
 
 function showArrivalBanner(isManual, arrivedAtOverride){
   const banner=document.getElementById('arrival-banner');
-  if(banner){ banner.classList.add('show'); banner.scrollIntoView({behavior:'smooth',block:'center'}); }
+  if(banner){
+    banner.style.display='block';
+    banner.classList.add('show');
+    banner.scrollIntoView({behavior:'smooth',block:'center'});
+  }
   // Record and display arrived time
   _arrivedAt = arrivedAtOverride || new Date().toISOString();
   const timeEl = document.getElementById('arrived-time-display');
@@ -4450,7 +4465,7 @@ async function showArrivalSummaryScreen(log){
       <!-- What's next -->
       <div style="font-size:14px;font-weight:700;color:#fff;margin:1rem 0 .5rem">What's next?</div>
 
-      <div class="dest-option" onclick="chooseNextDestination('return')">
+      <div class="dest-option" onclick="chooseNextDestination('return',this)">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-arrow-back-up" style="color:var(--amber)"></i>
@@ -4463,7 +4478,7 @@ async function showArrivalSummaryScreen(log){
         </div>
       </div>
 
-      <div class="dest-option" onclick="chooseNextDestination('job_to_job')">
+      <div class="dest-option" onclick="chooseNextDestination('job_to_job',this)">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-arrows-right-left" style="color:var(--green)"></i>
@@ -4474,7 +4489,7 @@ async function showArrivalSummaryScreen(log){
         <div class="dest-option-sub">Select another job on today's schedule</div>
       </div>
 
-      <div class="dest-option" onclick="chooseNextDestination('custom')">
+      <div class="dest-option" onclick="chooseNextDestination('custom',this)">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="dest-option-title">
             <i class="ti ti-map-search" style="color:var(--blue)"></i>
@@ -4545,25 +4560,50 @@ async function _getMeetSpotOrigin(timesheetId){
   }
 }
 
-async function chooseNextDestination(option){
-  _legType = option;
-  if(option === 'return'){
-    const timesheetId = _lastArrivalLog?.timesheet_id || _activeJob?.id;
-    const origin = await _getMeetSpotOrigin(timesheetId);
-    _returnDest = origin
-      ? {lat:origin.lat, lng:origin.lng, address:'Meet spot', type:'return'}
-      : null;
-    if(!_returnDest){
-      showToast('Could not find the original meet spot — enter it manually below','error');
+let _choosingNextDestination = false; // re-entry guard — see chooseNextDestination
+
+async function chooseNextDestination(option, el){
+  // The async chain here (GPS fetch, DB insert/query, then the setup
+  // screen's own queries) has no visual feedback while it runs — nothing
+  // disables these buttons, nothing shows a spinner. A driver seeing
+  // nothing happen for a couple seconds will reasonably tap again, and
+  // this guard is what stops that from firing a second full call on top of
+  // the first (found in testing: repeat taps produced 13 duplicate sets of
+  // the same 3 passengers, one per tap, because the LEG itself was
+  // correctly deduplicated but the setup screen's passenger pre-check
+  // insert ran fresh on every single call regardless).
+  if(_choosingNextDestination) return;
+  _choosingNextDestination = true;
+  if(el){ el.style.opacity='0.5'; el.style.pointerEvents='none'; }
+
+  try{
+    _legType = option;
+    if(option === 'return'){
+      const timesheetId = _lastArrivalLog?.timesheet_id || _activeJob?.id;
+      const origin = await _getMeetSpotOrigin(timesheetId);
+      _returnDest = origin
+        ? {lat:origin.lat, lng:origin.lng, address:'Meet spot', type:'return'}
+        : null;
+      if(!_returnDest){
+        showToast('Could not find the original meet spot — enter it manually below','error');
+      }
+    } else {
+      _returnDest = null;
     }
-  } else {
-    _returnDest = null;
+
+    const setupLog = await _beginSetupLeg(option);
+    if(!setupLog) return; // toast already shown inside _beginSetupLeg
+
+    // _wasReused means _beginSetupLeg found an existing setup row for this
+    // parent instead of creating a new one — passing that through tells
+    // showReturnSetupScreen to restore the actual saved selection instead
+    // of re-running its "pre-check this vehicle's passengers" batch insert,
+    // which is exactly what caused the duplication.
+    showReturnSetupScreen(_lastArrivalLog, setupLog._wasReused ? setupLog : undefined);
+  } finally {
+    _choosingNextDestination = false;
+    if(el){ el.style.opacity=''; el.style.pointerEvents=''; }
   }
-
-  const setupLog = await _beginSetupLeg(option);
-  if(!setupLog) return; // toast already shown inside _beginSetupLeg
-
-  showReturnSetupScreen(_lastArrivalLog);
 }
 
 // Page B — "Who is returning in this vehicle?" + destination details + begin trip
@@ -4862,7 +4902,7 @@ async function toggleReturnPax(key, card){
       // Checked — write their row now, not at confirmation
       const p = (window._returnPaxData||[]).find(x=>x._key===key);
       if(!p) return;
-      const {data:row} = await getSupabase().from('travel_passengers').insert({
+      const {data:row, error} = await getSupabase().from('travel_passengers').insert({
         travel_log_id: _activeTrip.id,
         profile_id:    p.profile_id||null,
         full_name:     p.full_name||p.external_name||'Unknown',
@@ -4872,7 +4912,19 @@ async function toggleReturnPax(key, card){
         boarded_at:    new Date().toISOString(),
         waypoint:      _legType==='return' ? 'meet_spot' : 'job_site',
       }).select().single();
-      if(row) window._returnPaxDbId[key] = row.id;
+      if(row){
+        window._returnPaxDbId[key] = row.id;
+      } else if(error?.code === '23505'){
+        // Already exists (the unique index caught a duplicate the tap-guard
+        // didn't) — look up the existing row's id instead of treating this
+        // as a failure, since the end state (this person is on the leg) is
+        // already correct.
+        const {data:existing} = await getSupabase().from('travel_passengers')
+          .select('id').eq('travel_log_id', _activeTrip.id)
+          .eq(p.profile_id ? 'profile_id' : 'external_name', p.profile_id || p.external_name)
+          .maybeSingle();
+        if(existing) window._returnPaxDbId[key] = existing.id;
+      }
     }
   }catch(e){
     console.warn('[toggleReturnPax] sync failed:', e.message);
@@ -5324,13 +5376,21 @@ async function _beginNewLeg(legType, alightedPax){
 
     const missing = (_passengers||[]).filter(p=>!existingKeys.has(keyOf(p)));
     if(missing.length){
-      await getSupabase().from('travel_passengers').insert(missing.map(p=>({
+      const {error:missingErr} = await getSupabase().from('travel_passengers').insert(missing.map(p=>({
         travel_log_id: updatedLog.id, profile_id: p.profile_id||null,
         full_name:     p.full_name||p.external_name||'Unknown', role: p.role||null,
         worker_type:   p.worker_type||'w2', external_name: p.external_name||null,
         external_id:   p.external_id||null, boarded_at: new Date().toISOString(),
         waypoint:      legType==='return' ? 'meet_spot' : 'job_site',
       })));
+      // A 23505 here means something else inserted the same person between
+      // the fetch above and this insert — a genuine race, not a bug in this
+      // diff logic. The end state (everyone in _passengers is present) is
+      // already correct either way, so this shouldn't abort the leg
+      // confirmation over it.
+      if(missingErr && missingErr.code !== '23505'){
+        console.warn('[beginNewLeg] passenger reconciliation insert error:', missingErr.message);
+      }
     }
     const extras = (existingPax||[]).filter(p=>!finalKeys.has(keyOf(p)));
     if(extras.length){
