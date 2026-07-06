@@ -657,9 +657,9 @@ body{background:#0f1e30;color:#f0f4f8}
 //   - warns if the last two entries don't look like a clean +1 bump on
 //     major, minor, or patch (skipped a version, or typo'd one)
 // ════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v1.2.9';
+const APP_VERSION = 'v1.3.2';
 const VERSION_HISTORY = [
-  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.2.5', 'v1.2.6', 'v1.2.7', 'v1.2.8', 'v1.2.9',
+  'v1.0.12', 'v1.0.16', 'v1.1.0', 'v1.1.1', 'v1.1.2', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.2.5', 'v1.2.6', 'v1.2.7', 'v1.2.8', 'v1.2.9', 'v1.3.0', 'v1.3.1', 'v1.3.2',
 ];
 
 function _checkVersionSequence(){
@@ -949,25 +949,24 @@ async function loadMyTrips(){
   loading.style.display = 'block';
   list.innerHTML = '';
 
-  const now   = new Date();
-  const today = now.getFullYear()+'-'+
-    String(now.getMonth()+1).padStart(2,'0')+'-'+
-    String(now.getDate()).padStart(2,'0');
+  const now = new Date();
 
-  // Update subtitle
-  const sub = document.getElementById('home-date-sub');
-  if(sub) sub.textContent = now.toLocaleDateString('en-US',
-    {weekday:'long',month:'long',day:'numeric'});
-
-  // ── Build LOCAL midnight-to-midnight range, converted to UTC for the query ──
-  // Using today+'T00:00:00.000Z' treats local midnight as UTC midnight, which is
-  // wrong for any timezone offset — trips in the evening (local) can land on the
-  // "next day" in UTC and fall outside this range. Build the range from actual
-  // local Date objects instead so the conversion to UTC is correct.
-  const localStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  // ── Build LOCAL rolling 7-day window (today and the preceding 6 days),
+  // converted to UTC for the query ── A rolling window rather than a fixed
+  // Sunday-Saturday reset — a Wednesday shouldn't lose Thursday-Saturday's
+  // trips from view just because a new calendar week started. Using local
+  // Date objects (not string concatenation) so the UTC conversion is
+  // correct regardless of timezone offset.
+  const localStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()-6, 0, 0, 0, 0);
   const localEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0);
+  const localWeekEndDisplay = new Date(localEnd.getTime() - 1); // last actual day in range, for display
 
-  // ── Primary query: this driver's travel logs today ────────────────────────
+  // Update subtitle — shows the rolling range, not a single date
+  const sub = document.getElementById('home-date-sub');
+  if(sub) sub.textContent = localStart.toLocaleDateString('en-US',{month:'short',day:'numeric'}) +
+    ' – ' + localWeekEndDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+  // ── Primary query: this driver's travel logs for the rolling 7-day window ──
   const {data:myLogs, error:logErr} = await getSupabase()
     .from('travel_logs')
     .select(`id, timesheet_id, status, leg_type, vehicle_plate, vehicle_make,
@@ -992,6 +991,10 @@ async function loadMyTrips(){
   }
 
   // ── Check one-trip-at-a-time gate ─────────────────────────────────────────
+  // Now evaluated across the whole week's fetched data rather than just
+  // today's — a leg left active/setup earlier in the same week still
+  // correctly blocks starting a new one, instead of only being caught if
+  // it happened to start today.
   const activeLog = (myLogs||[]).find(l=>l.status==='active'||l.status==='setup');
 
   // ── Fetch timesheet metadata for each log ─────────────────────────────────
@@ -1007,19 +1010,37 @@ async function loadMyTrips(){
 
   // ── Render trip cards ─────────────────────────────────────────────────────
   if(!myLogs?.length){
-    // No trips yet today — show new trip button
     list.innerHTML = `
       <div class="empty-state">
         <i class="ti ti-steering-wheel empty-icon"></i>
-        <div class="empty-title">No trips today</div>
+        <div class="empty-title">No trips this week</div>
         <div class="empty-msg">Ready to drive? Start a new trip below.</div>
       </div>`;
     _appendNewTripButton(list, null);
     return;
   }
 
+  // Group by local calendar day so a week's worth of cards reads as
+  // distinct days rather than one long undifferentiated list.
+  const todayKey = now.toDateString();
+  let lastDayKey = null;
+
   // Render each trip log as a card
   myLogs.forEach(log => {
+    const logDate = log.started_at ? new Date(log.started_at) : null;
+    const dayKey  = logDate ? logDate.toDateString() : 'unknown';
+    if(dayKey !== lastDayKey){
+      lastDayKey = dayKey;
+      const header = document.createElement('div');
+      header.style.cssText = 'font-size:12px;font-weight:700;color:var(--text3);'+
+        'text-transform:uppercase;letter-spacing:.05em;margin:'+
+        (list.children.length ? '1.25rem' : '0')+' 0 .5rem 2px';
+      header.textContent = dayKey===todayKey ? 'Today'
+        : logDate ? logDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})
+        : 'Unknown date';
+      list.appendChild(header);
+    }
+
     const ts      = tsMap[log.timesheet_id] || {};
     const isActive = log.status === 'active';
     const isSetup  = log.status === 'setup';
@@ -1233,7 +1254,7 @@ async function showStorePicker(){
   content.innerHTML = `
     <div style="padding:1rem;padding-bottom:5rem">
       <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:.75rem">
-        Where are you heading today?
+        Where are you heading?
       </div>
       <div id="store-picker-list">
         <div style="text-align:center;padding:2rem">
@@ -1245,16 +1266,19 @@ async function showStorePicker(){
       </button>
     </div>`;
 
-  const now   = new Date();
-  const today = now.getFullYear()+'-'+
-    String(now.getMonth()+1).padStart(2,'0')+'-'+
-    String(now.getDate()).padStart(2,'0');
+  const now = new Date();
+  const fmtDate = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const today    = fmtDate(now);
+  const tomorrow = fmtDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
 
-  // Load all timesheets for today (any supervisor)
+  // Today's jobs, plus tomorrow's — a driver may need to select tomorrow's
+  // job today to do setup/prep ahead of time, not just start driving for
+  // something happening right now.
   const {data:sheets, error} = await getSupabase()
     .from('timesheets')
     .select('id, client_name, store_number, city, state, job_date, dest_lat, dest_lng, dest_address, supervisor_name')
-    .eq('job_date', today)
+    .in('job_date', [today, tomorrow])
+    .order('job_date', {ascending:true})
     .order('client_name', {ascending:true});
 
   const listEl = document.getElementById('store-picker-list');
@@ -1264,20 +1288,42 @@ async function showStorePicker(){
     listEl.innerHTML = `
       <div class="empty-state">
         <i class="ti ti-calendar-off empty-icon"></i>
-        <div class="empty-title">No jobs scheduled today</div>
+        <div class="empty-title">No jobs scheduled today or tomorrow</div>
         <div class="empty-msg">A supervisor needs to create a timesheet first<br>in the Datascan Timesheet app.</div>
       </div>`;
     return;
   }
 
   listEl.innerHTML = '';
+  let lastDateKey = null;
   sheets.forEach(ts=>{
+    if(ts.job_date !== lastDateKey){
+      lastDateKey = ts.job_date;
+      const header = document.createElement('div');
+      header.style.cssText = 'font-size:12px;font-weight:700;color:var(--text3);'+
+        'text-transform:uppercase;letter-spacing:.05em;margin:'+
+        (listEl.children.length ? '1.25rem' : '0')+' 0 .5rem 2px';
+      header.textContent = ts.job_date===today ? 'Today' : ts.job_date===tomorrow ? 'Tomorrow' : ts.job_date;
+      listEl.appendChild(header);
+    }
+
     const card = document.createElement('button');
     card.className = 'job-card';
     const city = [ts.city,ts.state].filter(Boolean).join(', ');
     const hasCoords = !!(ts.dest_lat && ts.dest_lng);
+    const isTomorrow = ts.job_date === tomorrow;
+    // Tomorrow's cards get a distinct blue-tinted border/background — a
+    // small pill alone is easy to miss scrolling quickly; a driver should
+    // never be able to select the wrong day's job without clearly noticing.
+    if(isTomorrow){
+      card.style.border = '1.5px solid rgba(30,95,174,.5)';
+      card.style.background = 'rgba(30,95,174,.06)';
+    }
     card.innerHTML = `
-      <div class="job-client">${ts.client_name||'Unknown'}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div class="job-client">${ts.client_name||'Unknown'}</div>
+        ${isTomorrow ? '<span class="pill" style="background:rgba(30,95,174,.2);color:#90b8f0">Tomorrow</span>' : ''}
+      </div>
       <div class="job-meta">
         ${ts.store_number?`<div class="job-meta-item"><i class="ti ti-building-store"></i> Store ${ts.store_number}</div>`:''}
         ${city?`<div class="job-meta-item"><i class="ti ti-map-pin"></i> ${city}</div>`:''}
@@ -1294,6 +1340,15 @@ async function showStorePicker(){
         </div>
       </div>`;
     card.onclick = ()=>{
+      if(isTomorrow){
+        const dateLabel = new Date(ts.job_date+'T00:00:00').toLocaleDateString('en-US',
+          {weekday:'long',month:'long',day:'numeric'});
+        const ok = confirm(
+          '"'+(ts.client_name||'This job')+'" is scheduled for tomorrow — '+dateLabel+', not today.\n\n' +
+          'Continue selecting this job?'
+        );
+        if(!ok) return;
+      }
       _activeJob = ts;
       document.getElementById('trip-screen-title').textContent = ts.client_name||'Trip';
       document.getElementById('trip-screen-sub').textContent =
