@@ -1320,7 +1320,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.66';
+const APP_VERSION = 'v1.0.67';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1567,23 +1567,35 @@ function renderOrientationWarnings(){
 async function removeScan(scanId){
   if(_formLocked){ return; } // can't remove after submission
   const scan = scans.find(s=>s.scanId===scanId);
-  if(!scan) return;
+  if(!scan){ console.warn('[removeScan] scanId not found in scans[]:', scanId); return; }
   // If already saved to Supabase, delete from storage + DB
   if(scan.dbId){
     try{
       // Delete from storage
       if(scan.storagePath){
-        await getSupabase().storage.from('timesheet-scans').remove([scan.storagePath]);
+        const {error:storageErr} = await getSupabase().storage.from('timesheet-scans').remove([scan.storagePath]);
+        if(storageErr) console.warn('[removeScan] storage delete failed:', storageErr.message||storageErr);
       }
       // Delete from DB
-      await getSupabase().from('scan_attachments').delete().eq('id', scan.dbId);
-    } catch(e){ console.warn('Error deleting scan from storage:', e); }
+      const {error:dbErr, count} = await getSupabase().from('scan_attachments').delete({count:'exact'}).eq('id', scan.dbId);
+      if(dbErr){
+        console.error('[removeScan] DB delete failed (likely missing RLS DELETE policy on scan_attachments):', dbErr.message||dbErr);
+        alert('This attachment could not be removed from the server (permission error). It has been hidden locally, but please check the Supabase RLS DELETE policy on scan_attachments — otherwise it may reappear next time this draft loads.');
+      } else if(count === 0){
+        console.warn('[removeScan] DB delete returned 0 rows affected — row likely still exists (RLS silently blocked it).');
+        alert('This attachment could not be removed from the server (0 rows deleted — likely an RLS policy issue). It has been hidden locally, but please check the Supabase RLS DELETE policy on scan_attachments — otherwise it may reappear next time this draft loads.');
+      }
+    } catch(e){ console.error('[removeScan] Error deleting scan from storage/DB:', e); }
   }
   const idx = scans.findIndex(s=>s.scanId===scanId);
   if(idx>-1) scans.splice(idx,1);
   renderScans();
   checkSubmitReady();
   renderOrientationWarnings();
+  // Keep local + server draft state in sync immediately so the removal
+  // survives a reload / restore-draft prompt instead of silently reappearing.
+  onFormChange();
+  saveToLocal();
 }
 function renderScans(){
   const grid=document.getElementById('scans-grid');
