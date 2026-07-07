@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>DATASCAN Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1084,6 +1085,10 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <i class="ti ti-pencil" aria-hidden="true"></i>
       <span class="sb-link-label">TS Changes</span>
     </button>
+    <button class="sb-link" id="sb-rpt-scan-export" onclick="sbNavigate('rpt-scan-export')" aria-label="Scan Export">
+      <i class="ti ti-file-zip" aria-hidden="true"></i>
+      <span class="sb-link-label">Scan Export</span>
+    </button>
   </nav>
 
   <!-- Footer: settings + user -->
@@ -1370,6 +1375,7 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <span id="scan-page-nav" style="color:#fff;font-size:12px;margin:0 4px"></span>
       <button class="scan-ctrl-btn" id="scan-prev-btn" onclick="scanPage(-1)" style="display:none" title="Previous page"><i class="ti ti-chevron-left"></i></button>
       <button class="scan-ctrl-btn" id="scan-next-btn" onclick="scanPage(1)" style="display:none" title="Next page"><i class="ti ti-chevron-right"></i></button>
+      <button class="scan-remove" id="scan-delete-btn" onclick="deleteCurrentScan()" title="Delete this image" style="margin-left:auto"><i class="ti ti-trash"></i>&nbsp;Delete</button>
     </div>
   </div>
   <!-- Scan thumbnail strip -->
@@ -1740,7 +1746,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.90';
+const APP_VERSION = 'v1.0.95';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1915,6 +1921,9 @@ function initSidebar(){
   // Reports section — show if user has reports permission
   const rptIds = ['sb-rpt-hours','sb-rpt-supervisor','sb-rpt-employee','sb-rpt-audit','sb-rpt-changes','sb-rpt-outstanding'];
   rptIds.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=hasReports?'':'none'; });
+  // Scan export is admin-only
+  const scanExportBtn = document.getElementById('sb-rpt-scan-export');
+  if(scanExportBtn) scanExportBtn.style.display = isAdmin ? '' : 'none';
   const rptSection = document.getElementById('sb-section-reports');
   const rptDivider = document.getElementById('sb-divider-reports');
   if(rptSection) rptSection.style.display = hasReports ? '' : 'none';
@@ -1992,7 +2001,7 @@ function sbNavigate(page){
     openUATScreen();
   } else if(page==='scheduling'||page==='payroll'){
     showComingSoon(page);
-  } else if(page==='rpt-hours'||page==='rpt-supervisor'||page==='rpt-employee'||page==='rpt-audit'||page==='rpt-changes'||page==='rpt-outstanding'){
+  } else if(page==='rpt-hours'||page==='rpt-supervisor'||page==='rpt-employee'||page==='rpt-audit'||page==='rpt-changes'||page==='rpt-outstanding'||page==='rpt-scan-export'){
     openReportScreen(page);
   }
 }
@@ -2007,7 +2016,8 @@ function updateSidebarActive(page){
     'rpt-hours':'sb-rpt-hours','rpt-supervisor':'sb-rpt-supervisor',
     'rpt-employee':'sb-rpt-employee','rpt-audit':'sb-rpt-audit',
     'rpt-changes':'sb-rpt-changes',
-    'rpt-outstanding':'sb-rpt-outstanding'
+    'rpt-outstanding':'sb-rpt-outstanding',
+    'rpt-scan-export':'sb-rpt-scan-export'
   };
   const id = map[page||'timesheets'] || 'sb-timesheets';
   document.getElementById(id)?.classList.add('active');
@@ -2035,12 +2045,13 @@ async function fetchAllPages(table, selectStr, idField, idList, extraFilters=[])
 }
 
 const REPORT_DEFS = {
-  'rpt-hours':      { label:'Hours by Job',        icon:'ti-chart-bar' },
-  'rpt-supervisor': { label:'Approval Summary',     icon:'ti-clipboard-check' },
-  'rpt-employee':   { label:'Hours by Employee',    icon:'ti-user-check' },
-  'rpt-audit':      { label:'Audit Trail',          icon:'ti-history' },
-  'rpt-changes':     { label:'Timesheet Changes',       icon:'ti-pencil' },
-  'rpt-outstanding': { label:'Outstanding Timesheets',   icon:'ti-alert-triangle' },
+  'rpt-hours':      { label:'Hours by Job',           icon:'ti-chart-bar' },
+  'rpt-supervisor': { label:'Approval Summary',        icon:'ti-clipboard-check' },
+  'rpt-employee':   { label:'Hours by Employee',       icon:'ti-user-check' },
+  'rpt-audit':      { label:'Audit Trail',             icon:'ti-history' },
+  'rpt-changes':    { label:'Timesheet Changes',       icon:'ti-pencil' },
+  'rpt-outstanding':{ label:'Outstanding Timesheets',  icon:'ti-alert-triangle' },
+  'rpt-scan-export':{ label:'Scan Export',             icon:'ti-file-zip' },
 };
 
 let _currentReport = null;
@@ -2112,9 +2123,15 @@ function openReportScreen(page){
   }
   document.getElementById('report-body').innerHTML =
     '<div style="color:var(--text3);font-size:13px;padding:20px 0">Set filters above and click Run Report.</div>';
-  document.getElementById('report-actions').innerHTML = `
-    <button class="wiz-btn primary" onclick="runReport('${page}')"><i class="ti ti-player-play"></i> Run Report</button>
-    <button class="wiz-btn secondary" onclick="exportReportCSV()"><i class="ti ti-download"></i> Export CSV</button>`;
+  if(page === 'rpt-scan-export'){
+    document.getElementById('report-actions').innerHTML = `
+      <button class="wiz-btn primary" onclick="runReport('rpt-scan-export')"><i class="ti ti-player-play"></i> Run Report</button>
+      <button class="wiz-btn secondary" id="scan-zip-btn" onclick="exportScanZip()" style="display:none"><i class="ti ti-file-zip"></i> Download ZIP</button>`;
+  } else {
+    document.getElementById('report-actions').innerHTML = `
+      <button class="wiz-btn primary" onclick="runReport('${page}')"><i class="ti ti-player-play"></i> Run Report</button>
+      <button class="wiz-btn secondary" onclick="exportReportCSV()"><i class="ti ti-download"></i> Export CSV</button>`;
+  }
   updateSidebarActive(page);
 }
 
@@ -2218,6 +2235,8 @@ function _buildReportFilters(page){
     wrap.innerHTML = dateRange + orgFilters + supervisorFilter;
   } else if(page==='rpt-outstanding'){
     wrap.innerHTML = orgFilters + escalationTypeFilter + escalationLevelFilter;
+  } else if(page==='rpt-scan-export'){
+    wrap.innerHTML = dateRange + orgFilters + statusFilter + supervisorFilter + customerFilter;
   }
 
   // Populate supervisor dropdown if present
@@ -2379,12 +2398,13 @@ async function runReport(page){
   // Save filters for this report + user
   try { localStorage.setItem('rpt_filters_'+(currentUser?.id||'')+'_'+page, JSON.stringify(f)); } catch(e){}
   try {
-    if(page==='rpt-hours')      await _runHoursByJob(f);
-    if(page==='rpt-supervisor') await _runApprovalSummary(f);
-    if(page==='rpt-employee')   await _runHoursByEmployee(f);
-    if(page==='rpt-audit')      await _runAuditTrail(f);
-    if(page==='rpt-changes')    await _runTSChanges(f);
-    if(page==='rpt-outstanding') await _runOutstandingTimesheets(f);
+    if(page==='rpt-hours')        await _runHoursByJob(f);
+    if(page==='rpt-supervisor')   await _runApprovalSummary(f);
+    if(page==='rpt-employee')     await _runHoursByEmployee(f);
+    if(page==='rpt-audit')        await _runAuditTrail(f);
+    if(page==='rpt-changes')      await _runTSChanges(f);
+    if(page==='rpt-outstanding')  await _runOutstandingTimesheets(f);
+    if(page==='rpt-scan-export')  await _runScanExportPreview(f);
   } catch(e){
     body.innerHTML = `<div style="color:var(--danger-text);padding:20px 0">${e.message}</div>`;
   }
@@ -2945,6 +2965,241 @@ function exportReportCSV(){
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = fileName;
   a.click();
+}
+
+// ── Scan Export ───────────────────────────────────────────────────────────────
+
+// Holds results of preview run so Download ZIP can use them without re-querying
+let _scanExportManifest = []; // [{tsId, tsPrefix, fileName, storagePath}]
+
+async function _runScanExportPreview(f){
+  const body = document.getElementById('report-body');
+  const zipBtn = document.getElementById('scan-zip-btn');
+  if(zipBtn) zipBtn.style.display = 'none';
+  _scanExportManifest = [];
+
+  // Resolve org scope
+  const orgSupIds = _resolveOrgSupIds(f);
+  if(orgSupIds !== null && !orgSupIds.length){
+    body.innerHTML = '<div style="color:var(--text3);padding:20px 0;font-size:13px">No supervisors found for the selected org scope.</div>';
+    return;
+  }
+
+  // Query timesheets
+  let tsQ = getSupabase().from('timesheets')
+    .select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name');
+  if(f.from)       tsQ = tsQ.gte('job_date', f.from);
+  if(f.to)         tsQ = tsQ.lte('job_date', f.to);
+  if(f.status)     tsQ = tsQ.eq('status', f.status);
+  if(f.customer)   tsQ = tsQ.ilike('client_name', '%'+f.customer+'%');
+  if(f.supervisor) tsQ = tsQ.eq('supervisor_id', f.supervisor);
+  if(orgSupIds)    tsQ = tsQ.in('supervisor_id', orgSupIds);
+  tsQ = tsQ.order('job_date', {ascending:false});
+
+  const {data:sheets, error:tsErr} = await tsQ;
+  if(tsErr) throw tsErr;
+  if(!sheets?.length){
+    body.innerHTML = '<div style="color:var(--text3);padding:20px 0;font-size:13px">No timesheets found for the selected filters.</div>';
+    return;
+  }
+
+  // Fetch all scan attachments for matching timesheets
+  const tsIds = sheets.map(s=>s.id);
+  const scans  = await fetchAllPages(
+    'scan_attachments',
+    'id,timesheet_id,file_name,mime_type,storage_path,created_at',
+    'timesheet_id',
+    tsIds
+  );
+
+  if(!scans?.length){
+    body.innerHTML = '<div style="color:var(--text3);padding:20px 0;font-size:13px">No scan attachments found for the matching timesheets.</div>';
+    return;
+  }
+
+  // Build lookup: timesheet id → scan list (sorted by created_at)
+  const scansByTs = {};
+  scans.forEach(sc=>{
+    if(!scansByTs[sc.timesheet_id]) scansByTs[sc.timesheet_id] = [];
+    scansByTs[sc.timesheet_id].push(sc);
+  });
+  Object.values(scansByTs).forEach(arr=>arr.sort((a,b)=>a.created_at.localeCompare(b.created_at)));
+
+  // Detect colliding prefixes to decide whether to append tiebreaker ID suffix
+  const prefixCount = {};
+  sheets.forEach(ts=>{
+    const prefix = _buildScanPrefix(ts);
+    prefixCount[prefix] = (prefixCount[prefix]||0) + 1;
+  });
+
+  // Build manifest
+  sheets.forEach(ts=>{
+    const arr = scansByTs[ts.id];
+    if(!arr?.length) return;
+    const prefix = _buildScanPrefix(ts);
+    const needsTiebreak = prefixCount[prefix] > 1;
+    const tiebreak = needsTiebreak ? ('_' + ts.id.slice(-6)) : '';
+    arr.forEach((sc, i)=>{
+      const ext = _extFromMime(sc.mime_type, sc.file_name);
+      const seq = arr.length > 1 ? ('_' + (i+1)) : '';
+      _scanExportManifest.push({
+        tsId:        ts.id,
+        tsPrefix:    prefix,
+        fileName:    prefix + tiebreak + seq + ext,
+        storagePath: sc.storage_path,
+        mimeType:    sc.mime_type,
+      });
+    });
+  });
+
+  // Render preview table
+  const tsWithScans = sheets.filter(ts=>scansByTs[ts.id]?.length);
+  const rows = tsWithScans.map(ts=>{
+    const arr = scansByTs[ts.id]||[];
+    const prefix = _buildScanPrefix(ts);
+    const needsTiebreak = prefixCount[prefix] > 1;
+    const tiebreak = needsTiebreak ? ('_' + ts.id.slice(-6)) : '';
+    const fileList = arr.map((sc,i)=>{
+      const ext = _extFromMime(sc.mime_type, sc.file_name);
+      const seq = arr.length > 1 ? ('_'+(i+1)) : '';
+      return `<div style="font-size:11px;color:var(--text3)">${prefix}${tiebreak}${seq}${ext}</div>`;
+    }).join('');
+    return `<tr>
+      <td style="padding:7px 10px;white-space:nowrap">${ts.job_date}</td>
+      <td style="padding:7px 10px">${ts.client_name||'—'}${ts.store_number?' #'+ts.store_number:''}</td>
+      <td style="padding:7px 10px">${ts.city||'—'}${ts.state?', '+ts.state:''}</td>
+      <td style="padding:7px 10px">${ts.supervisor_name||'—'}</td>
+      <td style="padding:7px 10px;text-align:center">${arr.length}</td>
+      <td style="padding:7px 10px">${fileList}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="overflow-x:auto">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        <b>${tsWithScans.length}</b> timesheet${tsWithScans.length===1?'':'s'} &nbsp;·&nbsp;
+        <b>${_scanExportManifest.length}</b> attachment${_scanExportManifest.length===1?'':'s'} ready to export.
+        Review the file names below, then click <b>Download ZIP</b>.
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg3);color:var(--text2);font-size:11px;letter-spacing:.04em">
+            <th style="padding:7px 10px;text-align:left;white-space:nowrap">Job Date</th>
+            <th style="padding:7px 10px;text-align:left">Customer</th>
+            <th style="padding:7px 10px;text-align:left">Location</th>
+            <th style="padding:7px 10px;text-align:left">Supervisor</th>
+            <th style="padding:7px 10px;text-align:center">Files</th>
+            <th style="padding:7px 10px;text-align:left">Output filenames</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">${tsWithScans.length} row${tsWithScans.length===1?'':'s'}</div>
+    </div>`;
+
+  if(zipBtn && _scanExportManifest.length) zipBtn.style.display = '';
+}
+
+// Build the timesheet filename prefix: ClientName_StoreNum_City_ST_M-D-YY
+function _buildScanPrefix(ts){
+  const safe = s => (s||'').replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  const client = safe(ts.client_name) || 'Unknown';
+  const store  = ts.store_number ? safe(String(ts.store_number)) : '';
+  const city   = safe(ts.city)  || '';
+  const state  = safe(ts.state) || '';
+  let   date   = '';
+  if(ts.job_date){
+    const [y,m,d] = ts.job_date.split('-');
+    date = `${parseInt(m,10)}-${parseInt(d,10)}-${y.slice(2)}`;
+  }
+  return [client, store, city, state, date].filter(Boolean).join('_');
+}
+
+// Derive file extension from mime type with file_name fallback
+function _extFromMime(mime, fileName){
+  if(mime==='application/pdf')  return '.pdf';
+  if(mime==='image/jpeg')       return '.jpg';
+  if(mime==='image/png')        return '.png';
+  if(mime==='image/gif')        return '.gif';
+  if(mime==='image/webp')       return '.webp';
+  if(mime==='image/heic')       return '.heic';
+  // Fallback: grab extension from original filename
+  const m = (fileName||'').match(/(\.[^.]+)$/);
+  return m ? m[1].toLowerCase() : '.bin';
+}
+
+async function exportScanZip(){
+  if(!_scanExportManifest.length){ alert('Run the report first.'); return; }
+
+  const zipBtn = document.getElementById('scan-zip-btn');
+  const body   = document.getElementById('report-body');
+  if(zipBtn){ zipBtn.disabled=true; zipBtn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Building ZIP...'; }
+
+  try{
+    // Load JSZip on demand
+    if(!window.JSZip){
+      await new Promise((res,rej)=>{
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        s.onload=res; s.onerror=()=>rej(new Error('Failed to load JSZip'));
+        document.head.appendChild(s);
+      });
+    }
+
+    const zip = new window.JSZip();
+    let done = 0;
+    const total = _scanExportManifest.length;
+    const errors = [];
+
+    for(const item of _scanExportManifest){
+      // Update progress
+      if(zipBtn) zipBtn.innerHTML = `<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Fetching ${done+1}/${total}...`;
+
+      try{
+        const {data:urlData, error:urlErr} = await getSupabase()
+          .storage.from('timesheet-scans')
+          .createSignedUrl(item.storagePath, 300);
+        if(urlErr || !urlData?.signedUrl) throw new Error(urlErr?.message||'No signed URL');
+
+        const resp = await fetch(urlData.signedUrl);
+        if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        zip.file(item.fileName, blob);
+      } catch(e){
+        errors.push(`${item.fileName}: ${e.message}`);
+      }
+      done++;
+    }
+
+    if(zipBtn) zipBtn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Compressing...';
+
+    const zipBlob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+
+    // Build ZIP filename from active filters
+    const f = _rptFilters();
+    const fromPart = f.from ? f.from.replace(/-/g,'') : '';
+    const toPart   = f.to   ? f.to.replace(/-/g,'')   : '';
+    const datePart = [fromPart, toPart].filter(Boolean).join('-');
+    const zipName  = ['Datascan_Scans', datePart, new Date().toISOString().slice(0,10).replace(/-/g,'')].filter(Boolean).join('_') + '.zip';
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = zipName;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
+
+    if(errors.length){
+      const errDiv = document.createElement('div');
+      errDiv.style.cssText = 'margin-top:12px;padding:10px 14px;background:var(--danger-bg);border-radius:var(--radius-lg);font-size:12px;color:var(--danger-text)';
+      errDiv.innerHTML = `<b>${errors.length} file${errors.length===1?'':'s'} could not be fetched:</b><br>${errors.map(e=>`• ${e}`).join('<br>')}`;
+      body.appendChild(errDiv);
+    }
+
+  } catch(e){
+    alert('ZIP export failed: ' + e.message);
+  } finally {
+    if(zipBtn){ zipBtn.disabled=false; zipBtn.innerHTML='<i class="ti ti-file-zip"></i> Download ZIP'; }
+  }
 }
 
 // Hide report screen — call from any function that shows another screen
@@ -4872,7 +5127,7 @@ function loadWizImport(){
       <div id="imp-preview"></div>
 
       <!-- Action buttons -->
-      <div id="imp-actions" style="display:none;margin-top:1rem;display:flex;gap:8px;align-items:center">
+      <div id="imp-actions" style="display:none;margin-top:1rem;flex-wrap:wrap;gap:8px;align-items:center">
         <button class="wiz-btn primary" onclick="_runBulkImport()" id="imp-run-btn">
           <i class="ti ti-upload"></i> <span id="imp-run-label">Import</span>
         </button>
@@ -4899,7 +5154,8 @@ function _selectImportType(type){
   if(ua) ua.style.display = 'block';
   if(ul) ul.textContent = type==='manager' ? 'Upload Manager CSV' : 'Upload Supervisor CSV';
   document.getElementById('imp-preview').innerHTML = '';
-  document.getElementById('imp-actions').style.display = 'none';
+  const ia = document.getElementById('imp-actions');
+  if(ia) ia.style.display = 'none';
   // Reset file input
   const fi = document.getElementById('imp-file');
   if(fi) fi.value = '';
@@ -6320,6 +6576,14 @@ async function renderScanViewer(){
   noScans.style.display='none';
   controls.style.display='flex';
 
+  // Show/hide delete button based on timesheet status
+  const deleteBtn = document.getElementById('scan-delete-btn');
+  if(deleteBtn){
+    const ts = _currentDetailTs;
+    const locked = ts && (ts.status==='approved' || ts.status==='rejected');
+    deleteBtn.style.display = locked ? 'none' : 'flex';
+  }
+
   // Build thumbnail strip
   thumbStrip.innerHTML='';
   if(_detailScans.length>1){
@@ -6376,6 +6640,31 @@ async function loadScan(idx){
     pageNav.textContent='';
     imgEl.src=url;
     applyScanTransform();
+  }
+}
+
+async function deleteCurrentScan(){
+  const sc = _detailScans[_scanCurrentIdx];
+  if(!sc) return;
+  if(!confirm('Delete this image? This cannot be undone.')) return;
+
+  const btn = document.getElementById('scan-delete-btn');
+  if(btn) btn.disabled = true;
+
+  try{
+    // Remove from storage
+    await getSupabase().storage.from('timesheet-scans').remove([sc.storage_path]);
+    // Remove DB record
+    const {error} = await getSupabase().from('scan_attachments').delete().eq('id', sc.id);
+    if(error) throw new Error(error.message);
+
+    // Remove from local array and re-render
+    _detailScans.splice(_scanCurrentIdx, 1);
+    _scanCurrentIdx = Math.min(_scanCurrentIdx, _detailScans.length - 1);
+    await renderScanViewer();
+  } catch(e){
+    alert('Could not delete image: ' + e.message);
+    if(btn) btn.disabled = false;
   }
 }
 
@@ -7000,7 +7289,6 @@ async function saveEdits(){
 }
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- ── Add Person Panel ──────────────────────────────────────── -->
 <div id="add-person-panel">
   <div class="ap-header">
