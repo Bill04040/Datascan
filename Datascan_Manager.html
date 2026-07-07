@@ -1746,7 +1746,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.95';
+const APP_VERSION = 'v1.0.98';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2729,40 +2729,80 @@ async function _runAuditTrail(f){
   const {data, error} = await q;
   if(error) throw error;
 
-  // Get timesheet info for context
+  // Get timesheet info for context + org filtering
   const tsIds = [...new Set((data||[]).map(r=>r.timesheet_id))];
   let sheets = [];
   if(tsIds.length){
     const {data:sd} = await getSupabase().from('timesheets')
-      .select('id,job_date,client_name,store_number,status,supervisor_name')
+      .select('id,job_date,client_name,store_number,status,supervisor_name,supervisor_id')
       .in('id', tsIds);
     sheets = sd||[];
   }
 
+  // Fetch block_type for all block_ids so we can show card type in Field column
+  const blockIds = [...new Set((data||[]).map(r=>r.block_id).filter(Boolean))];
+  let blockTypes = {};
+  if(blockIds.length){
+    const {data:bd} = await getSupabase().from('time_blocks')
+      .select('id,block_type')
+      .in('id', blockIds);
+    (bd||[]).forEach(b=>{ blockTypes[b.id] = b.block_type; });
+  }
+
+  // Resolve org scope
+  const orgSupIds = _resolveOrgSupIds(f);
+
   const rows = (data||[]).map(r=>{
     const s = sheets.find(x=>x.id===r.timesheet_id)||{};
+
+    // Org scope filter
+    if(orgSupIds !== null && !orgSupIds.includes(s.supervisor_id)) return null;
     if(f.supervisor && s.supervisor_id !== f.supervisor) return null;
+
+    // Build field label: "time_in (Count)" or "time_out (Variance)" etc.
+    const blockType = r.block_id ? (blockTypes[r.block_id] || '') : '';
+    const typeLabel = blockType
+      ? blockType.charAt(0).toUpperCase() + blockType.slice(1).replace(/_/g,' ')
+      : '';
+    const fieldLabel = r.field
+      ? (r.field.replace('_',' ') + (typeLabel ? ` (${typeLabel})` : ''))
+      : '—';
+
+    // Format timestamp as readable local time
+    const changedAt = r.changed_at
+      ? new Date(r.changed_at).toLocaleString('en-US',{
+          month:'short',day:'numeric',year:'numeric',
+          hour:'numeric',minute:'2-digit',second:'2-digit'
+        })
+      : '—';
+
     return {
-      changed_at: new Date(r.changed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
-      client_name: s.client_name||'—',
-      store_number: s.store_number||'—',
-      job_date: s.job_date||'—',
-      status: s.status||'—',
+      client_name:     s.client_name||'—',
+      store_number:    s.store_number||'—',
+      job_date:        s.job_date||'—',
+      status:          s.status||'—',
       supervisor_name: s.supervisor_name||'—',
-      changed_by: r.changed_by_name||'—',
-      role: r.changed_by_role||'—',
-      field: r.field||'—',
-      old_value: r.old_value||'—',
-      new_value: r.new_value||'—',
+      changed_by:      r.changed_by_name||'—',
+      role:            r.changed_by_role||'—',
+      field:           fieldLabel,
+      old_value:       r.old_value||'—',
+      new_value:       r.new_value||'—',
+      changed_at:      changedAt,
     };
   }).filter(Boolean);
 
   _renderReportTable([
-    {key:'changed_at',label:'Changed At'},{key:'client_name',label:'Customer'},
-    {key:'store_number',label:'Store'},{key:'job_date',label:'Job Date'},
-    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
-    {key:'changed_by',label:'Changed By'},{key:'role',label:'Role'},
-    {key:'field',label:'Field'},{key:'old_value',label:'Old Value'},{key:'new_value',label:'New Value'},
+    {key:'client_name',label:'Customer'},
+    {key:'store_number',label:'Store'},
+    {key:'job_date',label:'Job Date'},
+    {key:'status',label:'Status'},
+    {key:'supervisor_name',label:'Supervisor'},
+    {key:'changed_by',label:'Changed By'},
+    {key:'role',label:'Role'},
+    {key:'field',label:'Field'},
+    {key:'old_value',label:'Old Value'},
+    {key:'new_value',label:'New Value'},
+    {key:'changed_at',label:'Changed At'},
   ], rows);
 }
 
@@ -6668,7 +6708,7 @@ async function deleteCurrentScan(){
   }
 }
 
-async function loadPdfPage(url, pageNum){
+async function loadPdfPage(url, pageNum){ // ── DO NOT REMOVE THIS LINE ──
   const canvasEl=document.getElementById('scan-viewer-canvas');
   const pageNav=document.getElementById('scan-page-nav');
   if(!window.pdfjsLib){
@@ -7202,89 +7242,117 @@ function cancelEditMode(){
   openDetailScreen(_currentDetailTs, true);
 }
 
+let _saveEditsInProgress = false;
+
 async function saveEdits(){
-  const changes = Object.values(_editChanges);
-  if(!changes.length){ cancelEditMode(); return; }
+  // Guard against double-firing from multiple Save buttons
+  if(_saveEditsInProgress) return;
+  _saveEditsInProgress = true;
 
-  // Block save if any invalid cells exist
-  const invalidCells = document.querySelectorAll('.edit-time-input.invalid, .edit-date-input.invalid');
-  if(invalidCells.length){
-    alert('Please fix the highlighted errors before saving.');
-    return;
-  }
+  // Visually disable all Save buttons while in progress
+  document.querySelectorAll('.edit-save-btn, .topbar-mgr-btn.edit').forEach(b=>{ b.disabled=true; b.style.opacity='0.5'; });
 
-  const ts = _currentDetailTs; if(!ts) return;
-  const now = new Date().toISOString();
-  const managerName = currentProfile?.full_name || '';
-  const managerRole = currentProfile?.role || 'manager';
+  try{
+    const changes = Object.values(_editChanges);
+    if(!changes.length){ cancelEditMode(); return; }
 
-  let saved = 0, failed = 0;
-  for(const c of changes){
-    const dbField = c.field === 'in' ? 'time_in' : 'time_out';
-
-    // Read original from block before overwriting
-    const {data:origBlock} = await getSupabase()
-      .from('time_blocks').select('time_in,time_out,original_time_in,original_time_out')
-      .eq('id', c.blockId).maybeSingle();
-
-    // Only preserve original_time_in/out on FIRST manager edit
-    const origFieldDb = c.field === 'in' ? 'original_time_in' : 'original_time_out';
-    const alreadyHasOriginal = origBlock?.[origFieldDb];
-    const updatePayload = {
-      [dbField]: c.newVal || null,
-      modified_by: currentUser.id,
-      modified_at: now,
-    };
-    if(!alreadyHasOriginal){
-      const origVal = origBlock?.[dbField] || null;
-      // original_time_in/original_time_out are plain `time`-typed columns —
-      // strip any date prefix from the current (timestamp) value before storing.
-      updatePayload[origFieldDb] = (origVal && origVal.includes('T')) ? origVal.split('T')[1] : origVal;
+    // Block save if any invalid cells exist
+    const invalidCells = document.querySelectorAll('.edit-time-input.invalid, .edit-date-input.invalid');
+    if(invalidCells.length){
+      alert('Please fix the highlighted errors before saving.');
+      return;
     }
 
-    // Chain .select() so we can tell a real 0-row RLS block apart from
-    // success — update() alone returns {data:null, error:null} either way.
-    const {data:updated, error} = await getSupabase()
-      .from('time_blocks')
-      .update(updatePayload)
-      .eq('id', c.blockId)
-      .select('id, time_in, time_out')
-      .maybeSingle();
+    const ts = _currentDetailTs; if(!ts) return;
+    const now = new Date().toISOString();
+    const managerName = currentProfile?.full_name || '';
+    const managerRole = currentProfile?.role || 'manager';
 
-    if(error){
-      console.error('[saveEdits] block update error — message:', error.message, '| code:', error.code, '| details:', error.details, '| hint:', error.hint);
-      failed++; continue;
+    let saved = 0, failed = 0;
+    for(const c of changes){
+      const dbField = c.field === 'in' ? 'time_in' : 'time_out';
+
+      // Null blockId means the change came from a timesheet-level field,
+      // not an individual time block — skip the block update, log only.
+      if(!c.blockId){
+        await getSupabase().from('timesheet_edit_log').insert({
+          timesheet_id:    ts.id,
+          block_id:        null,
+          field:           dbField,
+          old_value:       c.oldVal || null,
+          new_value:       c.newVal || null,
+          changed_by:      currentUser.id,
+          changed_by_name: managerName,
+          changed_by_role: managerRole,
+          changed_at:      now,
+        });
+        saved++;
+        continue;
+      }
+
+      // Read original from block before overwriting
+      const {data:origBlock} = await getSupabase()
+        .from('time_blocks').select('time_in,time_out,original_time_in,original_time_out')
+        .eq('id', c.blockId).maybeSingle();
+
+      // Only preserve original_time_in/out on FIRST manager edit
+      const origFieldDb = c.field === 'in' ? 'original_time_in' : 'original_time_out';
+      const alreadyHasOriginal = origBlock?.[origFieldDb];
+      const updatePayload = {
+        [dbField]: c.newVal || null,
+        modified_by: currentUser.id,
+        modified_at: now,
+      };
+      if(!alreadyHasOriginal){
+        const origVal = origBlock?.[dbField] || null;
+        updatePayload[origFieldDb] = (origVal && origVal.includes('T')) ? origVal.split('T')[1] : origVal;
+      }
+
+      const {data:updated, error} = await getSupabase()
+        .from('time_blocks')
+        .update(updatePayload)
+        .eq('id', c.blockId)
+        .select('id, time_in, time_out')
+        .maybeSingle();
+
+      if(error){
+        console.error('[saveEdits] block update error — message:', error.message, '| code:', error.code, '| details:', error.details, '| hint:', error.hint);
+        failed++; continue;
+      }
+      if(!updated){
+        console.error('[saveEdits] 0 rows updated for block', c.blockId, '— likely missing UPDATE RLS policy on time_blocks for this role');
+        failed++; continue;
+      }
+
+      // Append to timesheet_edit_log — every change preserved
+      const {error: logErr} = await getSupabase().from('timesheet_edit_log').insert({
+        timesheet_id:    ts.id,
+        block_id:        c.blockId,
+        field:           dbField,
+        old_value:       c.oldVal || null,
+        new_value:       c.newVal || null,
+        changed_by:      currentUser.id,
+        changed_by_name: managerName,
+        changed_by_role: managerRole,
+        changed_at:      now,
+      });
+      if(logErr) console.warn('[saveEdits] timesheet_edit_log insert failed (block update still succeeded):', logErr);
+
+      saved++;
     }
-    if(!updated){
-      console.error('[saveEdits] 0 rows updated for block', c.blockId, '— likely missing UPDATE RLS policy on time_blocks for this role');
-      failed++; continue;
+
+    if(saved > 0){
+      document.getElementById('edit-mode-bar')?.remove();
+      openDetailScreen(ts, true);
+      if(failed > 0){
+        alert(`Saved ${saved} change(s), but ${failed} failed to save — check the browser console for details. This is usually a missing UPDATE policy on the time_blocks table for your role.`);
+      }
+    } else {
+      alert('No changes were saved — check the browser console for details. This is usually a missing UPDATE policy on the time_blocks table for your role.');
     }
-
-    // Append to timesheet_edit_log — every change preserved
-    const {error: logErr} = await getSupabase().from('timesheet_edit_log').insert({
-      timesheet_id:    ts.id,
-      block_id:        c.blockId,
-      field:           dbField,
-      old_value:       c.oldVal || null,
-      new_value:       c.newVal || null,
-      changed_by:      currentUser.id,
-      changed_by_name: managerName,
-      changed_by_role: managerRole,
-      changed_at:      now,
-    });
-    if(logErr) console.warn('[saveEdits] timesheet_edit_log insert failed (block update still succeeded):', logErr);
-
-    saved++;
-  }
-
-  if(saved > 0){
-    document.getElementById('edit-mode-bar')?.remove();
-    openDetailScreen(ts, true);
-    if(failed > 0){
-      alert(`Saved ${saved} change(s), but ${failed} failed to save — check the browser console for details. This is usually a missing UPDATE policy on the time_blocks table for your role.`);
-    }
-  } else {
-    alert('No changes were saved — check the browser console for details. This is usually a missing UPDATE policy on the time_blocks table for your role.');
+  } finally {
+    _saveEditsInProgress = false;
+    document.querySelectorAll('.edit-save-btn, .topbar-mgr-btn.edit').forEach(b=>{ b.disabled=false; b.style.opacity=''; });
   }
 }
 
