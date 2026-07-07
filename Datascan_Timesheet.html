@@ -61,6 +61,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .no-break-warning-list.visible{display:block}
 .no-break-warning-list ul{margin:4px 0 0 14px;padding:0}
 .no-break-warning-list li{margin-bottom:2px}
+.high-hours-warning-list{margin-top:6px;padding:7px 10px;background:rgba(244,169,58,0.12);border-left:3px solid #F4A93A;border-radius:0 4px 4px 0;font-size:11.5px;color:#F4A93A;display:none}
+.high-hours-warning-list.visible{display:block}
+.high-hours-warning-list ul{margin:4px 0 0 14px;padding:0}
+.high-hours-warning-list li{margin-bottom:2px}
 /* Missing times warning — shown after scan upload */
 .missing-times-warning{margin-top:6px;padding:8px 10px;background:rgba(248,113,113,0.1);border-left:3px solid #f87171;border-radius:0 4px 4px 0;font-size:11.5px;color:#f87171;display:none}
 .missing-times-warning.visible{display:block}
@@ -83,7 +87,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .time-block[data-card-color]{border-left-width:3px;border-left-style:solid}
 .time-block-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
 .block-badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px}
-.sup-tag-btn{position:fixed;bottom:14px;right:14px;width:10px;height:10px;border-radius:50%;background:transparent;border:0.5px solid var(--border);cursor:pointer;opacity:0.15;z-index:50}
+.sup-tag-btn{position:fixed;bottom:10px;right:10px;width:22px;height:22px;border-radius:50%;background:transparent;border:0.5px solid var(--border);cursor:pointer;opacity:0.15;z-index:50}
 .sup-tag-btn:hover{opacity:0.5}
 .pin-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center}
 .pin-modal{background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:300px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.25)}
@@ -953,21 +957,18 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 </div>
 
 <div class="section">
-  <div class="section-title"><i class="ti ti-pencil"></i> Supervisor Signature</div>
-  <p style="font-size:12px;color:var(--text2);margin-bottom:6px">By signing, I certify these hours are accurate.</p>
-  <div class="sig-box" id="emp-sig-box"><canvas id="emp-sig-canvas"></canvas><span class="sig-placeholder" id="emp-sig-hint">Sign here with finger</span></div>
-  <div style="display:flex;justify-content:flex-end"><button class="btn-clear" onclick="clearSig('emp')">Clear</button></div>
-  <div class="field-row" style="margin-top:6px">
-    <div class="field-group"><label>Date signed</label><input type="date" id="emp-sign-date"/></div>
-  </div>
   <div class="btn-row">
     <button class="btn" id="draft-btn" onclick="saveDraft()"><i class="ti ti-device-floppy"></i> Save draft</button>
     <button class="btn btn-primary" id="submit-btn" onclick="submitSheet()" disabled><i class="ti ti-send"></i> Submit</button>
   </div>
-  <div class="submit-hint" id="submit-hint">Complete all fields, employee times, sign, and attach a scan to enable submit</div>
+  <div class="submit-hint" id="submit-hint">Complete all fields, employee times, and attach a scan to enable submit</div>
   <div class="no-break-warning-list" id="no-break-warning-list">
     <strong><i class="ti ti-alert-triangle" style="margin-right:4px"></i>No break recorded for employees with 8+ consecutive hours:</strong>
     <ul id="no-break-warning-items"></ul>
+  </div>
+  <div class="high-hours-warning-list" id="high-hours-warning-list">
+    <strong><i class="ti ti-alert-triangle" style="margin-right:4px"></i>Unusually high hours (13+) for these employees — double-check before submitting:</strong>
+    <ul id="high-hours-warning-items"></ul>
   </div>
   <div class="missing-times-warning" id="missing-times-warning">
     <strong><i class="ti ti-clock-x" style="margin-right:4px"></i>Missing Out times — submit is blocked until resolved:</strong>
@@ -1320,7 +1321,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.67';
+const APP_VERSION = 'v1.0.70';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1650,7 +1651,6 @@ function checkSubmitReady(){
     return;
   }
   const noEmpErrors=!document.querySelector('.emp-card.has-errors');
-  const hasSig=sigHasData('emp');
   const hasScan=scans.length>0;
   const jiOk=jobInfoComplete();
   // Supervisor card must always have clock in/out.
@@ -1683,7 +1683,7 @@ function checkSubmitReady(){
       });
     }
   });
-  const ready=noEmpErrors&&hasSig&&hasScan&&allHaveTimes&&jiOk;
+  const ready=noEmpErrors&&hasScan&&allHaveTimes&&jiOk;
 
   // DNR requires notes
   let dnrMissingNotes = false;
@@ -1710,7 +1710,6 @@ function checkSubmitReady(){
   const missing=[];
   if(!jiOk)missing.push('all job info fields');
   if(!allHaveTimes||!noEmpErrors)missing.push('valid employee times');
-  if(!hasSig)missing.push('supervisor signature');
   if(!hasScan)missing.push('at least one scan');
   if(dnrMissingNotes)missing.push('notes for DNR employees');
   if(hasDuplicates)missing.push('duplicate name resolution');
@@ -1754,6 +1753,20 @@ function checkSubmitReady(){
       warnDiv.classList.add('visible');
     } else {
       warnDiv.classList.remove('visible');
+    }
+  }
+
+  // High-hours outlier warning — shown when one or more (but not the majority
+  // of) employees have logged 13+ hours. Informational only, never blocks submit.
+  const hhDiv   = document.getElementById('high-hours-warning-list');
+  const hhItems = document.getElementById('high-hours-warning-items');
+  if(hhDiv && hhItems){
+    const { flagged } = getHighHoursEmployees();
+    if(flagged.length){
+      hhItems.innerHTML = flagged.map(f=>`<li>${f.name} &mdash; ${f.hours.toFixed(1)}h</li>`).join('');
+      hhDiv.classList.add('visible');
+    } else {
+      hhDiv.classList.remove('visible');
     }
   }
   // NOTE: onFormChange() intentionally removed — checkSubmitReady is called
@@ -2367,6 +2380,43 @@ function blockHrsBadge(empId, block){
 
 // ── No-break detection ────────────────────────────────────────────────────────
 // Returns true if employee has ≥ 8 consecutive paid hours with no break that overlaps
+// ── High-hours outlier check (13+ hrs in a day) ─────────────────────────────
+// Returns { flagged: [{empId,name,hours}], totalNamed, isMajority }.
+// "isMajority" means most of the crew logged 13+ hours (e.g. a genuinely
+// long job day) — in that case a blanket flag on everyone isn't useful, but
+// an individual who's still well above the rest of that already-long crew
+// (e.g. everyone else at 13-15h, one person at 25h) is still worth flagging.
+const HIGH_HOURS_THRESHOLD_MINS = 13 * 60;
+const HIGH_HOURS_OUTLIER_MARGIN = 4; // hours above the crew's median to still flag during a majority-high day
+function getHighHoursEmployees(){
+  const allHours = []; // every named employee's total daily hours
+  document.querySelectorAll('.emp-card').forEach(card=>{
+    const eid = card.dataset.empId;
+    const fname = document.getElementById('fname-'+eid);
+    const lname = card.querySelectorAll('input[type=text]')[1];
+    const hasName = fname && fname.value.trim().length>0;
+    if(!hasName) return;
+    const merged = getMergedPaid(eid, null);
+    const totalMins = merged.reduce((s,seg)=>s+(seg.out-seg.in),0);
+    const name = [fname.value.trim(), lname?.value.trim()].filter(Boolean).join(' ') || 'Employee';
+    allHours.push({empId:eid, name, hours: totalMins/60});
+  });
+  const totalNamed = allHours.length;
+  const atOrAbove = allHours.filter(e=>e.hours >= HIGH_HOURS_THRESHOLD_MINS/60);
+  const isMajority = totalNamed>0 && atOrAbove.length >= totalNamed/2;
+
+  // Crew median — used to spot an individual outlier even within a
+  // majority-high-hours day.
+  const sorted = allHours.map(e=>e.hours).sort((a,b)=>a-b);
+  const mid = Math.floor(sorted.length/2);
+  const median = sorted.length ? (sorted.length%2 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2) : 0;
+
+  const flagged = atOrAbove.filter(e=>
+    !isMajority || (e.hours - median) >= HIGH_HOURS_OUTLIER_MARGIN
+  );
+  return { flagged, totalNamed, isMajority };
+}
+
 function hasNoBreakWarning(empId){
   const blocks = empBlocks[empId] || [];
   const fname  = document.getElementById('fname-' + empId);
@@ -3503,6 +3553,22 @@ function stopSupabaseAutoSave(){
 function validateAll(){let ok=true;document.querySelectorAll('.emp-card').forEach(card=>{if(!validateEmployee(card.dataset.empId).empValid)ok=false;});return ok;}
 function saveDraft(){ saveTimesheet('draft'); }
 async function submitSheet(){
+  // ── Soft stop: excessive hours (13+) outlier check ────────────────────────
+  // Not an error — just a confirmation so the supervisor can double-check
+  // times before submitting. Suppressed automatically if a majority of the
+  // crew logged 13+ hours (that's a long job day, not a data-entry outlier).
+  const { flagged: highHoursEmps } = getHighHoursEmployees();
+  if(highHoursEmps.length){
+    const list = highHoursEmps.map(e=>`\u2022 ${e.name} \u2014 ${e.hours.toFixed(1)}h`).join('\n');
+    const proceed = confirm(
+      '\u26a0 Unusually high hours detected\n\n' +
+      'The following employee(s) have 13+ hours logged for the day:\n\n' +
+      list + '\n\n' +
+      'If these times are correct, click OK to continue submitting.\n' +
+      'Click Cancel to go back and fix the times.'
+    );
+    if(!proceed) return;
+  }
   // ── Hard block: check for incomplete travel logs ─────────────────────────
   if(currentTimesheetId){
     try{
@@ -3565,7 +3631,6 @@ async function submitSheet(){
 const today=new Date();
 if(document.getElementById('header-date'))document.getElementById('header-date').textContent=today.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 document.getElementById('job-date').value=today.toISOString().split('T')[0];
-const empSignDate=document.getElementById('emp-sign-date'); if(empSignDate) empSignDate.value=today.toISOString().split('T')[0];
 // mgr-sign-date removed — manager approval handled server-side
 // Mount customer autocomplete
 const acWrap=buildCustomerAC();
