@@ -1749,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.1.25';
+const APP_VERSION = 'v1.1.26';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -6708,8 +6708,8 @@ async function openDetailScreen(ts, isManager=false){
         // data-* attributes are required by enterEditMode() to make cells editable
         const blockId  = b?.id    || '';
         const empId    = e.id     || '';
-        const inAttr   = blockId ? `data-block-id="${blockId}" data-field="in"  data-emp-id="${empId}" data-stored-val="${b?.time_in||''}"` : '';
-        const outAttr  = blockId ? `data-block-id="${blockId}" data-field="out" data-emp-id="${empId}" data-stored-val="${b?.time_out||''}"` : '';
+        const inAttr   = blockId ? `data-block-id="${blockId}" data-field="in"  data-emp-id="${empId}" data-block-type="${b?.block_type||''}" data-stored-val="${b?.time_in||''}"` : '';
+        const outAttr  = blockId ? `data-block-id="${blockId}" data-field="out" data-emp-id="${empId}" data-block-type="${b?.block_type||''}" data-stored-val="${b?.time_out||''}"` : '';
         return `<td class="tl-cell-in${groupSep}${unpaidCls}" ${inAttr}>${tlFmt(b?.time_in)}${modDot}</td><td class="tl-cell-out${unpaidCls}" ${outAttr}>${tlFmt(b?.time_out)}</td>`;
       }).join('');
 
@@ -7330,6 +7330,7 @@ function enterEditMode(){
   const ts = _currentDetailTs; if(!ts) return;
   _editChanges = {};
   window._pendingMinFlags = {};
+  window._pendingNewBlocks = [];
 
   // Edit mode bar
   const detailBody = document.getElementById('detail-body');
@@ -7389,8 +7390,9 @@ function enterEditMode(){
     cell.appendChild(wrap);
   });
 
-  // Add MIN toggle button to each employee's sticky name cell (first row per employee only)
+  // Add MIN toggle and + Block buttons to each employee's sticky name cell (first row per employee only)
   const minButtonsAdded = new Set();
+  window._pendingNewBlocks = []; // [{empId, blockType, timeIn, timeOut}]
   document.querySelectorAll('.tl-table td.tl-sticky').forEach(cell=>{
     // Find the employee id from any In cell in the same row
     const row = cell.closest('tr');
@@ -7399,7 +7401,7 @@ function enterEditMode(){
     if(!inCell) return;
     const empId = inCell.dataset.empId;
     if(!empId) return;
-    // Only add ONE MIN button per employee — first sticky cell wins
+    // Only add ONE set of buttons per employee — first sticky cell wins
     if(minButtonsAdded.has(empId)) return;
     minButtonsAdded.add(empId);
 
@@ -7415,6 +7417,15 @@ function enterEditMode(){
     btn.style.marginTop = '4px';
     btn.onclick = () => toggleMinFlag(btn, empId);
     cell.appendChild(btn);
+
+    // + Block button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'min-toggle-btn';
+    addBtn.style.cssText = 'margin-top:4px;margin-left:3px;color:var(--success-text);border-color:rgba(106,179,79,.5)';
+    addBtn.innerHTML = '+ Block';
+    addBtn.title = 'Add a new time block for this employee';
+    addBtn.onclick = () => openAddBlockPanel(empId, cell);
+    cell.appendChild(addBtn);
   });
 
   // Topbar buttons
@@ -7447,6 +7458,104 @@ function toggleMinFlag(btn, empId){
       minInput.focus();
       minInput.placeholder = 'Required!';
     }
+  }
+}
+
+function openAddBlockPanel(empId, anchorCell){
+  // Remove any existing panel
+  document.getElementById('add-block-panel-inline')?.remove();
+
+  const empData  = (window._detailEmps||[]).find(e=>e.id===empId);
+  const empName  = empData ? [empData.first_name, empData.last_name].filter(Boolean).join(' ') : 'Employee';
+
+  // Find block types this employee already has (from currently rendered cells)
+  const existingTypes = new Set(
+    [...document.querySelectorAll(`td[data-emp-id="${empId}"]`)]
+      .map(td=>td.dataset.blockType).filter(Boolean)
+  );
+
+  // Available block types from card type catalog (excluding already-used and non-leaf types)
+  const available = (_detailCardTypes||[]).filter(ct=>
+    ct.is_active !== false && !existingTypes.has(ct.key)
+  );
+
+  if(!available.length){
+    alert(`${empName} already has all available block types.`);
+    return;
+  }
+
+  const ts = _currentDetailTs;
+  const jobDate = ts?.job_date || '';
+
+  const options = available.map(ct=>
+    `<option value="${ct.key}">${(ct.label||ct.key).replace(/_/g,' ')}</option>`
+  ).join('');
+
+  const panel = document.createElement('div');
+  panel.id = 'add-block-panel-inline';
+  panel.style.cssText = `
+    margin-top:6px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);
+    border-radius:var(--radius-lg);font-size:12px;min-width:220px;
+  `;
+  panel.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px;color:var(--text)">Add Block — ${empName}</div>
+    <div style="margin-bottom:5px">
+      <label style="color:var(--text2);font-size:11px">Block Type</label><br>
+      <select id="abp-type" style="width:100%;font-size:12px;padding:3px 6px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:4px">
+        ${options}
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <div style="flex:1">
+        <label style="color:var(--text2);font-size:11px">Time In</label><br>
+        <input id="abp-in" type="datetime-local" value="${jobDate}T00:00"
+          style="width:100%;font-size:11px;padding:3px 4px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:4px"/>
+      </div>
+      <div style="flex:1">
+        <label style="color:var(--text2);font-size:11px">Time Out</label><br>
+        <input id="abp-out" type="datetime-local" value="${jobDate}T00:00"
+          style="width:100%;font-size:11px;padding:3px 4px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:4px"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button onclick="confirmAddBlock('${empId}')"
+        style="flex:1;font-size:11px;padding:4px 8px;background:rgba(106,179,79,.25);border:1px solid rgba(106,179,79,.5);color:var(--success-text);border-radius:4px;cursor:pointer">
+        <i class="ti ti-check"></i> Add
+      </button>
+      <button onclick="document.getElementById('add-block-panel-inline')?.remove()"
+        style="font-size:11px;padding:4px 8px;background:var(--bg2);border:1px solid var(--border2);color:var(--text2);border-radius:4px;cursor:pointer">
+        Cancel
+      </button>
+    </div>
+  `;
+  anchorCell.appendChild(panel);
+}
+
+function confirmAddBlock(empId){
+  const typeEl = document.getElementById('abp-type');
+  const inEl   = document.getElementById('abp-in');
+  const outEl  = document.getElementById('abp-out');
+  if(!typeEl || !inEl || !outEl) return;
+
+  const blockType = typeEl.value;
+  const timeIn    = inEl.value  ? new Date(inEl.value).toISOString()  : null;
+  const timeOut   = outEl.value ? new Date(outEl.value).toISOString() : null;
+
+  if(!blockType){ alert('Please select a block type.'); return; }
+  if(!timeIn || !timeOut){ alert('Please enter both Time In and Time Out.'); return; }
+  if(new Date(timeOut) <= new Date(timeIn)){ alert('Time Out must be after Time In.'); return; }
+
+  if(!window._pendingNewBlocks) window._pendingNewBlocks = [];
+  // Replace if already pending for same emp + type
+  window._pendingNewBlocks = window._pendingNewBlocks.filter(b=>!(b.empId===empId && b.blockType===blockType));
+  window._pendingNewBlocks.push({empId, blockType, timeIn, timeOut});
+
+  const typeName = typeEl.options[typeEl.selectedIndex]?.text || blockType;
+  const panel = document.getElementById('add-block-panel-inline');
+  if(panel){
+    panel.innerHTML = `<div style="color:var(--success-text);font-size:12px"><i class="ti ti-check"></i>
+      <strong>${typeName}</strong> queued — will save with other changes.</div>`;
+    setTimeout(()=>panel.remove(), 2500);
   }
 }
 
@@ -7630,11 +7739,12 @@ async function saveEdits(){
   try{
     const changes = Object.values(_editChanges);
     const hasPendingMin = Object.keys(window._pendingMinFlags||{}).length > 0;
+    const hasPendingNewBlocks = (window._pendingNewBlocks||[]).length > 0;
     const minInput = document.getElementById('edit-min-hours');
     const hasPendingMinHours = minInput && (
       (minInput.value.trim()==='' ? null : parseFloat(minInput.value)) !== (_currentDetailTs?.minimum_hours ?? null)
     );
-    if(!changes.length && !hasPendingMin && !hasPendingMinHours){ cancelEditMode(); return; }
+    if(!changes.length && !hasPendingMin && !hasPendingMinHours && !hasPendingNewBlocks){ cancelEditMode(); return; }
 
     // Block save if any invalid cells exist
     const invalidCells = document.querySelectorAll('.edit-time-input.invalid, .edit-date-input.invalid');
@@ -7808,6 +7918,55 @@ async function saveEdits(){
       }
     }
     window._pendingMinFlags = {};
+
+    // ── Insert new time blocks ────────────────────────────────
+    for(const nb of (window._pendingNewBlocks||[])){
+      try{
+        // Get current max display_order for this employee's blocks
+        const {data:existingBlocks} = await getSupabase()
+          .from('time_blocks')
+          .select('display_order')
+          .eq('employee_id', nb.empId)
+          .eq('is_deleted', false)
+          .order('display_order', {ascending:false})
+          .limit(1);
+        const nextOrder = existingBlocks?.length ? (existingBlocks[0].display_order||0)+1 : 0;
+
+        const {data:inserted, error:insErr} = await getSupabase()
+          .from('time_blocks')
+          .insert({
+            timesheet_id:  ts.id,
+            employee_id:   nb.empId,
+            block_type:    nb.blockType,
+            time_in:       nb.timeIn,
+            time_out:      nb.timeOut,
+            is_primary:    false,
+            display_order: nextOrder,
+          })
+          .select('id')
+          .maybeSingle();
+
+        if(insErr) throw new Error(insErr.message);
+
+        // Log the new block to audit trail
+        await getSupabase().from('timesheet_edit_log').insert({
+          timesheet_id:    ts.id,
+          block_id:        inserted?.id || null,
+          employee_id:     nb.empId,
+          field:           'block_added',
+          old_value:       null,
+          new_value:       `${nb.blockType} ${nb.timeIn} → ${nb.timeOut}`,
+          changed_by:      currentUser.id,
+          changed_by_name: managerName,
+          changed_by_role: managerRole,
+          changed_at:      now,
+        });
+        minSaved++;
+      } catch(e){
+        errors.push(`Add block (${nb.blockType}): ${e.message}`);
+      }
+    }
+    window._pendingNewBlocks = [];
 
     if(saved > 0 || minSaved > 0){
       document.getElementById('edit-mode-bar')?.remove();
