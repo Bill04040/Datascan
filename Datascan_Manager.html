@@ -1359,10 +1359,6 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
 </div>
 <div id="detail-screen">
   <div class="detail-topbar">
-    <!-- Hidden admin-only delete button — top-left dot -->
-    <button class="admin-delete-btn" id="admin-delete-btn"
-      onclick="adminDeleteTimesheet()"
-      title="Admin: Delete timesheet"></button>
     <button class="detail-back-btn" onclick="closeDetailScreen()"><i class="ti ti-arrow-left"></i></button>
     <span class="detail-topbar-status" id="detail-topbar-status"></span>
     <div class="topbar-mgr-btns" id="topbar-mgr-btns" style="display:none"></div>
@@ -1383,7 +1379,6 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
       <span id="scan-page-nav" style="color:#fff;font-size:12px;margin:0 4px"></span>
       <button class="scan-ctrl-btn" id="scan-prev-btn" onclick="scanPage(-1)" style="display:none" title="Previous page"><i class="ti ti-chevron-left"></i></button>
       <button class="scan-ctrl-btn" id="scan-next-btn" onclick="scanPage(1)" style="display:none" title="Next page"><i class="ti ti-chevron-right"></i></button>
-      <button class="scan-remove" id="scan-delete-btn" onclick="deleteCurrentScan()" title="Delete this image" style="margin-left:auto"><i class="ti ti-trash"></i>&nbsp;Delete</button>
     </div>
   </div>
   <!-- Scan thumbnail strip -->
@@ -1754,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.1.23';
+const APP_VERSION = 'v1.1.25';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1879,11 +1874,6 @@ function completeSignIn(){
   startTimesheetSubscription();
   // Refresh UAT badge for managers
   setTimeout(refreshUATBadge, 1500);
-
-  // Admin delete button is intentionally hidden on the approval/detail screen.
-  // It is only used from the housekeeping panel — not the approval workflow.
-  const adminBtn = document.getElementById('admin-delete-btn');
-  if(adminBtn) adminBtn.style.display = 'none';
 
   // Init role switcher for testing_qa users
   if(can('role_switcher')) initRoleSwitcher();
