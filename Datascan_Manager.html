@@ -624,6 +624,10 @@ input[readonly]{background:var(--bg3);color:var(--text2);cursor:default;border-s
 /* DNR / Preferred badges */
 .tsv-flag-dnr{font-size:9px;font-weight:700;color:var(--danger-text);background:var(--danger-bg);padding:1px 4px;border-radius:3px}
 .tsv-flag-pref{font-size:9px;font-weight:700;color:var(--success-text);background:var(--success-bg);padding:1px 4px;border-radius:3px}
+.tsv-flag-min{font-size:9px;font-weight:700;color:#FAC775;background:rgba(250,199,117,.18);padding:1px 4px;border-radius:3px;border:1px solid rgba(250,199,117,.4)}
+.tl-min-delta{font-size:11px;font-weight:700;color:#FAC775}
+.min-toggle-btn{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;border:1px solid rgba(250,199,117,.5);background:rgba(250,199,117,.1);color:#FAC775;cursor:pointer;transition:all .15s}
+.min-toggle-btn.active{background:rgba(250,199,117,.3);border-color:#FAC775}
 .tsv-flag-empty{color:var(--text3)}
 .tsv-notes-cell{font-size:11px;color:var(--text2);font-style:italic;text-align:left;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Notes tooltip */
@@ -1088,6 +1092,10 @@ body.has-sidebar{padding:0;overflow:hidden;height:100vh;display:flex;flex-direct
     <button class="sb-link" id="sb-rpt-scan-export" onclick="sbNavigate('rpt-scan-export')" aria-label="Scan Export">
       <i class="ti ti-file-zip" aria-hidden="true"></i>
       <span class="sb-link-label">Scan Export</span>
+    </button>
+    <button class="sb-link" id="sb-rpt-housekeep" onclick="sbNavigate('rpt-housekeep')" aria-label="Housekeeping">
+      <i class="ti ti-trash" aria-hidden="true"></i>
+      <span class="sb-link-label">Housekeeping</span>
     </button>
   </nav>
 
@@ -1746,7 +1754,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.98';
+const APP_VERSION = 'v1.1.23';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1872,12 +1880,10 @@ function completeSignIn(){
   // Refresh UAT badge for managers
   setTimeout(refreshUATBadge, 1500);
 
-  // Show hidden delete button for admin@datascan.com
-  const _adminEmail = (currentProfile?.email||currentUser?.email||'').toLowerCase();
-  if(_adminEmail === 'admin@datascan.com'){
-    const adminBtn = document.getElementById('admin-delete-btn');
-    if(adminBtn) adminBtn.style.display = 'block';
-  }
+  // Admin delete button is intentionally hidden on the approval/detail screen.
+  // It is only used from the housekeeping panel — not the approval workflow.
+  const adminBtn = document.getElementById('admin-delete-btn');
+  if(adminBtn) adminBtn.style.display = 'none';
 
   // Init role switcher for testing_qa users
   if(can('role_switcher')) initRoleSwitcher();
@@ -1921,9 +1927,11 @@ function initSidebar(){
   // Reports section — show if user has reports permission
   const rptIds = ['sb-rpt-hours','sb-rpt-supervisor','sb-rpt-employee','sb-rpt-audit','sb-rpt-changes','sb-rpt-outstanding'];
   rptIds.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=hasReports?'':'none'; });
-  // Scan export is admin-only
+  // Scan export and housekeeping are admin-only
   const scanExportBtn = document.getElementById('sb-rpt-scan-export');
   if(scanExportBtn) scanExportBtn.style.display = isAdmin ? '' : 'none';
+  const housekeepBtn = document.getElementById('sb-rpt-housekeep');
+  if(housekeepBtn) housekeepBtn.style.display = isAdmin ? '' : 'none';
   const rptSection = document.getElementById('sb-section-reports');
   const rptDivider = document.getElementById('sb-divider-reports');
   if(rptSection) rptSection.style.display = hasReports ? '' : 'none';
@@ -2001,7 +2009,7 @@ function sbNavigate(page){
     openUATScreen();
   } else if(page==='scheduling'||page==='payroll'){
     showComingSoon(page);
-  } else if(page==='rpt-hours'||page==='rpt-supervisor'||page==='rpt-employee'||page==='rpt-audit'||page==='rpt-changes'||page==='rpt-outstanding'||page==='rpt-scan-export'){
+  } else if(page==='rpt-hours'||page==='rpt-supervisor'||page==='rpt-employee'||page==='rpt-audit'||page==='rpt-changes'||page==='rpt-outstanding'||page==='rpt-scan-export'||page==='rpt-housekeep'){
     openReportScreen(page);
   }
 }
@@ -2017,7 +2025,8 @@ function updateSidebarActive(page){
     'rpt-employee':'sb-rpt-employee','rpt-audit':'sb-rpt-audit',
     'rpt-changes':'sb-rpt-changes',
     'rpt-outstanding':'sb-rpt-outstanding',
-    'rpt-scan-export':'sb-rpt-scan-export'
+    'rpt-scan-export':'sb-rpt-scan-export',
+    'rpt-housekeep':'sb-rpt-housekeep'
   };
   const id = map[page||'timesheets'] || 'sb-timesheets';
   document.getElementById(id)?.classList.add('active');
@@ -2052,6 +2061,7 @@ const REPORT_DEFS = {
   'rpt-changes':    { label:'Timesheet Changes',       icon:'ti-pencil' },
   'rpt-outstanding':{ label:'Outstanding Timesheets',  icon:'ti-alert-triangle' },
   'rpt-scan-export':{ label:'Scan Export',             icon:'ti-file-zip' },
+  'rpt-housekeep':  { label:'Housekeeping',             icon:'ti-trash' },
 };
 
 let _currentReport = null;
@@ -2127,6 +2137,10 @@ function openReportScreen(page){
     document.getElementById('report-actions').innerHTML = `
       <button class="wiz-btn primary" onclick="runReport('rpt-scan-export')"><i class="ti ti-player-play"></i> Run Report</button>
       <button class="wiz-btn secondary" id="scan-zip-btn" onclick="exportScanZip()" style="display:none"><i class="ti ti-file-zip"></i> Download ZIP</button>`;
+  } else if(page === 'rpt-housekeep'){
+    document.getElementById('report-actions').innerHTML = `
+      <button class="wiz-btn primary" onclick="runReport('rpt-housekeep')"><i class="ti ti-player-play"></i> Preview</button>
+      <button class="wiz-btn secondary" id="housekeep-delete-btn" onclick="runHousekeepDelete()" style="display:none;border-color:var(--danger-text);color:var(--danger-text)"><i class="ti ti-trash"></i> Delete All</button>`;
   } else {
     document.getElementById('report-actions').innerHTML = `
       <button class="wiz-btn primary" onclick="runReport('${page}')"><i class="ti ti-player-play"></i> Run Report</button>
@@ -2237,6 +2251,11 @@ function _buildReportFilters(page){
     wrap.innerHTML = orgFilters + escalationTypeFilter + escalationLevelFilter;
   } else if(page==='rpt-scan-export'){
     wrap.innerHTML = dateRange + orgFilters + statusFilter + supervisorFilter + customerFilter;
+  } else if(page==='rpt-housekeep'){
+    wrap.innerHTML = `<div style="font-size:13px;color:var(--text2);line-height:1.6">
+      Finds <strong>draft</strong> timesheets with <strong>no employees</strong> that have not been edited in
+      <strong>4 or more days</strong>. Click <strong>Preview</strong> to review them before deleting.
+    </div>`;
   }
 
   // Populate supervisor dropdown if present
@@ -2288,7 +2307,7 @@ function _rptLoadSupervisors(){
   const ids = _resolveOrgSupIds(f);
   const all = (_orgTree._allProfiles||[]).filter(p=>p.role!=='elt');
   const filtered = ids ? all.filter(p=>ids.includes(p.id)) : all;
-  filtered.sort((a,b)=>a.full_name.localeCompare(b.full_name));
+  filtered.sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||''));
   const sel = document.getElementById('rpt-f-supervisor');
   if(!sel) return;
   sel.innerHTML = '<option value="">All</option>' +
@@ -2405,6 +2424,7 @@ async function runReport(page){
     if(page==='rpt-changes')      await _runTSChanges(f);
     if(page==='rpt-outstanding')  await _runOutstandingTimesheets(f);
     if(page==='rpt-scan-export')  await _runScanExportPreview(f);
+    if(page==='rpt-housekeep')    await _runHousekeepPreview();
   } catch(e){
     body.innerHTML = `<div style="color:var(--danger-text);padding:20px 0">${e.message}</div>`;
   }
@@ -2415,7 +2435,7 @@ async function _runHoursByJob(f){
   // Resolve org filter downward through hierarchy
   const orgSupIds = _resolveOrgSupIds(f);
   if(orgSupIds !== null && !orgSupIds.length){ _renderReportTable([],[]); return; }
-  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_name,supervisor_id');
+  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_name,supervisor_id,minimum_hours');
   if(f.from) tsQ = tsQ.gte('job_date', f.from);
   if(f.to)   tsQ = tsQ.lte('job_date', f.to);
   if(f.status) tsQ = tsQ.eq('status', f.status);
@@ -2441,7 +2461,7 @@ async function _runHoursByJob(f){
 
   const [blocks, emps, {data:cardTypesR1}] = await Promise.all([
     fetchAllPages('time_blocks','timesheet_id,employee_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
-    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name','timesheet_id',ids,[['is_deleted',false]]),
+    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name,apply_minimum','timesheet_id',ids,[['is_deleted',false]]),
     getSupabase().from('time_card_types').select('key,is_paid,nesting_rule').eq('is_active',true),
   ]);
   // Build card type lookup for nesting-aware hour calculation
@@ -2489,6 +2509,18 @@ async function _runHoursByJob(f){
         return enclosed ? acc+_blockSec(b) : acc;
       },0);
     const _totalSec = Math.max(0, _grossSec - _deductSec);
+
+    // Min delta: sum of max(0, min_hours - emp_labor_hours) for flagged employees
+    const _minHoursSec = s.minimum_hours != null ? Math.round(s.minimum_hours * 3600) : 0;
+    const _minDeltaSec = _minHoursSec > 0
+      ? sEmps.filter(e=>e.apply_minimum===true||e.apply_minimum==='true').reduce((acc,e)=>{
+          const eBlocks = sBlocks.filter(b=>b.employee_id===e.id);
+          const ePaidSec = eBlocks.filter(b=>_r1IsPaidTop(b.block_type)).reduce((a,b)=>a+_blockSec(b),0);
+          const delta = Math.max(0, _minHoursSec - ePaidSec);
+          return acc + delta;
+        }, 0)
+      : 0;
+
     return {
       job_date: s.job_date,
       client_name: s.client_name||'—',
@@ -2507,8 +2539,8 @@ async function _runHoursByJob(f){
       emp_distinct:  distEmps||'—',
       // Total rounds raw seconds ONCE — authoritative billing figure
       total_hours:   _fmtHours(_totalSec),
-      // Store raw seconds for potential future summing
-      // Export 4dp fields for Hours by Job
+      min_delta:     _minDeltaSec > 0 ? _fmtHours(_minDeltaSec) : '—',
+      billable_total: _fmtHours(_totalSec + _minDeltaSec),
       _exp_sup_count:     _fmtHoursExport(_sc),
       _exp_sup_variance:  _fmtHoursExport(_sv),
       _exp_sup_setup:     _fmtHoursExport(_ss),
@@ -2518,6 +2550,8 @@ async function _runHoursByJob(f){
       _exp_emp_setup:     _fmtHoursExport(_es),
       _exp_emp_precounts: _fmtHoursExport(_ep),
       _exp_total_hours:   _fmtHoursExport(_totalSec),
+      _exp_min_delta:     _fmtHoursExport(_minDeltaSec),
+      _exp_billable_total: _fmtHoursExport(_totalSec + _minDeltaSec),
     };
   });
   // Sort: date desc → customer → store → supervisor first → name
@@ -2532,7 +2566,7 @@ async function _runHoursByJob(f){
     const roleOrder = {supervisor:0, assistant:1, employee:2};
     const ra = roleOrder[a.role_type]??3, rb = roleOrder[b.role_type]??3;
     if(ra !== rb) return ra - rb;
-    return a.name.localeCompare(b.name);
+    return (a.name||'').localeCompare(b.name||'');
   });
 
   _renderReportTable([
@@ -2545,6 +2579,8 @@ async function _runHoursByJob(f){
     {key:'emp_setup',label:'Emp Setup',right:true},{key:'emp_precounts',label:'Emp PreCounts',right:true},
     {key:'emp_distinct',label:'# Employees',right:true},
     {key:'total_hours', label:'Total Hours', right:true},
+    {key:'min_delta',   label:'Min Delta',   right:true},
+    {key:'billable_total', label:'Billable Total', right:true},
   ], rows);
 }
 
@@ -2591,7 +2627,7 @@ async function _runApprovalSummary(f){
 
   const rows = Object.values(supMap)
     .filter(r=>r.total>0)
-    .sort((a,b)=>a.supervisor_name.localeCompare(b.supervisor_name));
+    .sort((a,b)=>(a.supervisor_name||'').localeCompare(b.supervisor_name||''));
 
   _renderReportTable([
     {key:'supervisor_name', label:'Supervisor'},
@@ -2612,7 +2648,7 @@ async function _runHoursByEmployee(f){
   const orgSupIds = _resolveOrgSupIds(f);
   if(orgSupIds !== null && !orgSupIds.length){ _renderReportTable([],[]); return; }
 
-  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name');
+  let tsQ = getSupabase().from('timesheets').select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name,minimum_hours');
   if(f.from) tsQ = tsQ.gte('job_date', f.from);
   if(f.to)   tsQ = tsQ.lte('job_date', f.to);
   if(f.status) tsQ = tsQ.eq('status', f.status);
@@ -2625,7 +2661,7 @@ async function _runHoursByEmployee(f){
 
   const ids = sheets.map(s=>s.id);
   const [emps, blocks, {data:cardTypesR3}] = await Promise.all([
-    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name,login_id','timesheet_id',ids,[['is_deleted',false]]),
+    fetchAllPages('employees','id,timesheet_id,role_type,first_name,last_name,login_id,apply_minimum','timesheet_id',ids,[['is_deleted',false]]),
     fetchAllPages('time_blocks','employee_id,timesheet_id,block_type,time_in,time_out','timesheet_id',ids,[['is_deleted',false]]),
     getSupabase().from('time_card_types').select('key,is_paid,nesting_rule').eq('is_active',true),
   ]);
@@ -2663,6 +2699,11 @@ async function _runHoursByEmployee(f){
         return enclosed ? acc+_blockSec(b) : acc;
       },0);
     const totalSecs = Math.max(0, _grossSec - _deductSec);
+    // Min delta for this employee
+    const minHoursSec = sheet.minimum_hours != null ? Math.round(sheet.minimum_hours * 3600) : 0;
+    const isMinFlagged = e.apply_minimum===true||e.apply_minimum==='true';
+    const minDeltaSec  = (minHoursSec > 0 && isMinFlagged)
+      ? Math.max(0, minHoursSec - totalSecs) : 0;
     // Raw seconds per block type — accumulate integers, format once
     const _rawCount    = eBlocks.filter(b=>b.block_type==='count')    .reduce((a,b)=>a+_blockSec(b),0);
     const _rawVariance = eBlocks.filter(b=>b.block_type==='variance') .reduce((a,b)=>a+_blockSec(b),0);
@@ -2684,12 +2725,16 @@ async function _runHoursByEmployee(f){
       setup:       _fmtHours(_rawSetup),
       precounts:   _fmtHours(_rawPre),
       total_hours: _fmtHours(totalSecs),
+      min_delta:   minDeltaSec > 0 ? _fmtHours(minDeltaSec) : '—',
+      billable_total: _fmtHours(totalSecs + minDeltaSec),
       // Export: 4dp via _fmtHoursExport — exportReportCSV() picks up _exp_{key} automatically
       _exp_count:       _fmtHoursExport(_rawCount),
       _exp_variance:    _fmtHoursExport(_rawVariance),
       _exp_setup:       _fmtHoursExport(_rawSetup),
       _exp_precounts:   _fmtHoursExport(_rawPre),
       _exp_total_hours: _fmtHoursExport(totalSecs),
+      _exp_min_delta:   _fmtHoursExport(minDeltaSec),
+      _exp_billable_total: _fmtHoursExport(totalSecs + minDeltaSec),
     });
   });
   // Sort: date desc → customer → store → supervisor first → name
@@ -2704,7 +2749,7 @@ async function _runHoursByEmployee(f){
     const roleOrder = {supervisor:0, assistant:1, employee:2};
     const ra = roleOrder[a.role_type]??3, rb = roleOrder[b.role_type]??3;
     if(ra !== rb) return ra - rb;
-    return a.name.localeCompare(b.name);
+    return (a.name||'').localeCompare(b.name||'');
   });
 
   _renderReportTable([
@@ -2716,37 +2761,53 @@ async function _runHoursByEmployee(f){
     {key:'count',label:'Count',right:true},{key:'variance',label:'Variance',right:true},
     {key:'setup',label:'Setup',right:true},{key:'precounts',label:'PreCounts',right:true},
     {key:'total_hours',label:'Total Hrs',right:true},
+    {key:'min_delta',label:'Min Delta',right:true},
+    {key:'billable_total',label:'Billable Total',right:true},
   ], rows);
 }
 
 // ── Report 4: Audit Trail ─────────────────────────────────────────────────────
 async function _runAuditTrail(f){
-  let q = getSupabase().from('timesheet_edit_log')
-    .select('timesheet_id,block_id,field,old_value,new_value,changed_by_name,changed_by_role,changed_at')
-    .order('changed_at',{ascending:false});
-  if(f.from) q = q.gte('changed_at', f.from);
-  if(f.to)   q = q.lte('changed_at', f.to+'T23:59:59');
-  const {data, error} = await q;
+  // Fetch edit log directly, filter job_date client-side via timesheets
+  const {data, error} = await getSupabase().from('timesheet_edit_log')
+    .select('timesheet_id,block_id,employee_id,field,old_value,new_value,changed_by_name,changed_by_role,changed_at');
   if(error) throw error;
 
-  // Get timesheet info for context + org filtering
+  // Fetch timesheets for all referenced IDs
   const tsIds = [...new Set((data||[]).map(r=>r.timesheet_id))];
   let sheets = [];
   if(tsIds.length){
     const {data:sd} = await getSupabase().from('timesheets')
-      .select('id,job_date,client_name,store_number,status,supervisor_name,supervisor_id')
+      .select('id,job_date,client_name,store_number,status,supervisor_name,supervisor_id,minimum_hours')
       .in('id', tsIds);
     sheets = sd||[];
   }
 
-  // Fetch block_type for all block_ids so we can show card type in Field column
+  // Fetch block_type + employee_id for all block_ids
   const blockIds = [...new Set((data||[]).map(r=>r.block_id).filter(Boolean))];
-  let blockTypes = {};
+  const blockTypes = {};
+  const blockEmpMap = {}; // block_id → employee_id (fallback for older log rows without employee_id)
   if(blockIds.length){
     const {data:bd} = await getSupabase().from('time_blocks')
-      .select('id,block_type')
-      .in('id', blockIds);
-    (bd||[]).forEach(b=>{ blockTypes[b.id] = b.block_type; });
+      .select('id,block_type,employee_id').in('id', blockIds);
+    (bd||[]).forEach(b=>{
+      blockTypes[b.id]  = b.block_type;
+      blockEmpMap[b.id] = b.employee_id;
+    });
+  }
+
+  // Build employee name lookup for all referenced employees
+  const empIds = [...new Set([
+    ...(data||[]).map(r=>r.employee_id).filter(Boolean),
+    ...Object.values(blockEmpMap).filter(Boolean),
+  ])];
+  const empNameMap = {};
+  if(empIds.length){
+    const {data:emps} = await getSupabase().from('employees')
+      .select('id,first_name,last_name').in('id', empIds);
+    (emps||[]).forEach(e=>{
+      empNameMap[e.id] = [e.first_name, e.last_name].filter(Boolean).join(' ');
+    });
   }
 
   // Resolve org scope
@@ -2755,20 +2816,27 @@ async function _runAuditTrail(f){
   const rows = (data||[]).map(r=>{
     const s = sheets.find(x=>x.id===r.timesheet_id)||{};
 
+    // Job date filter (client-side)
+    if(f.from && s.job_date && s.job_date < f.from) return null;
+    if(f.to   && s.job_date && s.job_date > f.to)   return null;
+
     // Org scope filter
     if(orgSupIds !== null && !orgSupIds.includes(s.supervisor_id)) return null;
     if(f.supervisor && s.supervisor_id !== f.supervisor) return null;
 
-    // Build field label: "time_in (Count)" or "time_out (Variance)" etc.
+    // Resolve employee name — prefer direct employee_id, fall back to block lookup
+    const resolvedEmpId = r.employee_id || blockEmpMap[r.block_id];
+    const empName = resolvedEmpId ? (empNameMap[resolvedEmpId] || '—') : '—';
+
+    // Build field label: "time in (Count)" or "apply minimum" etc.
     const blockType = r.block_id ? (blockTypes[r.block_id] || '') : '';
     const typeLabel = blockType
       ? blockType.charAt(0).toUpperCase() + blockType.slice(1).replace(/_/g,' ')
       : '';
     const fieldLabel = r.field
-      ? (r.field.replace('_',' ') + (typeLabel ? ` (${typeLabel})` : ''))
+      ? (r.field.replace(/_/g,' ') + (typeLabel ? ` (${typeLabel})` : ''))
       : '—';
 
-    // Format timestamp as readable local time
     const changedAt = r.changed_at
       ? new Date(r.changed_at).toLocaleString('en-US',{
           month:'short',day:'numeric',year:'numeric',
@@ -2776,46 +2844,70 @@ async function _runAuditTrail(f){
         })
       : '—';
 
+    // Format a value that may be an ISO datetime string into readable form
+    const fmtVal = v => {
+      if(!v || v==='—') return '—';
+      // Looks like a datetime if it contains 'T' or matches YYYY-MM-DD pattern
+      if(/^\d{4}-\d{2}-\d{2}T/.test(v)){
+        const d = new Date(v);
+        if(!isNaN(d)) return d.toLocaleString('en-US',{
+          month:'short',day:'numeric',year:'numeric',
+          hour:'numeric',minute:'2-digit'
+        });
+      }
+      return v;
+    };
+
     return {
       client_name:     s.client_name||'—',
       store_number:    s.store_number||'—',
       job_date:        s.job_date||'—',
       status:          s.status||'—',
       supervisor_name: s.supervisor_name||'—',
+      employee_name:   empName,
       changed_by:      r.changed_by_name||'—',
       role:            r.changed_by_role||'—',
       field:           fieldLabel,
-      old_value:       r.old_value||'—',
-      new_value:       r.new_value||'—',
+      old_value:       fmtVal(r.old_value),
+      new_value:       fmtVal(r.new_value),
       changed_at:      changedAt,
     };
   }).filter(Boolean);
 
+  // Sort: Job Date → Customer → Store → Employee → Changed At
+  rows.sort((a,b)=>{
+    const cmp = (x,y) => x<y?-1:x>y?1:0;
+    return cmp(a.job_date, b.job_date)
+        || cmp(a.client_name.toLowerCase(), b.client_name.toLowerCase())
+        || cmp(String(a.store_number), String(b.store_number))
+        || cmp(a.employee_name.toLowerCase(), b.employee_name.toLowerCase())
+        || cmp(a.changed_at, b.changed_at);
+  });
+
   _renderReportTable([
-    {key:'client_name',label:'Customer'},
-    {key:'store_number',label:'Store'},
-    {key:'job_date',label:'Job Date'},
-    {key:'status',label:'Status'},
+    {key:'client_name',    label:'Customer'},
+    {key:'store_number',   label:'Store'},
+    {key:'job_date',       label:'Job Date'},
+    {key:'status',         label:'Status'},
     {key:'supervisor_name',label:'Supervisor'},
-    {key:'changed_by',label:'Changed By'},
-    {key:'role',label:'Role'},
-    {key:'field',label:'Field'},
-    {key:'old_value',label:'Old Value'},
-    {key:'new_value',label:'New Value'},
-    {key:'changed_at',label:'Changed At'},
+    {key:'changed_by',     label:'Changed By'},
+    {key:'role',           label:'Role'},
+    {key:'employee_name',  label:'Employee'},
+    {key:'field',          label:'Field'},
+    {key:'old_value',      label:'Old Value'},
+    {key:'new_value',      label:'New Value'},
+    {key:'changed_at',     label:'Changed At'},
   ], rows);
 }
 
 // ── Report 5: Timesheet Changes ───────────────────────────────────────────────
 async function _runTSChanges(f){
-  let q = getSupabase().from('timesheet_changes')
-    .select('timesheet_id,changed_by,changed_at,field_name,employee_id,old_value,new_value')
-    .order('changed_at',{ascending:false});
-  if(f.from) q = q.gte('changed_at', f.from);
-  if(f.to)   q = q.lte('changed_at', f.to+'T23:59:59');
-  const {data, error} = await q;
+  // Fetch all change records (we filter by job_date client-side via timesheets)
+  const {data, error} = await getSupabase().from('timesheet_changes')
+    .select('timesheet_id,changed_by,changed_at,field_name,employee_id,old_value,new_value');
   if(error) throw error;
 
+  // Fetch timesheets for all referenced IDs
   const tsIds = [...new Set((data||[]).map(r=>r.timesheet_id))];
   let sheets = [];
   if(tsIds.length){
@@ -2825,7 +2917,10 @@ async function _runTSChanges(f){
     sheets = sd||[];
   }
 
-  // Get profile names for changed_by
+  // Resolve org scope
+  const orgSupIds = _resolveOrgSupIds(f);
+
+  // Get profile names for changed_by UUIDs
   const userIds = [...new Set((data||[]).map(r=>r.changed_by).filter(Boolean))];
   let profiles = [];
   if(userIds.length){
@@ -2833,30 +2928,87 @@ async function _runTSChanges(f){
     profiles = pd||[];
   }
 
+  // Get employee names for employee_id where present
+  const empIds = [...new Set((data||[]).map(r=>r.employee_id).filter(Boolean))];
+  const empNameMap = {};
+  if(empIds.length){
+    const {data:emps} = await getSupabase().from('employees')
+      .select('id,first_name,last_name').in('id', empIds);
+    (emps||[]).forEach(e=>{
+      empNameMap[e.id] = [e.first_name, e.last_name].filter(Boolean).join(' ');
+    });
+  }
+
+  // Format a value that may be an ISO datetime string into readable form
+  const fmtVal = v => {
+    if(!v || v==='—') return '—';
+    if(/^\d{4}-\d{2}-\d{2}T/.test(v)){
+      const d = new Date(v);
+      if(!isNaN(d)) return d.toLocaleString('en-US',{
+        month:'short',day:'numeric',year:'numeric',
+        hour:'numeric',minute:'2-digit'
+      });
+    }
+    return v;
+  };
+
   const rows = (data||[]).map(r=>{
     const s = sheets.find(x=>x.id===r.timesheet_id)||{};
+
+    // Job date filter (client-side since we queried changes directly)
+    if(f.from && s.job_date && s.job_date < f.from) return null;
+    if(f.to   && s.job_date && s.job_date > f.to)   return null;
+
+    // Org scope filter
+    if(orgSupIds !== null && !orgSupIds.includes(s.supervisor_id)) return null;
     if(f.supervisor && s.supervisor_id !== f.supervisor) return null;
-    const changer = profiles.find(p=>p.id===r.changed_by);
+
+    const changer   = profiles.find(p=>p.id===r.changed_by);
+    const empName   = r.employee_id ? (empNameMap[r.employee_id]||'—') : '—';
+    const changedAt = r.changed_at
+      ? new Date(r.changed_at).toLocaleString('en-US',{
+          month:'short',day:'numeric',year:'numeric',
+          hour:'numeric',minute:'2-digit',second:'2-digit'
+        })
+      : '—';
+
     return {
-      changed_at: new Date(r.changed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
-      client_name: s.client_name||'—',
-      store_number: s.store_number||'—',
-      job_date: s.job_date||'—',
-      status: s.status||'—',
+      job_date:        s.job_date||'—',
+      client_name:     s.client_name||'—',
+      store_number:    s.store_number||'—',
+      status:          s.status||'—',
       supervisor_name: s.supervisor_name||'—',
-      changed_by: changer?.full_name||r.changed_by||'—',
-      field_name: r.field_name||'—',
-      old_value: r.old_value||'—',
-      new_value: r.new_value||'—',
+      changed_by:      changer?.full_name||r.changed_by||'—',
+      employee_name:   empName,
+      field_name:      r.field_name||'—',
+      old_value:       fmtVal(r.old_value),
+      new_value:       fmtVal(r.new_value),
+      changed_at:      changedAt,
     };
   }).filter(Boolean);
 
+  // Sort: Job Date → Customer → Store → Employee → Changed At
+  rows.sort((a,b)=>{
+    const cmp = (x,y) => (x||'') < (y||'') ? -1 : (x||'') > (y||'') ? 1 : 0;
+    return cmp(a.job_date, b.job_date)
+        || cmp(a.client_name.toLowerCase(), b.client_name.toLowerCase())
+        || cmp(String(a.store_number), String(b.store_number))
+        || cmp(a.employee_name.toLowerCase(), b.employee_name.toLowerCase())
+        || cmp(a.changed_at, b.changed_at);
+  });
+
   _renderReportTable([
-    {key:'changed_at',label:'Changed At'},{key:'client_name',label:'Customer'},
-    {key:'store_number',label:'Store'},{key:'job_date',label:'Job Date'},
-    {key:'status',label:'Status'},{key:'supervisor_name',label:'Supervisor'},
-    {key:'changed_by',label:'Changed By'},{key:'field_name',label:'Field'},
-    {key:'old_value',label:'Old Value'},{key:'new_value',label:'New Value'},
+    {key:'job_date',        label:'Job Date'},
+    {key:'client_name',     label:'Customer'},
+    {key:'store_number',    label:'Store'},
+    {key:'status',          label:'Status'},
+    {key:'supervisor_name', label:'Supervisor'},
+    {key:'changed_by',      label:'Changed By'},
+    {key:'employee_name',   label:'Employee'},
+    {key:'field_name',      label:'Field'},
+    {key:'old_value',       label:'Old Value'},
+    {key:'new_value',       label:'New Value'},
+    {key:'changed_at',      label:'Changed At'},
   ], rows);
 }
 
@@ -3027,7 +3179,7 @@ async function _runScanExportPreview(f){
 
   // Query timesheets
   let tsQ = getSupabase().from('timesheets')
-    .select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name');
+    .select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name,minimum_hours');
   if(f.from)       tsQ = tsQ.gte('job_date', f.from);
   if(f.to)         tsQ = tsQ.lte('job_date', f.to);
   if(f.status)     tsQ = tsQ.eq('status', f.status);
@@ -3240,6 +3392,130 @@ async function exportScanZip(){
   } finally {
     if(zipBtn){ zipBtn.disabled=false; zipBtn.innerHTML='<i class="ti ti-file-zip"></i> Download ZIP'; }
   }
+}
+
+// ── Housekeeping ─────────────────────────────────────────────────────────────
+
+let _housekeepCandidates = [];
+
+async function _runHousekeepPreview(){
+  const body   = document.getElementById('report-body');
+  const delBtn = document.getElementById('housekeep-delete-btn');
+  if(delBtn) delBtn.style.display = 'none';
+  _housekeepCandidates = [];
+
+  // Draft timesheets not edited in ≥4 days
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 4);
+
+  const {data:drafts, error} = await getSupabase()
+    .from('timesheets')
+    .select('id,job_date,client_name,store_number,city,state,supervisor_name,updated_at,created_at')
+    .eq('status','draft')
+    .lte('updated_at', cutoff.toISOString())
+    .order('updated_at', {ascending:true});
+
+  if(error) throw error;
+  if(!drafts?.length){
+    body.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:20px 0">No stale draft timesheets found. Nothing to clean up.</div>';
+    return;
+  }
+
+  // Filter to only those with zero non-deleted employees
+  const tsIds = drafts.map(d=>d.id);
+  const {data:empRows} = await getSupabase()
+    .from('employees')
+    .select('timesheet_id')
+    .in('timesheet_id', tsIds)
+    .eq('is_deleted', false);
+
+  const tsWithEmps = new Set((empRows||[]).map(e=>e.timesheet_id));
+  _housekeepCandidates = drafts.filter(d=>!tsWithEmps.has(d.id));
+
+  if(!_housekeepCandidates.length){
+    body.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:20px 0">All stale drafts have employees on them — none are eligible for deletion.</div>';
+    return;
+  }
+
+  const rows = _housekeepCandidates.map(ts=>{
+    const lastEdit = new Date(ts.updated_at||ts.created_at);
+    const daysAgo  = Math.floor((Date.now()-lastEdit)/86400000);
+    return `<tr>
+      <td style="padding:7px 10px">${ts.job_date||'—'}</td>
+      <td style="padding:7px 10px">${ts.client_name||'—'}${ts.store_number?' #'+ts.store_number:''}</td>
+      <td style="padding:7px 10px">${ts.city||'—'}${ts.state?', '+ts.state:''}</td>
+      <td style="padding:7px 10px">${ts.supervisor_name||'—'}</td>
+      <td style="padding:7px 10px;text-align:center;color:var(--success-text)">0</td>
+      <td style="padding:7px 10px;color:var(--danger-text)">${daysAgo} day${daysAgo===1?'':'s'} ago</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      <b>${_housekeepCandidates.length}</b> draft timesheet${_housekeepCandidates.length===1?'':'s'} eligible for deletion
+      — no employees, last edited 4+ days ago. Review below, then click
+      <b style="color:var(--danger-text)">Delete All</b> to remove them permanently.
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg3);color:var(--text2);font-size:11px;letter-spacing:.04em">
+            <th style="padding:7px 10px;text-align:left">Job Date</th>
+            <th style="padding:7px 10px;text-align:left">Customer</th>
+            <th style="padding:7px 10px;text-align:left">Location</th>
+            <th style="padding:7px 10px;text-align:left">Supervisor</th>
+            <th style="padding:7px 10px;text-align:center">Employees</th>
+            <th style="padding:7px 10px;text-align:left">Last Edited</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  if(delBtn) delBtn.style.display = '';
+}
+
+async function runHousekeepDelete(){
+  if(!_housekeepCandidates.length){ alert('Run Preview first.'); return; }
+  if(!confirm(`Permanently delete ${_housekeepCandidates.length} draft timesheet${_housekeepCandidates.length===1?'':'s'}?\n\nThis cannot be undone.`)) return;
+
+  const btn  = document.getElementById('housekeep-delete-btn');
+  const body = document.getElementById('report-body');
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i> Deleting...'; }
+
+  let deleted=0;
+  const errors=[];
+
+  for(const ts of _housekeepCandidates){
+    try{
+      // Match the exact delete order used by adminDeleteTimesheet
+      await getSupabase().from('uat_feedback').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('pay_adjustments').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('scan_attachments').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('time_blocks').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('employees').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('timesheet_edit_log').delete().eq('timesheet_id', ts.id);
+      await getSupabase().from('timesheet_changes').delete().eq('timesheet_id', ts.id);
+      const {error} = await getSupabase().from('timesheets').delete().eq('id', ts.id);
+      if(error) throw new Error(error.message);
+      deleted++;
+    } catch(e){
+      const label = [ts.client_name, ts.store_number?'#'+ts.store_number:'', ts.job_date].filter(Boolean).join(' · ');
+      errors.push(`${label}: ${e.message}`);
+    }
+  }
+
+  _housekeepCandidates = [];
+  if(btn){ btn.disabled=false; btn.style.display='none'; btn.innerHTML='<i class="ti ti-trash"></i> Delete All'; }
+
+  const successHtml = deleted
+    ? `<div style="color:var(--success-text);margin-bottom:8px"><i class="ti ti-circle-check"></i> ${deleted} timesheet${deleted===1?'':'s'} deleted successfully.</div>`
+    : '';
+  const errorHtml = errors.length
+    ? `<div style="color:var(--danger-text);margin-top:8px"><i class="ti ti-alert-triangle"></i> ${errors.length} failed:<br>${errors.map(e=>`• ${e}`).join('<br>')}</div>`
+    : '';
+
+  body.innerHTML = `<div style="font-size:13px;padding:20px 0">${successHtml}${errorHtml}</div>`;
 }
 
 // Hide report screen — call from any function that shows another screen
@@ -6186,12 +6462,25 @@ async function openDetailScreen(ts, isManager=false){
     approved:  {cls:'ts-pill-approved', label:'Approved',       icon:'ti-circle-check'},
     rejected:  {cls:'ts-pill-rejected', label:'Rejected',       icon:'ti-circle-x'},
   };
-  const s=statusMap[ts.status]||{cls:'ts-pill-draft',label:ts.status,icon:'ti-clock'};
-  if(title) title.textContent = ts.client_name||'Timesheet';
-  statusEl.innerHTML=`<span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>`;
+
   body.innerHTML='<div class="ts-loading" style="text-align:center;padding:2rem;color:var(--text2)"><i class="ti ti-loader-2" style="font-size:24px;animation:spin 1s linear infinite;display:block;margin:0 auto .5rem"></i>Loading...</div>';
   screen.classList.add('active');
   document.body.style.overflow='hidden';
+
+  // Always re-fetch the full timesheet record so minimum_hours and other
+  // fields added after initial list load are always current.
+  const {data:freshTs, error:freshTsErr} = await getSupabase()
+    .from('timesheets')
+    .select('id,job_date,client_name,store_number,city,state,status,supervisor_id,supervisor_name,minimum_hours,locked_at,created_at,updated_at,manager_comments')
+    .eq('id', ts.id)
+    .maybeSingle();
+  if(freshTsErr) console.error('[openDetailScreen] timesheet re-fetch error:', freshTsErr);
+  if(freshTs) ts = Object.assign({}, ts, freshTs);
+  _currentDetailTs = ts;
+
+  const s=statusMap[ts.status]||{cls:'ts-pill-draft',label:ts.status,icon:'ti-clock'};
+  if(title) title.textContent = ts.client_name||'Timesheet';
+  statusEl.innerHTML=`<span class="ts-status-pill ${s.cls}"><i class="ti ${s.icon}"></i> ${s.label}</span>`;
 
   // ── Fetch all data in parallel ────────────────────────────
   const [
@@ -6208,6 +6497,7 @@ async function openDetailScreen(ts, isManager=false){
     getSupabase().from('time_card_types').select('*').eq('is_active',true).order('sort_order'),
   ]);
   if(empsErr) console.error('[detail] employees query failed:',empsErr);
+  window._detailEmps = emps||[];
 
   _detailScans = scansData||[];
   await renderScanViewer();
@@ -6322,9 +6612,17 @@ async function openDetailScreen(ts, isManager=false){
   _detailUsedKeys   = usedKeys;
 
   // ── Totals accumulators ───────────────────────────────────
-  let grandLaborMins=0, grandTravelMins=0, grandEmpCount=0;
+  let grandLaborMins=0, grandTravelMins=0, grandEmpCount=0, grandMinDeltaMins=0;
   // Per block type grand totals — keyed by block_type key
   const grandBlockMins = {}; // key -> total mins across all employees
+
+  // Minimum hours for this timesheet (in minutes), null = no minimum set
+  const minHoursMins = (ts.minimum_hours != null && ts.minimum_hours > 0)
+    ? Math.round(ts.minimum_hours * 60) : null;
+
+  // Show the column if minimum_hours is set OR if any employee has apply_minimum=true
+  const anyMinFlagged = (emps||[]).some(e=>e.apply_minimum===true||e.apply_minimum==='true');
+  const showMinCol = minHoursMins != null || anyMinFlagged;
 
   // ── Build table rows ──────────────────────────────────────
   function buildEmpRows(e){
@@ -6334,7 +6632,8 @@ async function openDetailScreen(ts, isManager=false){
                      e.role_type==='assistant' ?'<span class="tl-emp-badge asst">AST</span>':'';
     const isDnr    = e.dnr===true||e.dnr==='true';
     const isPref   = e.preferred===true||e.preferred==='true';
-    const flags    = (isDnr?'<span class="tsv-flag-dnr" style="margin-right:2px">DNR</span>':'')+(isPref?'<span class="tsv-flag-pref">PREF</span>':'');
+    const isMin    = e.apply_minimum===true||e.apply_minimum==='true';
+    const flags    = (isDnr?'<span class="tsv-flag-dnr" style="margin-right:2px">DNR</span>':'')+(isPref?'<span class="tsv-flag-pref" style="margin-right:2px">PREF</span>':'')+(isMin?'<span class="tsv-flag-min">MIN</span>':'');
 
     // Group blocks by date (YYYY-MM-DD), preserving sort within each date
     const datesOrdered = [];
@@ -6346,6 +6645,7 @@ async function openDetailScreen(ts, isManager=false){
     });
     if(!datesOrdered.length) datesOrdered.push('nodate');
 
+    // laborMins and travelMins accumulated by the display loop below
     let laborMins=0, travelMins=0;
     const dayRows = [];
 
@@ -6436,9 +6736,13 @@ async function openDetailScreen(ts, isManager=false){
       // Labor + Travel summary cells (far right)
       const lHrs=fmtMins(dayLaborMins);
       const tHrs=fmtMins(dayTravelMins);
+      // Delta cell placeholder — replaced after loop once laborMins is final
+      const deltaCell = showMinCol
+        ? (dIdx===0 ? '{{DELTA_CELL}}' : `<td class="tl-hrs tl-group-sep tl-empty"></td>`)
+        : '';
 
-      dayRows.push(`<tr>
-        <td class="tl-sticky" style="font-size:11px">
+      dayRows.push(`<tr${isMin && minHoursMins!=null ? ' style="box-shadow:inset 3px 0 0 #FAC775;background:rgba(250,199,117,.04)"' : ''}>
+        <td class="tl-sticky" style="font-size:11px${isMin && minHoursMins!=null ? ';border-left:3px solid #FAC775' : ''}">
           <div style="font-weight:700">${fullName}${roleBadge}</div>
           ${dateLbl?`<div class="tl-time-date" style="margin-top:2px">${dateLbl}</div>`:''}
           ${flags?`<div style="margin-top:3px">${flags}</div>`:''}
@@ -6448,11 +6752,24 @@ async function openDetailScreen(ts, isManager=false){
         ${blockHrCells}
         <td class="tl-hrs tl-group-sep${dayLaborMins?'':' tl-empty'}" style="color:var(--info-text)">${lHrs}</td>
         <td class="tl-hrs${dayTravelMins?'':' tl-empty'}" style="color:#3b6d11">${tHrs}</td>
+        ${deltaCell}
       </tr>`);
     });
 
     const hasName = !!(e.first_name||e.last_name||'').trim() || !!(e.first_name||'').trim() || !!(e.last_name||'').trim();
     if((laborMins>0||travelMins>0) && hasName){ grandLaborMins+=laborMins; grandTravelMins+=travelMins; grandEmpCount++; }
+
+    // Calculate empMinDelta using the EXACT same laborMins as the LABOR column
+    const empMinDelta = (isMin && minHoursMins!=null && laborMins < minHoursMins)
+      ? (minHoursMins - laborMins) : 0;
+    if(empMinDelta > 0) grandMinDeltaMins += empMinDelta;
+
+    // Replace the placeholder in the first row with the real delta cell
+    const deltaCellHtml = showMinCol
+      ? `<td class="tl-hrs tl-group-sep${empMinDelta?'':' tl-empty'}" style="color:#FAC775">${empMinDelta?fmtMins(empMinDelta):'—'}</td>`
+      : '';
+    if(dayRows.length) dayRows[0] = dayRows[0].replace('{{DELTA_CELL}}', deltaCellHtml);
+
     return dayRows.join('');
   }
 
@@ -6480,6 +6797,10 @@ async function openDetailScreen(ts, isManager=false){
   });
   // Labor + Travel summary headers
   hdr1+='<th colspan="2" class="tl-group-sep" style="min-width:96px">Summary</th>';
+  // Min delta header — only show if timesheet has a minimum set
+  if(showMinCol) hdr1+=minHoursMins!=null
+    ? `<th rowspan="2" class="tl-group-sep" style="color:#FAC775;min-width:72px;vertical-align:middle">Min Delta<br><span style="font-size:9px;opacity:.7;font-weight:400">${ts.minimum_hours}h minimum</span></th>`
+    : `<th rowspan="2" class="tl-group-sep" style="color:#FAC775;min-width:80px;vertical-align:middle;font-size:10px">Min Delta<br><span style="font-size:9px;color:var(--danger-text);font-weight:400">⚠ Set min hrs in Edit</span></th>`;
 
   // Row 2: In/Out sub-headers + blank for block hrs + Labor/Travel labels
   let hdr2='';
@@ -6496,11 +6817,12 @@ async function openDetailScreen(ts, isManager=false){
     hdr2+=`<th class="tl-in-out${groupSep}" style="${travelStyle}">Hrs</th>`;
   });
   hdr2+='<th class="tl-in-out tl-group-sep" style="color:var(--info-text)">Labor</th><th class="tl-in-out" style="color:#3b6d11">Travel</th>';
+  if(showMinCol) hdr2+=``; // Min Delta spans both header rows via rowspan="2"
 
   // ── Build all employee rows ───────────────────────────────
   const bodyRows = validEmps.length
     ? validEmps.map(e=>buildEmpRows(e)).join('')
-    : `<tr><td class="tl-sticky" style="color:var(--text3);font-weight:400">No employees</td>${cols.map(()=>'<td></td><td></td>').join('')}${paidKeys.map(()=>'<td></td>').join('')}<td></td><td></td></tr>`;
+    : `<tr><td class="tl-sticky" style="color:var(--text3);font-weight:400">No employees</td>${cols.map(()=>'<td></td><td></td>').join('')}${paidKeys.map(()=>'<td></td>').join('')}<td></td><td></td>${showMinCol?'<td></td>':''}</tr>`;
 
   // ── Totals row ────────────────────────────────────────────
   const blockTotalCells = paidKeys.map((key,i)=>{
@@ -6510,12 +6832,17 @@ async function openDetailScreen(ts, isManager=false){
     return `<td class="tl-hrs${groupSep}${m?'':' tl-empty'}" style="${travelStyle}">${m?fmtMins(m):'—'}</td>`;
   }).join('');
 
+  const minDeltaTotalCell = showMinCol
+    ? `<td class="tl-hrs tl-group-sep${grandMinDeltaMins?'':' tl-empty'}" style="color:#FAC775">${grandMinDeltaMins?fmtMins(grandMinDeltaMins):'—'}</td>`
+    : '';
+
   const totalsRow=`<tr class="tl-totals-row">
-    <td class="tl-sticky">Total · ${grandEmpCount} emp</td>
+    <td class="tl-sticky">Total · ${grandEmpCount} emp${grandMinDeltaMins>0?` · <span style="color:#FAC775">${fmtMins(grandMinDeltaMins)} delta</span>`:''}</td>
     ${cols.map(()=>'<td></td><td></td>').join('')}
     ${blockTotalCells}
     <td class="tl-hrs tl-group-sep" style="color:var(--info-text)">${fmtMins(grandLaborMins)}</td>
     <td class="tl-hrs" style="color:#3b6d11">${fmtMins(grandTravelMins)}</td>
+    ${minDeltaTotalCell}
   </tr>`;
 
   // ── Topbar summary ────────────────────────────────────────
@@ -7012,6 +7339,7 @@ function parseStoredVal(val){
 function enterEditMode(){
   const ts = _currentDetailTs; if(!ts) return;
   _editChanges = {};
+  window._pendingMinFlags = {};
 
   // Edit mode bar
   const detailBody = document.getElementById('detail-body');
@@ -7019,9 +7347,17 @@ function enterEditMode(){
     const bar = document.createElement('div');
     bar.className = 'edit-mode-bar';
     bar.id = 'edit-mode-bar';
-    bar.style.cssText='background:#412402;color:#FAC775;padding:.6rem 1rem;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:48px;z-index:9;border-bottom:1px solid #633806';
+    bar.style.cssText='background:#412402;color:#FAC775;padding:.6rem 1rem;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:48px;z-index:9;border-bottom:1px solid #633806;flex-wrap:wrap';
+    const minVal = ts.minimum_hours != null ? ts.minimum_hours : '';
     bar.innerHTML = `<i class="ti ti-pencil" style="font-size:16px"></i>
-      Edit mode — click any In/Out cell to change time.
+      Edit mode — click any In/Out cell to change time. Toggle <span style="color:#FAC775;font-weight:700">MIN</span> per employee to flag for minimum billing.
+      <label style="display:flex;align-items:center;gap:5px;margin-left:8px;font-size:12px">
+        Min Hours:
+        <input id="edit-min-hours" type="number" min="0" max="24" step="0.5"
+          value="${minVal}" placeholder="e.g. 4"
+          style="width:60px;font-size:12px;padding:3px 6px;background:rgba(255,255,255,.1);border:1px solid rgba(250,199,117,.5);border-radius:4px;color:#FAC775"
+          title="Minimum billable hours for flagged employees on this job"/>
+      </label>
       <button class="edit-cancel-btn" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
       <button class="edit-save-btn" id="add-person-btn" onclick="openAddPersonPanel()" style="background:rgba(106,179,79,.25);border-color:rgba(106,179,79,.6);color:#6ab34f"><i class="ti ti-user-plus"></i> Add Person</button>
       <button class="edit-save-btn" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save changes</button>`;
@@ -7063,6 +7399,34 @@ function enterEditMode(){
     cell.appendChild(wrap);
   });
 
+  // Add MIN toggle button to each employee's sticky name cell (first row per employee only)
+  const minButtonsAdded = new Set();
+  document.querySelectorAll('.tl-table td.tl-sticky').forEach(cell=>{
+    // Find the employee id from any In cell in the same row
+    const row = cell.closest('tr');
+    if(!row) return;
+    const inCell = row.querySelector('td[data-emp-id]');
+    if(!inCell) return;
+    const empId = inCell.dataset.empId;
+    if(!empId) return;
+    // Only add ONE MIN button per employee — first sticky cell wins
+    if(minButtonsAdded.has(empId)) return;
+    minButtonsAdded.add(empId);
+
+    // Read current apply_minimum from the loaded employee data
+    const empData = (window._detailEmps||[]).find(e=>e.id===empId);
+    const isActive = empData?.apply_minimum===true||empData?.apply_minimum==='true';
+
+    const btn = document.createElement('button');
+    btn.className = 'min-toggle-btn' + (isActive?' active':'');
+    btn.dataset.empId = empId;
+    btn.dataset.minActive = isActive ? '1' : '0';
+    btn.textContent = isActive ? 'MIN ✓' : 'MIN';
+    btn.style.marginTop = '4px';
+    btn.onclick = () => toggleMinFlag(btn, empId);
+    cell.appendChild(btn);
+  });
+
   // Topbar buttons
   const btns = document.getElementById('topbar-mgr-btns');
   if(btns){
@@ -7072,6 +7436,27 @@ function enterEditMode(){
       <button class="topbar-mgr-btn" style="background:rgba(255,255,255,.15);color:#fff" onclick="cancelEditMode()"><i class="ti ti-x"></i> Cancel</button>
       <button class="topbar-mgr-btn" style="background:rgba(106,179,79,.25);color:#6ab34f;border-color:rgba(106,179,79,.5)" onclick="openAddPersonPanel()"><i class="ti ti-user-plus"></i> Add Person</button>
       <button class="topbar-mgr-btn edit" onclick="saveEdits()"><i class="ti ti-device-floppy"></i> Save</button>`;
+  }
+}
+
+function toggleMinFlag(btn, empId){
+  const nowActive = btn.dataset.minActive === '1';
+  const newActive = !nowActive;
+  btn.dataset.minActive = newActive ? '1' : '0';
+  btn.className = 'min-toggle-btn' + (newActive?' active':'');
+  btn.textContent = newActive ? 'MIN ✓' : 'MIN';
+  // Store pending change so saveEdits can pick it up
+  if(!window._pendingMinFlags) window._pendingMinFlags = {};
+  window._pendingMinFlags[empId] = newActive;
+  // If no minimum hours set, highlight the input to prompt the user
+  if(newActive){
+    const minInput = document.getElementById('edit-min-hours');
+    if(minInput && !minInput.value.trim()){
+      minInput.style.borderColor = '#FAC775';
+      minInput.style.boxShadow = '0 0 0 2px rgba(250,199,117,.4)';
+      minInput.focus();
+      minInput.placeholder = 'Required!';
+    }
   }
 }
 
@@ -7237,9 +7622,9 @@ function recalcEditRowHrs(blockId, empId){
     : `<span style="background:#e6f1fb;color:#0c447c;border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600">${hrs}</span>`;
 }
 
-function cancelEditMode(){
+async function cancelEditMode(){
   document.getElementById('edit-mode-bar')?.remove();
-  openDetailScreen(_currentDetailTs, true);
+  await openDetailScreen(_currentDetailTs, true);
 }
 
 let _saveEditsInProgress = false;
@@ -7254,7 +7639,12 @@ async function saveEdits(){
 
   try{
     const changes = Object.values(_editChanges);
-    if(!changes.length){ cancelEditMode(); return; }
+    const hasPendingMin = Object.keys(window._pendingMinFlags||{}).length > 0;
+    const minInput = document.getElementById('edit-min-hours');
+    const hasPendingMinHours = minInput && (
+      (minInput.value.trim()==='' ? null : parseFloat(minInput.value)) !== (_currentDetailTs?.minimum_hours ?? null)
+    );
+    if(!changes.length && !hasPendingMin && !hasPendingMinHours){ cancelEditMode(); return; }
 
     // Block save if any invalid cells exist
     const invalidCells = document.querySelectorAll('.edit-time-input.invalid, .edit-date-input.invalid');
@@ -7328,6 +7718,7 @@ async function saveEdits(){
       const {error: logErr} = await getSupabase().from('timesheet_edit_log').insert({
         timesheet_id:    ts.id,
         block_id:        c.blockId,
+        employee_id:     c.empId || null,
         field:           dbField,
         old_value:       c.oldVal || null,
         new_value:       c.newVal || null,
@@ -7341,9 +7732,96 @@ async function saveEdits(){
       saved++;
     }
 
-    if(saved > 0){
+    // ── Hard stop: MIN flagged employees require a minimum hours value ──────
+    // Compute EFFECTIVE flag state: pending overrides DB value, pending false means deselected
+    const hasFlaggedEmps = (window._detailEmps||[]).some(e=>{
+      const pending = (window._pendingMinFlags||{})[e.id];
+      const dbVal   = e.apply_minimum===true||e.apply_minimum==='true';
+      return pending !== undefined ? pending : dbVal;
+    }) || Object.values(window._pendingMinFlags||{}).some(v=>v===true);
+    const minInputVal = minInput ? minInput.value.trim() : '';
+    const minHoursVal = minInputVal==='' ? null : parseFloat(minInputVal);
+    if(hasFlaggedEmps && (minHoursVal===null || isNaN(minHoursVal) || minHoursVal<=0)){
+      // Highlight the field
+      if(minInput){
+        minInput.style.borderColor='var(--danger-text)';
+        minInput.style.boxShadow='0 0 0 2px rgba(248,113,113,.4)';
+        minInput.focus();
+      }
+      alert('One or more employees are flagged for minimum billing but no Minimum Hours value has been set.\n\nPlease enter a value in the Min Hours field before saving, or remove the MIN flags.');
+      return;
+    }
+    // Clear any validation highlight on the min hours field
+    if(minInput){ minInput.style.borderColor=''; minInput.style.boxShadow=''; }
+    let minSaved = 0;
+    // minInput already read above for the early-return check
+    if(minInput){
+      const newMinVal = minInput.value.trim()==='' ? null : parseFloat(minInput.value);
+      const oldMinVal = ts.minimum_hours ?? null;
+      const minChanged = newMinVal !== oldMinVal;
+      if(minChanged){
+        const {error:minErr} = await getSupabase()
+          .from('timesheets')
+          .update({minimum_hours: newMinVal})
+          .eq('id', ts.id);
+        if(!minErr){
+          // Log the change
+          await getSupabase().from('timesheet_edit_log').insert({
+            timesheet_id:    ts.id,
+            block_id:        null,
+            field:           'minimum_hours',
+            old_value:       oldMinVal != null ? String(oldMinVal) : null,
+            new_value:       newMinVal != null ? String(newMinVal) : null,
+            changed_by:      currentUser.id,
+            changed_by_name: managerName,
+            changed_by_role: managerRole,
+            changed_at:      now,
+          });
+          ts.minimum_hours = newMinVal; // update local copy
+          minSaved++;
+        } else {
+          console.error('[saveEdits] minimum_hours update failed — column may not exist. Run: ALTER TABLE timesheets ADD COLUMN minimum_hours numeric(4,2) DEFAULT NULL;', minErr);
+          alert('Could not save Minimum Hours. Please ensure the database migration has been run:\nALTER TABLE timesheets ADD COLUMN minimum_hours numeric(4,2) DEFAULT NULL;');
+        }
+      }
+    }
+
+    // ── Save apply_minimum flags on employees ─────────────────
+    const pendingFlags = window._pendingMinFlags || {};
+    for(const [empId, newVal] of Object.entries(pendingFlags)){
+      const empData = (window._detailEmps||[]).find(e=>e.id===empId);
+      const oldVal = empData?.apply_minimum ?? false;
+      if(newVal === oldVal) continue;
+      const {data:flagData, error:flagErr} = await getSupabase()
+        .from('employees')
+        .update({apply_minimum: newVal})
+        .eq('id', empId)
+        .select('id');
+      if(!flagErr && flagData && flagData.length > 0){
+        await getSupabase().from('timesheet_edit_log').insert({
+          timesheet_id:    ts.id,
+          block_id:        null,
+          employee_id:     empId,
+          field:           'apply_minimum',
+          old_value:       String(oldVal),
+          new_value:       String(newVal),
+          changed_by:      currentUser.id,
+          changed_by_name: managerName,
+          changed_by_role: managerRole,
+          changed_at:      now,
+        });
+        if(empData) empData.apply_minimum = newVal;
+        minSaved++;
+      } else {
+        console.error('[saveEdits] apply_minimum update failed — column may not exist. Run: ALTER TABLE employees ADD COLUMN apply_minimum boolean NOT NULL DEFAULT false;', flagErr);
+        alert('Could not save MIN flag. Please ensure the database migration has been run:\nALTER TABLE employees ADD COLUMN apply_minimum boolean NOT NULL DEFAULT false;');
+      }
+    }
+    window._pendingMinFlags = {};
+
+    if(saved > 0 || minSaved > 0){
       document.getElementById('edit-mode-bar')?.remove();
-      openDetailScreen(ts, true);
+      await openDetailScreen(ts, true);
       if(failed > 0){
         alert(`Saved ${saved} change(s), but ${failed} failed to save — check the browser console for details. This is usually a missing UPDATE policy on the time_blocks table for your role.`);
       }
