@@ -1749,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.1.26';
+const APP_VERSION = 'v1.1.27';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -2029,16 +2029,27 @@ function updateSidebarActive(page){
 // Global batch fetcher — bypasses Supabase 1000 row default limit
 // Batches IDs in groups of 200 to avoid URL length limits
 async function fetchAllPages(table, selectStr, idField, idList, extraFilters=[]){
-  const BATCH = 200;
-  const PAGE  = 2000;
+  const BATCH    = 50;   // timesheet IDs per chunk — smaller = fewer rows per query
+  const PAGE_SIZE = 1000; // Supabase default safe page size
   let all = [];
+
   for(let i=0; i<idList.length; i+=BATCH){
     const chunk = idList.slice(i, i+BATCH);
-    let q = getSupabase().from(table).select(selectStr).in(idField, chunk).limit(PAGE);
-    extraFilters.forEach(([col,val])=>{ q = q.eq(col,val); });
-    const {data, error} = await q;
-    if(error) throw error;
-    if(data) all = all.concat(data);
+    let from = 0;
+    while(true){
+      let q = getSupabase()
+        .from(table)
+        .select(selectStr, {count:'exact'})
+        .in(idField, chunk)
+        .range(from, from + PAGE_SIZE - 1);
+      extraFilters.forEach(([col,val])=>{ q = q.eq(col,val); });
+      const {data, error, count} = await q;
+      if(error) throw error;
+      if(data?.length) all = all.concat(data);
+      // Stop if we got all rows or received nothing
+      if(!data?.length || all.length - (all.length - data.length) < PAGE_SIZE || from + PAGE_SIZE >= (count||0)) break;
+      from += PAGE_SIZE;
+    }
   }
   return all;
 }
