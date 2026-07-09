@@ -1362,7 +1362,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.0.77';
+const APP_VERSION = 'v1.0.78';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -1652,6 +1652,9 @@ function renderScans(){
     if(s.isPdf){
       const removeBtn = _formLocked ? '' : `<button class="scan-remove" onclick="removeScan(${s.scanId})" title="Remove scan">✕ Remove</button>`;
       div.innerHTML=`<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--bg2)"><i class="ti ti-file-type-pdf" style="font-size:36px;color:var(--danger-text)"></i><span style="font-size:10px;color:var(--text2);text-align:center;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%">${s.name}</span></div><div class="scan-thumb-overlay"><span class="scan-thumb-name">${s.name}</span>${removeBtn}</div>`;
+    } else if(s.previewFailed){
+      const removeBtn3 = _formLocked ? '' : `<button class="scan-remove" onclick="removeScan(${s.scanId})" title="Remove scan">✕ Remove</button>`;
+      div.innerHTML=`<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--bg2)" title="File is attached and saved, but a preview couldn't be loaded right now"><i class="ti ti-photo-off" style="font-size:32px;color:var(--text2)"></i><span style="font-size:10px;color:var(--text2);text-align:center;padding:0 8px">Preview unavailable</span></div><div class="scan-thumb-overlay"><span class="scan-thumb-name">${s.name}</span>${removeBtn3}</div>`;
     } else {
       const removeBtn2 = _formLocked ? '' : `<button class="scan-remove" onclick="removeScan(${s.scanId})" title="Remove scan">✕ Remove</button>`;
       div.innerHTML=`<img src="${s.dataUrl}" alt="Scan"/><div class="scan-thumb-overlay"><span class="scan-thumb-name">${s.name}</span>${removeBtn2}</div>`;
@@ -4801,6 +4804,12 @@ async function loadDraftTimesheet(tsId){
   console.log('[loadDraft] START tsId=', tsId);
   try{
   stopSupabaseAutoSave();
+  // Refresh the auth session before reading anything. A session that went
+  // stale while this draft/timesheet sat unopened (e.g. reopening a
+  // rejected timesheet hours or days later) causes storage calls further
+  // down — like generating signed preview URLs for saved scans — to fail
+  // in ways that otherwise look like a data problem rather than an auth one.
+  await ensureFreshSession();
   // ── 1. Fetch all data first, before touching the DOM ──────
   const {data:ts, error:tsErr} = await getSupabase()
     .from('timesheets').select('*').eq('id', tsId).single();
@@ -4985,7 +4994,21 @@ async function loadDraftTimesheet(tsId){
           .storage.from('timesheet-scans')
           .createSignedUrl(sc.storage_path, 3600);
         if(urlErr||!urlData?.signedUrl){
-          console.warn('[loadDraft] signed URL failed for', sc.file_name, urlErr?.message);
+          // Don't silently drop this scan — it's still a real, saved
+          // attachment (the row and file both exist). Losing it from the
+          // in-memory list here would wrongly re-block submission and hide
+          // it from the Remove button. Keep it, just without a preview.
+          console.warn('[loadDraft] signed URL failed for', sc.file_name, urlErr?.message, '— keeping scan without preview');
+          scans.push({
+            scanId:      ++scanCounter,
+            name:        sc.file_name,
+            dataUrl:     null,
+            isPdf:       sc.mime_type==='application/pdf',
+            dbId:        sc.id,
+            storagePath: sc.storage_path,
+            orientation: 'unknown',
+            previewFailed: true
+          });
           continue;
         }
         const signedUrl = urlData.signedUrl;
@@ -5012,7 +5035,24 @@ async function loadDraftTimesheet(tsId){
           orientation: 'unknown'
         });
         console.log('[loadDraft] scan restored:', sc.file_name);
-      } catch(e){ console.warn('[loadDraft] scan restore failed for', sc.file_name, e.message); }
+      } catch(e){
+        console.warn('[loadDraft] scan restore failed for', sc.file_name, e.message, '— keeping scan without preview');
+        // Same safety net as the signed-URL-failure branch above: an
+        // unexpected error here (e.g. a network hiccup) must not make a
+        // real, saved attachment disappear from the form.
+        if(!scans.find(x=>x.dbId===sc.id)){
+          scans.push({
+            scanId:      ++scanCounter,
+            name:        sc.file_name,
+            dataUrl:     null,
+            isPdf:       sc.mime_type==='application/pdf',
+            dbId:        sc.id,
+            storagePath: sc.storage_path,
+            orientation: 'unknown',
+            previewFailed: true
+          });
+        }
+      }
     }
     renderScans();
     _scanEverUploaded = true;
