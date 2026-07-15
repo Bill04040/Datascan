@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ShelfScan Capture</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#16191a; --surface:#212525; --surface-2:#2a2f2f; --line:#383e3e;
+    --text:#eeebe3; --text-dim:#9aa3a2;
+    --accent:#ff8a1f; --accent-dim:#5c3d1c;
+    --ok:#4fb286; --ok-dim:#1f3630;
+    --warn:#e0b23a; --warn-dim:#3a331a;
+    --bad:#e5615a; --bad-dim:#3a2220;
+    --radius:10px;
+    --display:'Barlow Condensed',sans-serif; --body:'Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+  header{padding:16px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:10;display:flex;align-items:center;gap:10px;}
+  .back-btn{background:none;border:none;color:var(--text-dim);font-size:20px;padding:4px 8px 4px 0;cursor:pointer;line-height:1;}
+  .header-titles{flex:1;min-width:0;}
+  h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:0.4px;margin:0;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tagline{font-size:11px;color:var(--text-dim);font-family:var(--mono);margin-top:2px;}
+  main{flex:1;padding:16px;padding-bottom:40px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+  button{font-family:var(--body);font-weight:600;font-size:14px;border:none;border-radius:8px;padding:12px 16px;cursor:pointer;}
+  button:active{transform:scale(0.97);}
+  button:disabled{opacity:0.5;}
+  .btn-primary{background:var(--accent);color:#1a1200;width:100%;}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--line);width:100%;}
+  .btn-sm{padding:8px 12px;font-size:13px;width:auto;}
+  .list-item{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;cursor:pointer;}
+  .list-item:active{background:var(--surface-2);}
+  .li-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .li-title{font-weight:600;font-size:15px;}
+  .li-id{font-family:var(--mono);font-size:12px;color:var(--accent);}
+  .li-sub{font-size:12px;color:var(--text-dim);margin-top:4px;font-family:var(--mono);}
+  .badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:0.3px;}
+  .badge.ok{background:var(--ok-dim);color:var(--ok);}
+  .badge.warn{background:var(--warn-dim);color:var(--warn);}
+  .empty{color:var(--text-dim);font-size:13px;text-align:center;padding:28px 8px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin:4px 0 2px;}
+  input[type=text],input[type=email],input[type=password]{width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--text);padding:11px 12px;border-radius:8px;font-size:14px;font-family:var(--body);margin-bottom:8px;}
+  input:focus{outline:none;border-color:var(--accent);}
+  input[type=file]{display:none;}
+  .photo-row{display:flex;gap:8px;overflow-x:auto;padding:4px 0;}
+  .photo-thumb{position:relative;flex:none;width:84px;height:84px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-thumb .tag{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);color:var(--text);font-family:var(--mono);font-size:9px;text-align:center;padding:2px 0;}
+  .photo-thumb .del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.65);color:var(--text);border:none;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;}
+  .add-shelf-tile{flex:none;width:84px;height:84px;border-radius:8px;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:24px;cursor:pointer;background:var(--surface-2);}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:480px;}
+  .modal h3{font-family:var(--display);font-size:20px;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.4px;}
+  .modal .btn-row{display:flex;gap:8px;margin-top:14px;}
+  .modal .btn-row button{flex:1;}
+  .stat-row{display:flex;gap:8px;margin-bottom:4px;}
+  .stat{flex:1;background:var(--surface-2);border-radius:8px;padding:9px;text-align:center;}
+  .stat .num{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--accent);}
+  .stat .lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;margin-top:1px;}
+  .error-box{background:var(--bad-dim);border:1px solid #5c2f2c;color:var(--bad);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px;}
+  .signout{background:none;border:none;color:var(--text-dim);font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:underline;}
+  .spinner-text{color:var(--text-dim);font-size:13px;text-align:center;padding:40px 0;font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+// -----------------------------------------------------------------------
+// Config -- same project as the existing timesheet app. Point this at a
+// different Supabase project/keys if you want the capture data isolated.
+// -----------------------------------------------------------------------
+const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZld2VseGNhYnZodWljbGhyeHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTgwMjMsImV4cCI6MjA5NTYzNDAyM30.NW4q5y-pUhLaOFgesaF84je2BrB_hS2Ugwmx4ByjlWQ';
+const BUCKET = 'shelf-captures';
+
+let _sb = null;
+function getSupabase(){
+  if (!_sb) _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return _sb;
+}
+
+const state = { screen: 'jobs', jobId: null, sectionRowId: null, sectionLabel: null, currentUser: null };
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&lt;'.includes(m)?'&lt;':m,'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function friendlyError(err){
+  const msg = (err && err.message) || String(err);
+  if (/row-level security|row level security|RLS|JWT|permission/i.test(msg)) {
+    return 'Your session may have expired. Try signing out and back in.';
+  }
+  return msg;
+}
+
+function resizeToBlob(file, maxDim, quality){
+  return new Promise((resolve) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = img.width * scale; c.height = img.height * scale;
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(resolve, 'image/jpeg', quality);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// -----------------------------------------------------------------------
+// Auth -- same pattern as the timesheet app: email/password via Supabase Auth
+// -----------------------------------------------------------------------
+async function initAuth(){
+  const { data } = await getSupabase().auth.getSession();
+  state.currentUser = data.session ? data.session.user : null;
+  getSupabase().auth.onAuthStateChange((_event, session) => {
+    state.currentUser = session ? session.user : null;
+    render();
+  });
+}
+
+async function signIn(email, password){
+  const { error } = await getSupabase().auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+async function signOut(){
+  await getSupabase().auth.signOut();
+  state.currentUser = null;
+  state.screen = 'jobs';
+  render();
+}
+
+// -----------------------------------------------------------------------
+// Data access
+// -----------------------------------------------------------------------
+async function listJobs(){
+  const { data, error } = await getSupabase()
+    .from('shelfscan_jobs').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+async function jobSectionCount(jobId){
+  const { count } = await getSupabase()
+    .from('shelfscan_sections').select('*', { count: 'exact', head: true }).eq('job_id', jobId);
+  return count || 0;
+}
+
+async function createJob(fields){
+  const name = `${fields.customerName} — Store #${fields.storeNumber} — ${fields.city}, ${fields.state}`;
+  const { data, error } = await getSupabase()
+    .from('shelfscan_jobs')
+    .insert({
+      name,
+      customer_name: fields.customerName,
+      store_number: fields.storeNumber,
+      city: fields.city,
+      state: fields.state,
+      created_by: state.currentUser.id,
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function listSections(jobId){
+  const { data, error } = await getSupabase()
+    .from('shelfscan_sections').select('*').eq('job_id', jobId).order('section_id');
+  if (error) throw error;
+  return data;
+}
+
+async function createOrGetSection(jobId, sectionLabel){
+  const { data: existing } = await getSupabase()
+    .from('shelfscan_sections').select('*').eq('job_id', jobId).eq('section_id', sectionLabel).maybeSingle();
+  if (existing) return existing;
+  const { data, error } = await getSupabase()
+    .from('shelfscan_sections')
+    .insert({ job_id: jobId, section_id: sectionLabel, created_by: state.currentUser.id })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function sectionPhotos(sectionRowId){
+  const { data, error } = await getSupabase()
+    .from('shelfscan_photos').select('*').eq('section_id', sectionRowId).order('shelf_index', { ascending: true, nullsFirst: true });
+  if (error) throw error;
+  return data;
+}
+
+async function uploadPhoto(sectionRowId, photoType, shelfIndex, blob){
+  const path = `${state.currentUser.id}/${state.jobId}/${sectionRowId}/${photoType}_${shelfIndex ?? 0}_${Date.now()}.jpg`;
+  const { error: uploadErr } = await getSupabase().storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if (uploadErr) throw uploadErr;
+
+  const { data, error: dbErr } = await getSupabase().from('shelfscan_photos').insert({
+    section_id: sectionRowId,
+    photo_type: photoType,
+    shelf_index: shelfIndex,
+    storage_path: path,
+    mime_type: 'image/jpeg',
+    file_size: blob.size,
+    created_by: state.currentUser.id,
+  }).select().single();
+  if (dbErr) throw dbErr;
+  return data;
+}
+
+async function deletePhoto(photoRow){
+  await getSupabase().storage.from(BUCKET).remove([photoRow.storage_path]);
+  await getSupabase().from('shelfscan_photos').delete().eq('id', photoRow.id);
+}
+
+async function signedUrl(path){
+  const { data } = await getSupabase().storage.from(BUCKET).createSignedUrl(path, 3600);
+  return data ? data.signedUrl : '';
+}
+
+function triggerBlobDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function downloadPhotoFile(photoRow, filename){
+  const url = await signedUrl(photoRow.storage_path);
+  const resp = await fetch(url);
+  const blob = await resp.blob();
+  triggerBlobDownload(blob, filename);
+}
+
+async function downloadJobPhotosZip(job, sections, photoCounts){
+  const btn = document.getElementById('downloadZipBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Zipping…'; }
+  try {
+    const zip = new JSZip();
+    for (let i = 0; i < sections.length; i++) {
+      const s = sections[i];
+      const photos = photoCounts[i];
+      const folder = zip.folder(s.section_id);
+      for (const p of photos) {
+        const url = await signedUrl(p.storage_path);
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const filename = p.photo_type === 'overview'
+          ? 'overview.jpg'
+          : `shelf_${String(p.shelf_index).padStart(3, '0')}.jpg`;
+        folder.file(filename, blob);
+      }
+    }
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    triggerBlobDownload(zipBlob, `${job.name.replace(/[^a-z0-9]+/gi, '_')}_photos.zip`);
+  } catch (err) {
+    alert(friendlyError(err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Download All Photos (.zip)'; }
+  }
+}
+
+// -----------------------------------------------------------------------
+// Rendering
+// -----------------------------------------------------------------------
+function render(){
+  const app = document.getElementById('app');
+  if (!state.currentUser) return renderSignIn(app);
+  if (state.screen === 'jobs') return renderJobs(app);
+  if (state.screen === 'job') return renderJob(app);
+  if (state.screen === 'section') return renderSection(app);
+}
+
+function renderSignIn(app){
+  app.innerHTML = `
+    <header><div class="header-titles"><h1>ShelfScan Capture</h1><div class="tagline">sign in to continue</div></div></header>
+    <main>
+      <div class="card">
+        <div id="signinError"></div>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button class="btn-primary" id="signinBtn">Sign In</button>
+      </div>
+    </main>`;
+  document.getElementById('signinBtn').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errBox = document.getElementById('signinError');
+    errBox.innerHTML = '';
+    try {
+      await signIn(email, password);
+    } catch (e) {
+      errBox.innerHTML = `<div class="error-box">${esc(friendlyError(e))}</div>`;
+    }
+  });
+}
+
+async function renderJobs(app){
+  app.innerHTML = `
+    <header>
+      <div class="header-titles"><h1>ShelfScan Capture</h1><div class="tagline">training data organizer</div></div>
+      <button class="signout" id="signoutBtn">sign out</button>
+    </header>
+    <main><div class="spinner-text">Loading jobs…</div></main>`;
+  document.getElementById('signoutBtn').addEventListener('click', signOut);
+
+  let jobs = [];
+  try { jobs = await listJobs(); } catch (e) { renderFatal(app, e); return; }
+  const counts = await Promise.all(jobs.map(j => jobSectionCount(j.id)));
+
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <button class="btn-primary" id="newJobBtn">+ New Capture Job</button>
+    <p class="eyebrow">Jobs</p>
+    ${jobs.length ? jobs.map((j, i) => `
+      <div class="list-item" data-job="${j.id}" style="margin-bottom:8px;">
+        <div class="li-top"><span class="li-title">${esc(j.customer_name || j.name)}</span></div>
+        <div class="li-sub">Store #${esc(j.store_number || '—')} · ${esc(j.city || '—')}, ${esc(j.state || '—')}</div>
+        <div class="li-sub">${counts[i]} section(s) · created ${new Date(j.created_at).toLocaleDateString()}</div>
+      </div>`).join('') : `<div class="empty">No jobs yet. Create one to start capturing.</div>`}
+  `;
+  document.getElementById('newJobBtn').addEventListener('click', () => showNewJobModal({
+    onSave: async (fields) => {
+      try {
+        const job = await createJob(fields);
+        state.jobId = job.id; state.screen = 'job'; render();
+      } catch (e) { alert(friendlyError(e)); }
+    }
+  }));
+  document.querySelectorAll('[data-job]').forEach(el => el.addEventListener('click', () => {
+    state.jobId = el.getAttribute('data-job'); state.screen = 'job'; render();
+  }));
+}
+
+async function renderJob(app){
+  app.innerHTML = `
+    <header><button class="back-btn" id="backBtn">‹</button><div class="header-titles"><h1>Loading…</h1></div></header>
+    <main><div class="spinner-text">Loading sections…</div></main>`;
+  document.getElementById('backBtn').addEventListener('click', () => { state.screen = 'jobs'; render(); });
+
+  let jobs, sections;
+  try {
+    [jobs, sections] = await Promise.all([listJobs(), listSections(state.jobId)]);
+  } catch (e) { renderFatal(app, e); return; }
+  const job = jobs.find(j => j.id === state.jobId);
+  if (!job) { state.screen = 'jobs'; return render(); }
+
+  const photoCounts = await Promise.all(sections.map(s => sectionPhotos(s.id)));
+
+  document.querySelector('h1').textContent = job.name;
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <button class="btn-primary" id="newSectionBtn">+ Add Section (4ft ID)</button>
+    ${sections.length ? sections.map((s, i) => {
+      const photos = photoCounts[i];
+      const hasOverview = photos.some(p => p.photo_type === 'overview');
+      const shelfCount = photos.filter(p => p.photo_type === 'shelf').length;
+      return `
+      <div class="list-item" data-section="${s.id}" data-label="${esc(s.section_id)}" style="margin-bottom:8px;">
+        <div class="li-top">
+          <span class="li-id">${esc(s.section_id)}</span>
+          <span class="badge ${hasOverview ? 'ok' : 'warn'}">${hasOverview ? 'overview ✓' : 'no overview'}</span>
+        </div>
+        <div class="li-sub">${shelfCount} shelf photo(s)</div>
+      </div>`;
+    }).join('') : `<div class="empty">No sections yet.</div>`}
+    ${sections.length ? '<button class="btn-ghost" id="downloadZipBtn">Download All Photos (.zip)</button>' : ''}
+  `;
+  document.getElementById('newSectionBtn').addEventListener('click', () => showModal({
+    title: 'Section ID', placeholder: 'e.g. A12-03',
+    onSave: async (label) => {
+      try {
+        const section = await createOrGetSection(state.jobId, label);
+        state.sectionRowId = section.id; state.sectionLabel = section.section_id;
+        state.screen = 'section'; render();
+      } catch (e) { alert(friendlyError(e)); }
+    }
+  }));
+  const zipBtn = document.getElementById('downloadZipBtn');
+  if (zipBtn) zipBtn.addEventListener('click', () => downloadJobPhotosZip(job, sections, photoCounts));
+
+  document.querySelectorAll('[data-section]').forEach(el => el.addEventListener('click', () => {
+    state.sectionRowId = el.getAttribute('data-section');
+    state.sectionLabel = el.getAttribute('data-label');
+    state.screen = 'section'; render();
+  }));
+}
+
+async function renderSection(app){
+  app.innerHTML = `
+    <header><button class="back-btn" id="backBtn">‹</button><div class="header-titles"><h1>${esc(state.sectionLabel)}</h1><div class="tagline">4ft section capture</div></div></header>
+    <main><div class="spinner-text">Loading photos…</div></main>`;
+  document.getElementById('backBtn').addEventListener('click', () => { state.screen = 'job'; render(); });
+
+  let photos;
+  try { photos = await sectionPhotos(state.sectionRowId); } catch (e) { renderFatal(app, e); return; }
+
+  const overview = photos.find(p => p.photo_type === 'overview') || null;
+  const shelves = photos.filter(p => p.photo_type === 'shelf').sort((a,b) => a.shelf_index - b.shelf_index);
+  const overviewUrl = overview ? await signedUrl(overview.storage_path) : null;
+  const shelfUrls = await Promise.all(shelves.map(s => signedUrl(s.storage_path)));
+
+  const main = document.querySelector('main');
+  main.innerHTML = `
+    <div class="stat-row">
+      <div class="stat"><div class="num">${overview ? '1' : '0'}</div><div class="lbl">Overview</div></div>
+      <div class="stat"><div class="num">${shelves.length}</div><div class="lbl">Shelf photos</div></div>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Overview — full 4ft, top to bottom</p>
+      ${overview ? `
+        <div class="photo-row"><div class="photo-thumb"><img src="${overviewUrl}"><button class="del" style="left:2px;right:auto;" data-dl-photo="overview">↓</button></div></div>
+        <button class="btn-ghost btn-sm" id="retakeOverview" style="margin-top:10px;">Retake overview</button>
+      ` : `<button class="btn-primary" id="captureOverview">Capture Overview Photo</button>`}
+      <input type="file" id="overviewInput" accept="image/*">
+      <div class="note" style="font-size:11px;color:var(--text-dim);margin-top:6px;">Opens your camera or photo library — pick an existing photo if you already took it.</div>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Shelf by shelf — top to bottom, in order</p>
+      <div class="photo-row">
+        ${shelves.map((s, i) => `
+          <div class="photo-thumb">
+            <img src="${shelfUrls[i]}">
+            <div class="tag">shelf ${s.shelf_index}</div>
+            <button class="del" style="left:2px;right:auto;" data-dl-photo="${s.id}">↓</button>
+            <button class="del" data-del-photo="${s.id}" data-del-path="${esc(s.storage_path)}">×</button>
+          </div>`).join('')}
+        <div class="add-shelf-tile" id="addShelfTile">+</div>
+      </div>
+      <input type="file" id="shelfInput" accept="image/*" multiple>
+      <div class="note" style="font-size:11px;color:var(--text-dim);margin-top:6px;">Select multiple photos at once from your library if they're already taken — they'll be numbered in the order you pick them.</div>
+    </div>
+  `;
+
+  const overviewInput = document.getElementById('overviewInput');
+  const openOverview = () => overviewInput.click();
+  const capBtn = document.getElementById('captureOverview');
+  const retakeBtn = document.getElementById('retakeOverview');
+  if (capBtn) capBtn.addEventListener('click', openOverview);
+  if (retakeBtn) retakeBtn.addEventListener('click', openOverview);
+
+  overviewInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      if (overview) await deletePhoto(overview);
+      const blob = await resizeToBlob(file, 1400, 0.78);
+      await uploadPhoto(state.sectionRowId, 'overview', null, blob);
+      render();
+    } catch (err) { alert(friendlyError(err)); }
+  });
+
+  const shelfInput = document.getElementById('shelfInput');
+  document.getElementById('addShelfTile').addEventListener('click', () => shelfInput.click());
+  shelfInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    let nextIndex = shelves.length ? Math.max(...shelves.map(s => s.shelf_index)) + 1 : 1;
+    try {
+      for (const file of files) {
+        const blob = await resizeToBlob(file, 1100, 0.75);
+        await uploadPhoto(state.sectionRowId, 'shelf', nextIndex, blob);
+        nextIndex++;
+      }
+      render();
+    } catch (err) { alert(friendlyError(err)); }
+  });
+
+  document.querySelectorAll('[data-dl-photo]').forEach(el => el.addEventListener('click', async () => {
+    const key = el.getAttribute('data-dl-photo');
+    el.textContent = '…';
+    try {
+      if (key === 'overview') {
+        await downloadPhotoFile(overview, `${state.sectionLabel}_overview.jpg`);
+      } else {
+        const s = shelves.find(sh => sh.id === key);
+        await downloadPhotoFile(s, `${state.sectionLabel}_shelf_${String(s.shelf_index).padStart(3,'0')}.jpg`);
+      }
+    } catch (err) { alert(friendlyError(err)); }
+    finally { el.textContent = '↓'; }
+  }));
+
+  document.querySelectorAll('[data-del-photo]').forEach(el => el.addEventListener('click', async () => {
+    try {
+      await deletePhoto({ id: el.getAttribute('data-del-photo'), storage_path: el.getAttribute('data-del-path') });
+      render();
+    } catch (err) { alert(friendlyError(err)); }
+  }));
+}
+
+function renderFatal(app, err){
+  app.innerHTML = `
+    <header><div class="header-titles"><h1>ShelfScan Capture</h1></div></header>
+    <main><div class="error-box">${esc(friendlyError(err))}</div>
+    <button class="btn-ghost" onclick="location.reload()">Reload</button></main>`;
+}
+
+function showNewJobModal({ onSave }){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <h3>New capture job</h3>
+      <input type="text" id="fCustomer" placeholder="Customer name (e.g. Publix)">
+      <input type="text" id="fStore" placeholder="Store number (e.g. 482)">
+      <input type="text" id="fCity" placeholder="City">
+      <input type="text" id="fState" placeholder="State">
+      <div class="btn-row">
+        <button class="btn-ghost" id="newJobCancel">Cancel</button>
+        <button class="btn-primary" id="newJobSave">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const close = () => document.body.removeChild(backdrop);
+  document.getElementById('newJobCancel').addEventListener('click', close);
+  document.getElementById('newJobSave').addEventListener('click', () => {
+    const fields = {
+      customerName: document.getElementById('fCustomer').value.trim(),
+      storeNumber: document.getElementById('fStore').value.trim(),
+      city: document.getElementById('fCity').value.trim(),
+      state: document.getElementById('fState').value.trim(),
+    };
+    if (!fields.customerName || !fields.storeNumber) {
+      alert('Customer name and store number are required.');
+      return;
+    }
+    close();
+    onSave(fields);
+  });
+}
+
+function showModal({ title, placeholder, onSave }){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <h3>${esc(title)}</h3>
+      <input type="text" id="modalInput" placeholder="${esc(placeholder)}" autofocus>
+      <div class="btn-row">
+        <button class="btn-ghost" id="modalCancel">Cancel</button>
+        <button class="btn-primary" id="modalSave">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const input = document.getElementById('modalInput');
+  const close = () => document.body.removeChild(backdrop);
+  document.getElementById('modalCancel').addEventListener('click', close);
+  document.getElementById('modalSave').addEventListener('click', () => {
+    const v = input.value.trim();
+    if (!v) return;
+    close();
+    onSave(v);
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('modalSave').click(); });
+}
+
+(async function start(){
+  document.getElementById('app').innerHTML = '<div class="spinner-text">Loading…</div>';
+  await initAuth();
+  render();
+})();
+</script>
+</body>
+</html>
