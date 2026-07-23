@@ -1749,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.1.27';
+const APP_VERSION = 'v1.1.30';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -6527,8 +6527,10 @@ async function openDetailScreen(ts, isManager=false){
   // Format time for cell — time on line 1, date on line 2
   function tlFmt(t){
     if(!t) return '<span class="tl-empty">—</span>';
-    let dateStr='', timeStr=t;
-    if(t.includes('T')){ const p=t.split('T'); dateStr=p[0]; timeStr=p[1]; }
+    // Times are naive local timestamps — strip any UTC/TZ suffix before parsing
+    const clean = t.replace(/Z$|[+-]\d{2}:\d{2}$/, '').replace(/\.\d+$/, '');
+    let dateStr='', timeStr=clean;
+    if(clean.includes('T')){ const p=clean.split('T'); dateStr=p[0]; timeStr=p[1]; }
     const[h,m]=timeStr.split(':').map(Number);
     const ampm=h<12?'AM':'PM';
     const hr=h%12===0?12:h%12;
@@ -7324,13 +7326,16 @@ function buildISO(dateStr, h24, m){
 // Parse stored ISO or HH:MM value back into display parts
 function parseStoredVal(val){
   if(!val) return {timeStr:'', dateStr:'', h:0, m:0, ampm:'AM', displayTime:'', displayDate:''};
-  const isoStr = val.includes('T') ? val : ('2000-01-01T' + val);
-  const dt = new Date(isoStr);
-  const h24 = dt.getHours(), m = dt.getMinutes();
-  const ampm = h24 < 12 ? 'AM' : 'PM';
-  const hr12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  // Strip UTC/TZ suffix and milliseconds — times are stored as naive local timestamps
+  const clean = val.replace(/Z$|[+-]\d{2}:\d{2}$/, '').replace(/\.\d+$/, '');
+  let dateStr = '', timeStr = clean;
+  if(clean.includes('T')){ const p = clean.split('T'); dateStr = p[0]; timeStr = p[1]; }
+  const parts = timeStr.split(':');
+  const h24 = parseInt(parts[0], 10) || 0;
+  const m   = parseInt(parts[1], 10) || 0;
+  const ampm  = h24 < 12 ? 'AM' : 'PM';
+  const hr12  = h24 % 12 === 0 ? 12 : h24 % 12;
   const displayTime = hr12 + ':' + String(m).padStart(2,'0');
-  const dateStr = val.includes('T') ? val.split('T')[0] : '';
   const yy = dateStr ? String(new Date(dateStr+'T00:00:00').getFullYear()).slice(2) : '';
   const d = dateStr ? new Date(dateStr+'T00:00:00') : null;
   const displayDate = d ? `${d.getMonth()+1}/${d.getDate()}/${yy}` : '';
@@ -7549,8 +7554,8 @@ function confirmAddBlock(empId){
   if(!typeEl || !inEl || !outEl) return;
 
   const blockType = typeEl.value;
-  const timeIn    = inEl.value  ? new Date(inEl.value).toISOString()  : null;
-  const timeOut   = outEl.value ? new Date(outEl.value).toISOString() : null;
+  const timeIn    = inEl.value  ? inEl.value.slice(0,16) + ':00'  : null;
+  const timeOut   = outEl.value ? outEl.value.slice(0,16) + ':00'  : null;
 
   if(!blockType){ alert('Please select a block type.'); return; }
   if(!timeIn || !timeOut){ alert('Please enter both Time In and Time Out.'); return; }
