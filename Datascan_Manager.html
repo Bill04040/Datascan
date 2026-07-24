@@ -1749,7 +1749,7 @@ function startTimesheetSubscription(){
 //      dynamically from APP_VERSION by waitForSupabase(). Do not add or
 //      restore any static version text in the HTML body.
 //
-const APP_VERSION = 'v1.1.30';
+const APP_VERSION = 'v1.1.34';
 
 // ── Supabase client ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://fewelxcabvhuiclhrxxa.supabase.co';
@@ -6246,7 +6246,11 @@ async function loadMgrTimesheets(){
   const {data, error} = await query;
   loading.style.display='none';
 
-  if(error){ container.innerHTML='<div class="ts-empty"><i class="ti ti-alert-circle"></i><p>Error loading timesheets</p></div>'; return; }
+  if(error){
+    console.error('[loadMgrTimesheets] Supabase error:', error);
+    container.innerHTML=`<div class="ts-empty"><i class="ti ti-alert-circle"></i><p>Error loading timesheets</p><p style="font-size:11px;color:var(--text3);margin-top:4px">${error.message||JSON.stringify(error)}</p></div>`;
+    return;
+  }
   if(!data||!data.length){ container.innerHTML='<div class="ts-empty"><i class="ti ti-clipboard-x"></i><p>No timesheets found</p></div>'; return; }
 
   // Stats
@@ -7385,6 +7389,7 @@ function enterEditMode(){
     const wrap = document.createElement('div');
     wrap.className = 'edit-cell-wrap';
     wrap.id = 'ecw-' + key;
+    wrap.style.position = 'relative';
     wrap.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap">
         <input id="eti-${key}" class="edit-time-input" type="text" maxlength="4"
@@ -7400,7 +7405,20 @@ function enterEditMode(){
       </div>
       ${p.dateStr?`<input id="dte-${key}" class="edit-date-input" type="date" value="${p.dateStr}" data-key="${key}" onchange="onEditDateChange(this)" style="font-size:10px;margin-top:2px"/>`:``}
       <div id="ebadge-${key}" class="edit-changed-badge" style="display:none"><i class="ti ti-edit"></i></div>
-      <div id="eerr-${key}" class="edit-err-badge" style="display:none"></div>`;
+      <div id="eerr-${key}" class="edit-err-badge" style="display:none"></div>
+      ${field==='out' ? `<button
+        title="Delete this block"
+        onclick="confirmDeleteBlock('${blockId}', this)"
+        style="margin-top:4px;width:100%;font-size:11px;padding:2px 6px;
+               border-radius:3px;border:1px solid rgba(163,45,45,.5);
+               background:rgba(163,45,45,.12);color:#a32d2d;
+               cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;
+               font-family:inherit;font-weight:500"
+        onmouseenter="this.style.background='rgba(163,45,45,.25)'"
+        onmouseleave="this.style.background='rgba(163,45,45,.12)'"
+        class="block-del-btn">
+        <i class="ti ti-trash" style="font-size:12px" aria-hidden="true"></i> Delete
+      </button>` : ''}`;
 
     cell.innerHTML = '';
     cell.appendChild(wrap);
@@ -7462,10 +7480,8 @@ function toggleMinFlag(btn, empId){
   btn.dataset.minActive = newActive ? '1' : '0';
   btn.className = 'min-toggle-btn' + (newActive?' active':'');
   btn.textContent = newActive ? 'MIN ✓' : 'MIN';
-  // Store pending change so saveEdits can pick it up
   if(!window._pendingMinFlags) window._pendingMinFlags = {};
   window._pendingMinFlags[empId] = newActive;
-  // If no minimum hours set, highlight the input to prompt the user
   if(newActive){
     const minInput = document.getElementById('edit-min-hours');
     if(minInput && !minInput.value.trim()){
@@ -7474,6 +7490,61 @@ function toggleMinFlag(btn, empId){
       minInput.focus();
       minInput.placeholder = 'Required!';
     }
+  }
+}
+
+async function confirmDeleteBlock(blockId, btn){
+  // Find block type label for the confirmation message
+  const blockTypeEl = btn?.closest('td')?.previousElementSibling;
+  const row = btn?.closest('tr');
+  const empName = row?.querySelector('td.tl-sticky .tl-emp-name, td.tl-sticky div[style*="font-weight"]')?.textContent?.trim() || 'this employee';
+
+  // Get block type from the IN cell's data attribute
+  const inCell = row?.querySelector('td[data-field="in"][data-block-id="'+blockId+'"]');
+  const blockType = inCell?.dataset?.blockType || 'block';
+  const blockLabel = blockType.charAt(0).toUpperCase() + blockType.slice(1).replace(/_/g,' ');
+
+  if(!confirm(`Delete the ${blockLabel} block for ${empName}?\n\nThis will permanently remove this time block and cannot be undone.`)) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>';
+
+  try{
+    const {error} = await getSupabase()
+      .from('time_blocks')
+      .update({is_deleted: true})
+      .eq('id', blockId);
+
+    if(error) throw new Error(error.message);
+
+    // Log the deletion
+    const ts = _currentDetailTs;
+    const now = new Date().toISOString();
+    await getSupabase().from('timesheet_edit_log').insert({
+      timesheet_id:    ts?.id,
+      block_id:        blockId,
+      employee_id:     inCell?.dataset?.empId || null,
+      field:           'block_deleted',
+      old_value:       blockType,
+      new_value:       null,
+      changed_by:      currentUser.id,
+      changed_by_name: currentProfile?.full_name || '',
+      changed_by_role: currentProfile?.role || '',
+      changed_at:      now,
+    });
+
+    // Remove pending time edits for this block
+    Object.keys(_editChanges).forEach(k=>{ if(k.startsWith(blockId)) delete _editChanges[k]; });
+    if(window._pendingNewBlocks) window._pendingNewBlocks = window._pendingNewBlocks.filter(b=>b.blockId!==blockId);
+
+    // Re-render without saving — reload the detail screen
+    await openDetailScreen(ts, true);
+    enterEditMode();
+
+  } catch(e){
+    alert('Could not delete block: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-trash"></i>';
   }
 }
 
@@ -7678,7 +7749,9 @@ function markEditChange(key, inp, h24, m, dateStr){
   const empId   = inp.dataset.empId;
   const origIso = inp.dataset.origIso || '';
 
-  const newISO = dateStr ? buildISO(dateStr, h24, m) : String(h24).padStart(2,'0')+':'+String(m).padStart(2,'0');
+  // Always use a full ISO datetime — fall back to job_date if the block has no date stored
+  const effectiveDate = dateStr || _currentDetailTs?.job_date || '';
+  const newISO = effectiveDate ? buildISO(effectiveDate, h24, m) : String(h24).padStart(2,'0')+':'+String(m).padStart(2,'0');
   const changed = newISO !== origIso;
 
   // Update badge / original display
